@@ -1,9 +1,27 @@
 """斗罗大陆文字游戏核心常量与内容目录汇总。"""
 
 from .ambush import AMBUSH_CATALOG, ambush_by_key
+from .battle_armor import BATTLE_ARMOR_ITEM_KEY, BATTLE_ARMOR_TIERS, EQUIP_SLOT_BATTLE_ARMOR, battle_armor_tier_by_index
+from .bloodline import (
+    BLOODLINE_AWAKEN_REALM,
+    BLOODLINE_CATALOG,
+    BLOODLINE_MAX_LEVEL,
+    BLOODLINE_POWER_PERCENT,
+    bloodline_power_per_level,
+    get_bloodline,
+    random_bloodline,
+)
 from .bosses import BOSS_CATALOG, boss_by_key
 from .daily_tasks import DAILY_TASK_CATALOG, task_by_key, tasks_for_metric
 from .events import EVENT_CATALOG, roll_event
+from .material import (
+    MATERIAL_CATALOG,
+    MATERIAL_WEIGHT_BY_RARITY,
+    PROSPECT_REGIONS,
+    material_by_key,
+    prospect_region_by_key,
+    prospects_for_stage,
+)
 from .realm import (
     ACTION_TYPE_LABELS,
     BREAKTHROUGH_RULES,
@@ -30,6 +48,16 @@ from .realm import (
     total_soul_power_needed,
 )
 from .sects import SECT_CATALOG, sect_by_key
+from .soul_core import EQUIP_SLOT_SOUL_CORE, SOUL_CORE_TIERS, soul_core_tier_by_index
+from .soul_device import (
+    CRAFTSMAN_RANK_EXP,
+    SLOT_SOUL_JET,
+    SLOT_SOUL_SHIELD,
+    SLOT_SOUL_WEAPON,
+    SOUL_DEVICE_CATALOG,
+    craftsman_rank_from_exp,
+    soul_device_by_key,
+)
 from .soulbeast import HUNT_REGIONS, first_region_for_stage, region_by_key, regions_for_stage
 from .soulbone import SOULBONE_CATALOG, random_soulbone_by_part, random_soulbone_by_rarity, soulbone_by_key
 from .wuhun import WUHUN_CATALOG, random_wuhun, wuhun_by_key
@@ -37,6 +65,17 @@ from .wuhun import WUHUN_CATALOG, random_wuhun, wuhun_by_key
 __all__ = [
     "AMBUSH_CATALOG",
     "ambush_by_key",
+    "BATTLE_ARMOR_ITEM_KEY",
+    "BATTLE_ARMOR_TIERS",
+    "EQUIP_SLOT_BATTLE_ARMOR",
+    "battle_armor_tier_by_index",
+    "BLOODLINE_AWAKEN_REALM",
+    "BLOODLINE_CATALOG",
+    "BLOODLINE_MAX_LEVEL",
+    "BLOODLINE_POWER_PERCENT",
+    "bloodline_power_per_level",
+    "get_bloodline",
+    "random_bloodline",
     "BOSS_CATALOG",
     "boss_by_key",
     "DAILY_TASK_CATALOG",
@@ -44,6 +83,12 @@ __all__ = [
     "tasks_for_metric",
     "EVENT_CATALOG",
     "roll_event",
+    "MATERIAL_CATALOG",
+    "MATERIAL_WEIGHT_BY_RARITY",
+    "PROSPECT_REGIONS",
+    "material_by_key",
+    "prospect_region_by_key",
+    "prospects_for_stage",
     "ACTION_TYPE_LABELS",
     "BREAKTHROUGH_RULES",
     "DEFAULT_ACTION_POINT_COSTS",
@@ -69,6 +114,16 @@ __all__ = [
     "total_soul_power_needed",
     "SECT_CATALOG",
     "sect_by_key",
+    "EQUIP_SLOT_SOUL_CORE",
+    "SOUL_CORE_TIERS",
+    "soul_core_tier_by_index",
+    "CRAFTSMAN_RANK_EXP",
+    "SLOT_SOUL_JET",
+    "SLOT_SOUL_SHIELD",
+    "SLOT_SOUL_WEAPON",
+    "SOUL_DEVICE_CATALOG",
+    "craftsman_rank_from_exp",
+    "soul_device_by_key",
     "HUNT_REGIONS",
     "first_region_for_stage",
     "region_by_key",

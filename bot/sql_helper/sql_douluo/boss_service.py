@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
-from bot.plugins.douluo_game.core import BOSS_CATALOG, boss_by_key, random_soulbone_by_part, random_soulbone_by_rarity
+from bot.plugins.douluo_game.core import BATTLE_ARMOR_ITEM_KEY, BOSS_CATALOG, boss_by_key, random_soulbone_by_part, random_soulbone_by_rarity
 from bot.sql_helper import Session
 from bot.sql_helper.sql_douluo.models import DouluoBossRecord, DouluoJournal, utcnow
 from bot.sql_helper.sql_douluo.service import (
@@ -122,6 +122,11 @@ def challenge_boss(tg: int, boss_key: str | None = None) -> dict[str, Any]:
                     granted = _grant_inventory_item_session(session, tg, bone["key"], 1)
                     if granted:
                         rewards["soulbone"] = {"key": bone["key"], "name": bone["name"], "rarity": bone.get("rarity")}
+            armor_chance = float(reward_cfg.get("armor_chance") or 0)
+            if random.random() < armor_chance:
+                granted = _grant_inventory_item_session(session, tg, BATTLE_ARMOR_ITEM_KEY, 1)
+                if granted:
+                    rewards["armor"] = {"key": BATTLE_ARMOR_ITEM_KEY, "name": "斗铠"}
         profile.updated_at = utcnow()
         session.commit()
         session.refresh(profile)

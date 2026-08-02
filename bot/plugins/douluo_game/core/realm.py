@@ -6,7 +6,7 @@ from typing import Any
 
 # ---------------------------------------------------------------------------
 # 魂师境界:魂士 -> 魂师 -> 大魂师 -> 魂尊 -> 魂宗 -> 魂王 -> 魂帝 -> 魂圣
-#            -> 魂斗罗 -> 封号斗罗 -> 神
+#            -> 魂斗罗 -> 封号斗罗 -> 神 -> 神王(终极斗罗)
 # ---------------------------------------------------------------------------
 DEFAULT_REALM_THRESHOLDS: list[dict[str, Any]] = [
     {"stage": "魂士", "star_cap": 9, "soul_power_per_star": 100},
@@ -20,6 +20,7 @@ DEFAULT_REALM_THRESHOLDS: list[dict[str, Any]] = [
     {"stage": "魂斗罗", "star_cap": 9, "soul_power_per_star": 3400},
     {"stage": "封号斗罗", "star_cap": 9, "soul_power_per_star": 5200},
     {"stage": "神", "star_cap": 1, "soul_power_per_star": 12000},
+    {"stage": "神王", "star_cap": 1, "soul_power_per_star": 20000},
 ]
 
 # 境界对应的基础战力量级(用于战力公式与斗魂结算)
@@ -35,6 +36,7 @@ REALM_BASE_POWER: dict[str, int] = {
     "魂斗罗": 360000,
     "封号斗罗": 550000,
     "神": 900000,
+    "神王": 1400000,
 }
 
 # 武魂品质系数(战力加成)
@@ -75,6 +77,11 @@ DEFAULT_DAILY_ACTION_LIMITS: dict[str, int] = {
     "sect": 3,
     "salary": 1,
     "breakthrough": 3,
+    "prospect": 3,
+    "craft": 5,
+    "armor": 2,
+    "condense": 1,
+    "bloodline": 5,
 }
 
 # 各行动消耗的行动力
@@ -89,6 +96,11 @@ DEFAULT_ACTION_POINT_COSTS: dict[str, int] = {
     "sect": 1,
     "salary": 1,
     "breakthrough": 2,
+    "prospect": 2,
+    "craft": 2,
+    "armor": 3,
+    "condense": 4,
+    "bloodline": 2,
 }
 
 ACTION_TYPE_LABELS: dict[str, str] = {
@@ -102,6 +114,11 @@ ACTION_TYPE_LABELS: dict[str, str] = {
     "sect": "宗门",
     "salary": "俸禄",
     "breakthrough": "突破",
+    "prospect": "矿脉勘探",
+    "craft": "魂导锻造",
+    "armor": "斗铠淬炼",
+    "condense": "魂核凝聚",
+    "bloodline": "血脉",
 }
 
 # ---------------------------------------------------------------------------
@@ -148,6 +165,7 @@ REALM_MAX_RING_TIER: dict[str, str] = {
     "魂斗罗": "十万年",
     "封号斗罗": "十万年",
     "神": "百万年",
+    "神王": "百万年",
 }
 
 # 魂环基础属性:每档年限的基础攻击/防御/速度/精神

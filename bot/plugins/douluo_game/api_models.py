@@ -40,6 +40,14 @@ class HuntPayload(InitDataPayload):
     region_key: str = ""
 
 
+class ProspectPayload(InitDataPayload):
+    region_key: str = ""
+
+
+class CraftPayload(InitDataPayload):
+    item_key: str = ""
+
+
 class InventoryEquipmentPayload(InitDataPayload):
     item_key: str = ""
     slot: str = ""
@@ -112,6 +120,13 @@ class AdminSettingsPayload(BaseModel):
     duel_prepare_seconds: int | None = None
     broadcast_enabled: bool | None = None
     message_auto_delete_seconds: int | None = None
+    bloodline_awaken_coin: int | None = None
+    bloodline_enhance_coin: int | None = None
+    bloodline_enhance_soul_power: int | None = None
+    prospect_coin_cost: int | None = None
+    condense_coin_cost: int | None = None
+    condense_soul_power_cost: int | None = None
+    armor_upgrade_coin: int | None = None
 
 
 class AdminProfilePatchPayload(BaseModel):

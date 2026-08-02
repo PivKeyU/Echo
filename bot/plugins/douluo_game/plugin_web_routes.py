@@ -21,11 +21,13 @@ from bot.plugins.douluo_game.api_models import (
     AuctionBidPayload,
     AuctionListPayload,
     BossChallengePayload,
+    CraftPayload,
     DailyTaskClaimPayload,
     ExchangePayload,
     HuntPayload,
     InitDataPayload,
     InventoryEquipmentPayload,
+    ProspectPayload,
     RankPayload,
     SectJoinPayload,
     WebAuthBindTelegramPayload,
@@ -56,14 +58,19 @@ from bot.sql_helper.sql_douluo import (
     admin_toggle_item_definition,
     admin_update_settings,
     admin_upsert_item_definition,
+    awaken_bloodline,
     awaken_wuhun,
     breakthrough,
     build_douluo_leaderboard,
     challenge_boss,
     claim_daily_task,
     claim_salary,
+    condense_soul_core,
+    craft_soul_device,
+    enhance_bloodline,
     equip_inventory_item,
     exchange_currency,
+    get_sequel_catalog,
     get_settings,
     hunt_soul_beast,
     join_sect,
@@ -73,10 +80,12 @@ from bot.sql_helper.sql_douluo import (
     my_listings,
     place_auction_bid,
     place_auction_listing,
+    prospect_materials,
     reforge_wuhun,
     settle_expired_auctions,
     train_soul_power,
     unequip_inventory_item,
+    upgrade_battle_armor,
 )
 from bot.sql_helper.sql_xiuxian.web_auth import (
     WebAuthRateLimitError,
@@ -309,6 +318,66 @@ def register_web(app) -> None:
             result = await run_in_threadpool(reforge_wuhun, int(telegram_user["id"]))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"code": 200, "data": await run_in_threadpool(build_action_result_bundle, int(telegram_user["id"]), result)}
+
+    @user_router.post("/api/bloodline/awaken")
+    async def douluo_bloodline_awaken(payload: InitDataPayload):
+        telegram_user = await run_in_threadpool(_verify_user_from_auth, payload.init_data, payload.session_token)
+        try:
+            result = await run_in_threadpool(awaken_bloodline, int(telegram_user["id"]))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        await _push_result_broadcast_to_groups(result)
+        return {"code": 200, "data": await run_in_threadpool(build_action_result_bundle, int(telegram_user["id"]), result)}
+
+    @user_router.post("/api/bloodline/enhance")
+    async def douluo_bloodline_enhance(payload: InitDataPayload):
+        telegram_user = await run_in_threadpool(_verify_user_from_auth, payload.init_data, payload.session_token)
+        try:
+            result = await run_in_threadpool(enhance_bloodline, int(telegram_user["id"]))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        await _push_result_broadcast_to_groups(result)
+        return {"code": 200, "data": await run_in_threadpool(build_action_result_bundle, int(telegram_user["id"]), result)}
+
+    @user_router.post("/api/prospect")
+    async def douluo_prospect(payload: ProspectPayload):
+        telegram_user = await run_in_threadpool(_verify_user_from_auth, payload.init_data, payload.session_token)
+        try:
+            result = await run_in_threadpool(prospect_materials, int(telegram_user["id"]), payload.region_key)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        await _push_result_broadcast_to_groups(result)
+        return {"code": 200, "data": await run_in_threadpool(build_action_result_bundle, int(telegram_user["id"]), result)}
+
+    @user_router.post("/api/craft")
+    async def douluo_craft(payload: CraftPayload):
+        telegram_user = await run_in_threadpool(_verify_user_from_auth, payload.init_data, payload.session_token)
+        try:
+            result = await run_in_threadpool(craft_soul_device, int(telegram_user["id"]), payload.item_key)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        await _push_result_broadcast_to_groups(result)
+        return {"code": 200, "data": await run_in_threadpool(build_action_result_bundle, int(telegram_user["id"]), result)}
+
+    @user_router.post("/api/armor/upgrade")
+    async def douluo_armor_upgrade(payload: InitDataPayload):
+        telegram_user = await run_in_threadpool(_verify_user_from_auth, payload.init_data, payload.session_token)
+        try:
+            result = await run_in_threadpool(upgrade_battle_armor, int(telegram_user["id"]))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        await _push_result_broadcast_to_groups(result)
+        return {"code": 200, "data": await run_in_threadpool(build_action_result_bundle, int(telegram_user["id"]), result)}
+
+    @user_router.post("/api/soul-core/condense")
+    async def douluo_soul_core_condense(payload: InitDataPayload):
+        telegram_user = await run_in_threadpool(_verify_user_from_auth, payload.init_data, payload.session_token)
+        try:
+            result = await run_in_threadpool(condense_soul_core, int(telegram_user["id"]))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        await _push_result_broadcast_to_groups(result)
         return {"code": 200, "data": await run_in_threadpool(build_action_result_bundle, int(telegram_user["id"]), result)}
 
     @user_router.post("/api/inventory/equip")

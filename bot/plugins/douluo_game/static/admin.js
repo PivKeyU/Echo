@@ -35,6 +35,13 @@ const SETTINGS_FIELDS = [
   ["duel_prepare_seconds", "斗魂准备(秒)", "num"],
   ["broadcast_enabled", "群内播报", "bool"],
   ["message_auto_delete_seconds", "消息自动删除(秒)", "num"],
+  ["bloodline_awaken_coin", "血脉觉醒魂币", "num"],
+  ["bloodline_enhance_coin", "血脉淬炼魂币", "num"],
+  ["bloodline_enhance_soul_power", "血脉淬炼魂力", "num"],
+  ["prospect_coin_cost", "勘探消耗魂币", "num"],
+  ["condense_coin_cost", "魂核凝聚魂币", "num"],
+  ["condense_soul_power_cost", "魂核凝聚魂力", "num"],
+  ["armor_upgrade_coin", "斗铠升级魂币", "num"],
 ];
 
 function qs(sel) { return document.querySelector(sel); }

@@ -71,6 +71,15 @@ class DouluoProfile(Base):
     arena_losses = Column(Integer, default=0, nullable=False)
     total_hunts = Column(Integer, default=0, nullable=False)
 
+    # 血脉(龙王传说 / 终极斗罗)
+    bloodline_key = Column(String(64), nullable=True)
+    bloodline_level = Column(Integer, default=0, nullable=False)
+    bloodline_at = Column(DateTime, nullable=True)
+
+    # 魂导师(绝世唐门)
+    craftsman_rank = Column(Integer, default=1, nullable=False)
+    craftsman_exp = Column(Integer, default=0, nullable=False)
+
     last_train_at = Column(DateTime, nullable=True)
     last_breakthrough_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utcnow, nullable=False)
@@ -91,6 +100,7 @@ class DouluoSoulRing(Base):
     years = Column(Integer, default=0, nullable=False)
     tier = Column(String(16), nullable=False)
     color = Column(String(16), nullable=False)
+    source_name = Column(String(64), nullable=True)
     skill_name = Column(String(64), nullable=True)
     attack = Column(Integer, default=0, nullable=False)
     defense = Column(Integer, default=0, nullable=False)

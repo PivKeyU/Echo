@@ -19,16 +19,32 @@ from typing import Any
 from bot.func_helper.emby_currency import get_emby_balance
 from bot.plugins.douluo_game.core import (
     ACTION_TYPE_LABELS,
+    BATTLE_ARMOR_ITEM_KEY,
+    BATTLE_ARMOR_TIERS,
+    BLOODLINE_AWAKEN_REALM,
+    BLOODLINE_MAX_LEVEL,
     BREAKTHROUGH_RULES,
+    CRAFTSMAN_RANK_EXP,
     DEFAULT_ACTION_POINT_COSTS,
     DEFAULT_DAILY_ACTION_LIMITS,
     DEFAULT_REALM_THRESHOLDS,
+    EQUIP_SLOT_BATTLE_ARMOR,
+    EQUIP_SLOT_SOUL_CORE,
+    MATERIAL_CATALOG,
+    MATERIAL_WEIGHT_BY_RARITY,
+    PROSPECT_REGIONS,
     REALM_BASE_POWER,
     RING_SLOT_CAP,
+    SLOT_SOUL_JET,
+    SLOT_SOUL_SHIELD,
+    SLOT_SOUL_WEAPON,
     SOUL_BONE_PARTS,
+    SOUL_CORE_TIERS,
+    SOUL_DEVICE_CATALOG,
     TITLED_DOULUO_TITLES,
     WUHUN_QUALITY_POWER,
     WUHUN_SYSTEM_POWER,
+    material_by_key,
     max_allowed_ring_tier,
     realm_index,
     realm_stages,
@@ -78,6 +94,14 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "event_chance_percent": 25,
     "auction_fee_percent": 5,
     "auction_duration_hours": 12,
+    # 后续作品玩法
+    "bloodline_awaken_coin": 2000,
+    "bloodline_enhance_coin": 800,
+    "bloodline_enhance_soul_power": 2000,
+    "prospect_coin_cost": 100,
+    "condense_coin_cost": 2000,
+    "condense_soul_power_cost": 3000,
+    "armor_upgrade_coin": 1500,
 }
 
 _SETTINGS_CACHE: tuple[float, dict[str, Any]] | None = None
@@ -95,6 +119,10 @@ _CATEGORY_LABELS: dict[str, str] = {
     "material": "材料",
     "contract": "契约",
     "ticket": "凭证",
+    "craft_material": "锻造材料",
+    "soul_device": "魂导器",
+    "battle_armor": "斗铠",
+    "soul_core": "魂核",
 }
 
 _INVENTORY_CATEGORIES = [
@@ -104,6 +132,10 @@ _INVENTORY_CATEGORIES = [
     {"key": "material", "label": "材料", "equip": False},
     {"key": "contract", "label": "契约", "equip": False},
     {"key": "ticket", "label": "凭证", "equip": False},
+    {"key": "craft_material", "label": "锻造材料", "equip": False},
+    {"key": "soul_device", "label": "魂导器", "equip": True},
+    {"key": "battle_armor", "label": "斗铠", "equip": True},
+    {"key": "soul_core", "label": "魂核", "equip": True},
 ]
 
 
@@ -134,7 +166,7 @@ def _profile_display_name(display_name: str | None, username: str | None, tg: in
 
 
 # 触发群播报的关键突破境界
-BROADCAST_MILESTONE_REALMS = {"魂王", "魂帝", "魂圣", "魂斗罗", "封号斗罗", "神"}
+BROADCAST_MILESTONE_REALMS = {"魂王", "魂帝", "魂圣", "魂斗罗", "封号斗罗", "神", "神王"}
 
 
 def _build_douluo_broadcast_event(profile, result: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any] | None:
@@ -170,6 +202,17 @@ def _build_douluo_broadcast_event(profile, result: dict[str, Any], settings: dic
                 f"💍 夺得 {result.get('years')}年高阶魂环!{color}色魂光冲天而起,群中魂师尽皆瞩目。"
             ),
         }
+    # 血脉觉醒(珍品/神品)
+    bloodline = result.get("bloodline") or {}
+    if result.get("awakened") and str(bloodline.get("rarity") or "") in ("珍品", "神品"):
+        return {
+            "kind": "bloodline",
+            "title": "斗罗血脉播报",
+            "text": (
+                f"🧬 {display} 觉醒稀有血脉【{bloodline.get('name')}】({bloodline.get('rarity')})!\n"
+                f"🌀 {bloodline.get('system') or ''} 体系血脉流转周身,群中魂师尽皆动容。"
+            ),
+        }
     # 魂兽讨伐胜利(含稀有魂骨掉落)
     if result.get("win"):
         boss = result.get("boss") or {}
@@ -178,6 +221,9 @@ def _build_douluo_broadcast_event(profile, result: dict[str, Any], settings: dic
         bone = (rewards or {}).get("soulbone") or {}
         if bone.get("name"):
             lines.append(f"🦴 稀有魂骨掉落:【{bone.get('name')}】({bone.get('rarity') or '未知'})")
+        armor = (rewards or {}).get("armor") or {}
+        if armor.get("name"):
+            lines.append(f"🛡️ 天降斗铠:【{armor.get('name')}】")
         score = int(rewards.get("score") or 0)
         if score:
             lines.append(f"📈 讨伐战绩 +{score}")
@@ -247,6 +293,13 @@ def get_settings() -> dict[str, Any]:
         merged["auction_duration_hours"] = max(_coerce_int(merged.get("auction_duration_hours"), 12), 1)
         merged["exchange_enabled"] = bool(merged.get("exchange_enabled", True))
         merged["broadcast_enabled"] = bool(merged.get("broadcast_enabled", True))
+        merged["bloodline_awaken_coin"] = max(_coerce_int(merged.get("bloodline_awaken_coin"), 2000), 0)
+        merged["bloodline_enhance_coin"] = max(_coerce_int(merged.get("bloodline_enhance_coin"), 800), 0)
+        merged["bloodline_enhance_soul_power"] = max(_coerce_int(merged.get("bloodline_enhance_soul_power"), 2000), 0)
+        merged["prospect_coin_cost"] = max(_coerce_int(merged.get("prospect_coin_cost"), 100), 0)
+        merged["condense_coin_cost"] = max(_coerce_int(merged.get("condense_coin_cost"), 2000), 0)
+        merged["condense_soul_power_cost"] = max(_coerce_int(merged.get("condense_soul_power_cost"), 3000), 0)
+        merged["armor_upgrade_coin"] = max(_coerce_int(merged.get("armor_upgrade_coin"), 1500), 0)
         if not isinstance(merged.get("realm_thresholds"), list) or not merged.get("realm_thresholds"):
             merged["realm_thresholds"] = copy.deepcopy(DEFAULT_REALM_THRESHOLDS)
         _SETTINGS_CACHE = (now + _SETTINGS_CACHE_TTL, copy.deepcopy(merged))
@@ -348,8 +401,38 @@ def _serialize_profile_row(profile: DouluoProfile, *, session=None) -> dict[str,
         "total_hunts": int(profile.total_hunts),
         "last_train_at": profile.last_train_at,
         "last_breakthrough_at": profile.last_breakthrough_at,
+        "bloodline": _bloodline_payload(profile),
+        "craftsman": {
+            "rank": max(int(profile.craftsman_rank or 1), 1),
+            "exp": max(int(profile.craftsman_exp or 0), 0),
+        },
         "created_at": profile.created_at,
         "updated_at": profile.updated_at,
+    }
+
+
+def _bloodline_payload(profile: DouluoProfile) -> dict[str, Any] | None:
+    """档案序列化的血脉字段。"""
+    if not profile.bloodline_key:
+        return None
+    from bot.plugins.douluo_game.core.bloodline import bloodline_power_per_level, get_bloodline
+
+    bl = get_bloodline(profile.bloodline_key)
+    level = max(int(profile.bloodline_level or 0), 0)
+    if bl is None:
+        return {"key": profile.bloodline_key, "name": profile.bloodline_key, "level": level}
+    base = REALM_BASE_POWER.get(str(profile.realm_stage or "魂士"), 1000)
+    per_level = bloodline_power_per_level(bl, base)
+    return {
+        "key": bl["key"],
+        "name": bl["name"],
+        "system": bl.get("system"),
+        "rarity": bl.get("rarity"),
+        "skill": bl.get("skill"),
+        "description": bl.get("description"),
+        "level": level,
+        "power_per_level": per_level,
+        "power": int(per_level * level),
     }
 
 
@@ -698,6 +781,7 @@ def _rings_payload_session(session, tg: int) -> list[dict[str, Any]]:
             "years": int(row.years),
             "tier": row.tier,
             "color": row.color,
+            "source_name": row.source_name or "",
             "skill_name": row.skill_name,
             "attack": int(row.attack),
             "defense": int(row.defense),
@@ -729,6 +813,7 @@ def _equipment_summary_session(session, tg: int) -> dict[str, Any]:
             "spirit": int((row.item_meta or {}).get("spirit", 0)),
             "trigger_chance": (row.item_meta or {}).get("trigger_chance"),
             "skill": (row.item_meta or {}).get("skill"),
+            "tier": (row.item_meta or {}).get("tier"),
         }
     return summary
 
@@ -756,6 +841,9 @@ def _compute_battle_power_session(session, profile: DouluoProfile) -> int:
 
     power += max(int(profile.spirit_power or 0), 0) * 3
     power += int(profile.sect_contribution or 0) // 10
+    bloodline = _bloodline_payload(profile)
+    if bloodline:
+        power += int(bloodline.get("power") or 0)
     return int(power)
 
 
@@ -1016,6 +1104,80 @@ def _builtin_item_definitions() -> list[dict[str, Any]]:
                 "is_builtin": True,
             }
         )
+    # 锻造材料
+    for material in MATERIAL_CATALOG:
+        definitions.append(
+            {
+                "item_key": material["key"],
+                "name": material["name"],
+                "category": "craft_material",
+                "rarity": material.get("rarity", "凡品"),
+                "description": material.get("description", ""),
+                "is_builtin": True,
+            }
+        )
+    # 魂导器(含锻造配方)
+    for device in SOUL_DEVICE_CATALOG:
+        definitions.append(
+            {
+                "item_key": device["key"],
+                "name": device["name"],
+                "category": "soul_device",
+                "rarity": device.get("rarity", "良品"),
+                "description": device.get("description", ""),
+                "equipment_slot": device.get("equipment_slot"),
+                "attack": int(device.get("attack", 0)),
+                "defense": int(device.get("defense", 0)),
+                "speed": int(device.get("speed", 0)),
+                "spirit": int(device.get("spirit", 0)),
+                "trigger_chance": device.get("trigger_chance"),
+                "skill": device.get("skill"),
+                "recipe_config": {
+                    "materials": dict(device.get("recipe") or {}),
+                    "coin": int(device.get("craft_coin") or 0),
+                    "craftsman_rank": max(int(device.get("craftsman_rank") or 1), 1),
+                },
+                "is_builtin": True,
+            }
+        )
+    # 斗铠(基础一字斗铠;升级在 item_meta.tier 上推进)
+    armor_base = BATTLE_ARMOR_TIERS[0] if BATTLE_ARMOR_TIERS else {}
+    definitions.append(
+        {
+            "item_key": BATTLE_ARMOR_ITEM_KEY,
+            "name": armor_base.get("name", "一字斗铠"),
+            "category": "battle_armor",
+            "rarity": armor_base.get("rarity", "凡品"),
+            "description": armor_base.get("description", ""),
+            "equipment_slot": EQUIP_SLOT_BATTLE_ARMOR,
+            "attack": int(armor_base.get("attack", 0)),
+            "defense": int(armor_base.get("defense", 0)),
+            "speed": int(armor_base.get("speed", 0)),
+            "spirit": int(armor_base.get("spirit", 0)),
+            "trigger_chance": armor_base.get("trigger_chance"),
+            "skill": armor_base.get("skill"),
+            "is_builtin": True,
+        }
+    )
+    # 魂核
+    for core in SOUL_CORE_TIERS:
+        definitions.append(
+            {
+                "item_key": core["item_key"],
+                "name": core["name"],
+                "category": "soul_core",
+                "rarity": core.get("rarity", "凡品"),
+                "description": core.get("description", ""),
+                "equipment_slot": EQUIP_SLOT_SOUL_CORE,
+                "attack": int(core.get("attack", 0)),
+                "defense": int(core.get("defense", 0)),
+                "speed": int(core.get("speed", 0)),
+                "spirit": int(core.get("spirit", 0)),
+                "trigger_chance": core.get("trigger_chance"),
+                "skill": core.get("skill"),
+                "is_builtin": True,
+            }
+        )
     return definitions
 
 
@@ -1038,6 +1200,7 @@ def _sync_builtin_item_definitions(session) -> None:
                 spirit=definition.get("spirit", 0),
                 trigger_chance=definition.get("trigger_chance"),
                 skill=definition.get("skill"),
+                recipe_config=definition.get("recipe_config"),
                 version=1,
                 enabled=True,
                 is_builtin=True,
@@ -1635,3 +1798,443 @@ def challenge_boss(tg: int, boss_key: str | None = None) -> dict[str, Any]:
     from bot.sql_helper.sql_douluo.boss_service import challenge_boss as _challenge
 
     return _challenge(int(tg), boss_key)
+
+
+# ---------------------------------------------------------------------------
+# 斗罗后续作品玩法:血脉 / 魂导器 / 斗铠 / 魂核
+# ---------------------------------------------------------------------------
+def get_bloodline_payload(tg: int) -> dict[str, Any] | None:
+    with Session() as session:
+        profile = _load_profile(session, int(tg))
+        return _bloodline_payload(profile)
+
+
+def awaken_bloodline(tg: int) -> dict[str, Any]:
+    settings = get_settings()
+    tg = int(tg)
+    now = utcnow()
+    with Session() as session:
+        profile = _load_profile(session, tg, for_update=True)
+        if profile.bloodline_key:
+            raise ValueError("血脉已经觉醒,无法重复觉醒")
+        if not profile.wuhun_key:
+            raise ValueError("尚未觉醒武魂,先觉醒武魂再觉醒血脉")
+        if realm_index(str(profile.realm_stage or "魂士")) < realm_index(BLOODLINE_AWAKEN_REALM):
+            raise ValueError(f"至少达到 {BLOODLINE_AWAKEN_REALM} 才能觉醒血脉")
+        action_counter, _, _ = _check_daily_action_points(session, tg, "bloodline", settings, now)
+        daily_counter, limit = _check_daily_action_limit(session, tg, "bloodline", settings, now)
+        cost = _coerce_int(settings.get("bloodline_awaken_coin"), 2000)
+        if int(profile.coin or 0) < cost:
+            raise ValueError(f"觉醒血脉需要 {cost} 金魂币,当前不足")
+        profile.coin = int(profile.coin or 0) - cost
+        _consume_daily_action_points(action_counter, _action_point_cost(settings, "bloodline"))
+        _increment_daily_action_counter(daily_counter)
+        from bot.plugins.douluo_game.core.bloodline import random_bloodline
+
+        bloodline = random_bloodline()
+        profile.bloodline_key = bloodline["key"]
+        profile.bloodline_level = 1
+        profile.bloodline_at = now
+        profile.updated_at = utcnow()
+        session.commit()
+        session.refresh(profile)
+        power = _compute_battle_power_session(session, profile)
+    result = {
+        "tg": tg,
+        "success": True,
+        "awakened": True,
+        "result_text": f"血脉觉醒!获得【{bloodline['name']}】({bloodline['rarity']})\n"
+        f"血脉特性:{bloodline.get('skill')}",
+        "bloodline": _bloodline_payload(profile),
+        "profile": _serialize_profile_row(profile),
+        "battle_power": power,
+    }
+    result["broadcast"] = _build_douluo_broadcast_event(profile, result, settings)
+    return result
+
+
+def enhance_bloodline(tg: int) -> dict[str, Any]:
+    settings = get_settings()
+    tg = int(tg)
+    now = utcnow()
+    with Session() as session:
+        profile = _load_profile(session, tg, for_update=True)
+        if not profile.bloodline_key:
+            raise ValueError("尚未觉醒血脉,先觉醒血脉再淬炼")
+        level = max(int(profile.bloodline_level or 0), 0)
+        if level >= BLOODLINE_MAX_LEVEL:
+            raise ValueError(f"血脉已淬炼至 {BLOODLINE_MAX_LEVEL} 级,已达圆满")
+        action_counter, _, _ = _check_daily_action_points(session, tg, "bloodline", settings, now)
+        daily_counter, limit = _check_daily_action_limit(session, tg, "bloodline", settings, now)
+        coin_cost = _coerce_int(settings.get("bloodline_enhance_coin"), 800)
+        sp_cost = _coerce_int(settings.get("bloodline_enhance_soul_power"), 2000)
+        if int(profile.coin or 0) < coin_cost:
+            raise ValueError(f"淬炼血脉需要 {coin_cost} 金魂币,当前不足")
+        if int(profile.soul_power or 0) < sp_cost:
+            raise ValueError(f"淬炼血脉需要消耗 {sp_cost} 魂力,当前不足")
+        profile.coin = int(profile.coin or 0) - coin_cost
+        profile.soul_power = max(int(profile.soul_power or 0) - sp_cost, 0)
+        _consume_daily_action_points(action_counter, _action_point_cost(settings, "bloodline"))
+        _increment_daily_action_counter(daily_counter)
+        success_percent = max(100 - level, 10)
+        success = random.randint(1, 100) <= success_percent
+        if success:
+            profile.bloodline_level = level + 1
+        profile.updated_at = utcnow()
+        session.commit()
+        session.refresh(profile)
+        power = _compute_battle_power_session(session, profile)
+    result = {
+        "tg": tg,
+        "success": success,
+        "result_text": (
+            f"血脉淬炼成功,升至 {profile.bloodline_level} 级!"
+            if success
+            else f"血脉淬炼失败,流失部分魂力(成功率 {success_percent}%)"
+        ),
+        "bloodline": _bloodline_payload(profile),
+        "profile": _serialize_profile_row(profile),
+        "battle_power": power,
+    }
+    result["broadcast"] = _build_douluo_broadcast_event(profile, result, settings)
+    return result
+
+
+def _roll_materials(region: dict[str, Any], count: int = 3) -> list[dict[str, Any]]:
+    """按区域产出品质与材料表加权随机 material。"""
+    tier_rarities = list(region.get("rarity_tiers") or ["凡品", "良品"])
+    allowed_keys = set(region.get("materials") or [m["key"] for m in MATERIAL_CATALOG])
+    pool: list[dict[str, Any]] = []
+    for material in MATERIAL_CATALOG:
+        if material["key"] not in allowed_keys:
+            continue
+        rarity = str(material.get("rarity") or "凡品")
+        rarity_weight = MATERIAL_WEIGHT_BY_RARITY.get(rarity, 10)
+        tier_weight = 4 if rarity in tier_rarities else 1
+        pool.extend([material] * (rarity_weight * tier_weight))
+    if not pool:
+        pool = [MATERIAL_CATALOG[-1]]
+    return [dict(random.choice(pool)) for _ in range(max(int(count or 3), 1))]
+
+
+def prospect_materials(tg: int, region_key: str | None = None) -> dict[str, Any]:
+    from bot.plugins.douluo_game.core.material import prospect_region_by_key, prospects_for_stage
+
+    settings = get_settings()
+    tg = int(tg)
+    now = utcnow()
+    with Session() as session:
+        profile = _load_profile(session, tg, for_update=True)
+        if not profile.wuhun_key:
+            raise ValueError("尚未觉醒武魂,先觉醒武魂再勘探矿脉")
+        stage = str(profile.realm_stage or "魂士")
+        accessible = prospects_for_stage(stage)
+        region: dict[str, Any] | None = None
+        if region_key:
+            candidate = prospect_region_by_key(region_key)
+            if candidate is None:
+                raise ValueError("勘探区域不存在")
+            if candidate["key"] not in [r["key"] for r in accessible]:
+                raise ValueError("当前境界无法进入该勘探区域")
+            region = candidate
+        else:
+            region = accessible[-1] if accessible else None
+        if region is None:
+            raise ValueError("当前境界还没有开放的勘探区域")
+        entry_coin = max(_coerce_int(region.get("entry_coin"), 0), 0)
+        if int(profile.coin or 0) < entry_coin:
+            raise ValueError(f"进入【{region['name']}】需要 {entry_coin} 金魂币")
+        action_counter, _, _ = _check_daily_action_points(session, tg, "prospect", settings, now)
+        daily_counter, limit = _check_daily_action_limit(session, tg, "prospect", settings, now)
+        coin_cost = max(_coerce_int(settings.get("prospect_coin_cost"), 100), 0)
+        total_cost = entry_coin + coin_cost
+        if int(profile.coin or 0) < total_cost:
+            raise ValueError(f"勘探需要 {total_cost} 金魂币(入场 {entry_coin} + 消耗 {coin_cost})")
+        profile.coin = int(profile.coin or 0) - total_cost
+        _consume_daily_action_points(action_counter, _action_point_cost(settings, "prospect"))
+        _increment_daily_action_counter(daily_counter)
+        materials = _roll_materials(region, count=random.randint(2, 3))
+        for material in materials:
+            _grant_inventory_item_session(session, tg, material["key"], 1)
+        profile.updated_at = utcnow()
+        session.commit()
+        session.refresh(profile)
+        power = _compute_battle_power_session(session, profile)
+    result = {
+        "tg": tg,
+        "region": region,
+        "materials": materials,
+        "result_text": (
+            f"在【{region['name']}】勘探,收获:\n"
+            + "\n".join(f"· {m['name']}({m['rarity']})" for m in materials)
+        ),
+        "profile": _serialize_profile_row(profile),
+        "battle_power": power,
+    }
+    result["broadcast"] = _build_douluo_broadcast_event(profile, result, settings)
+    return result
+
+
+def get_craftsman_info(tg: int) -> dict[str, Any]:
+    with Session() as session:
+        profile = _load_profile(session, int(tg))
+        exp = max(int(profile.craftsman_exp or 0), 0)
+        from bot.plugins.douluo_game.core.soul_device import craftsman_rank_from_exp
+
+        rank, lower, upper = craftsman_rank_from_exp(exp)
+        return {
+            "rank": max(int(profile.craftsman_rank or rank), rank),
+            "exp": exp,
+            "next_exp": upper if rank < len(CRAFTSMAN_RANK_EXP) else None,
+        }
+
+
+def craft_soul_device(tg: int, item_key: str) -> dict[str, Any]:
+    from bot.plugins.douluo_game.core.soul_device import craftsman_rank_from_exp
+
+    settings = get_settings()
+    tg = int(tg)
+    item_key = str(item_key or "").strip()
+    now = utcnow()
+    with Session() as session:
+        profile = _load_profile(session, tg, for_update=True)
+        definition = (
+            session.query(DouluoItemDefinition).filter(DouluoItemDefinition.item_key == item_key).first()
+        )
+        if definition is None or str(definition.category) != "soul_device":
+            raise ValueError("魂导器不存在")
+        if not definition.enabled:
+            raise ValueError("该魂导器配方已停用")
+        recipe = dict((definition.recipe_config or {}) if isinstance(definition.recipe_config, dict) else {})
+        materials = recipe.get("materials") or {}
+        craft_coin = max(_coerce_int(recipe.get("coin"), 0), 0)
+        required_rank = max(_coerce_int(recipe.get("craftsman_rank"), 1), 1)
+        current_rank = max(int(profile.craftsman_rank or 1), 1)
+        if current_rank < required_rank:
+            raise ValueError(f"锻造该魂导器需要 {required_rank} 阶魂导师,当前 {current_rank} 阶")
+        if int(profile.coin or 0) < craft_coin:
+            raise ValueError(f"锻造需要 {craft_coin} 金魂币")
+        for material_key, quantity in materials.items():
+            row = (
+                session.query(DouluoInventoryItem)
+                .filter(
+                    DouluoInventoryItem.tg == tg,
+                    DouluoInventoryItem.item_key == str(material_key),
+                )
+                .first()
+            )
+            have = int(row.quantity or 0) if row else 0
+            if have < int(quantity):
+                name = material_by_key(str(material_key)) or {"name": material_key}
+                raise ValueError(f"锻造材料不足:缺少 {name['name']} ×{int(quantity)}(现有 {have})")
+        action_counter, _, _ = _check_daily_action_points(session, tg, "craft", settings, now)
+        daily_counter, limit = _check_daily_action_limit(session, tg, "craft", settings, now)
+        for material_key, quantity in materials.items():
+            _consume_inventory_item_session(session, tg, str(material_key), int(quantity))
+        profile.coin = int(profile.coin or 0) - craft_coin
+        _consume_daily_action_points(action_counter, _action_point_cost(settings, "craft"))
+        _increment_daily_action_counter(daily_counter)
+        exp_gain = 40 + (required_rank - 1) * 25
+        new_exp = max(int(profile.craftsman_exp or 0), 0) + exp_gain
+        new_rank, _, _ = craftsman_rank_from_exp(new_exp)
+        profile.craftsman_exp = new_exp
+        profile.craftsman_rank = new_rank
+        _grant_inventory_item_session(session, tg, item_key, 1, allow_disabled=False)
+        profile.updated_at = utcnow()
+        session.commit()
+        session.refresh(profile)
+        power = _compute_battle_power_session(session, profile)
+    result = {
+        "tg": tg,
+        "item_key": item_key,
+        "craftsman_exp_gained": exp_gain,
+        "result_text": (
+            f"锻造成功!获得【{definition.name}】\n魂导师经验 +{exp_gain},当前 {new_rank} 阶"
+        ),
+        "profile": _serialize_profile_row(profile),
+        "battle_power": power,
+    }
+    result["broadcast"] = _build_douluo_broadcast_event(profile, result, settings)
+    return result
+
+
+def _battle_armor_row(session, tg: int):
+    return (
+        session.query(DouluoInventoryItem)
+        .filter(
+            DouluoInventoryItem.tg == int(tg),
+            DouluoInventoryItem.item_key == BATTLE_ARMOR_ITEM_KEY,
+        )
+        .order_by(DouluoInventoryItem.equipped_slot.desc())
+        .first()
+    )
+
+
+def upgrade_battle_armor(tg: int) -> dict[str, Any]:
+    from bot.plugins.douluo_game.core.battle_armor import battle_armor_tier_by_index
+
+    settings = get_settings()
+    tg = int(tg)
+    now = utcnow()
+    with Session() as session:
+        profile = _load_profile(session, tg, for_update=True)
+        row = _battle_armor_row(session, tg)
+        if row is None or int(row.quantity or 0) <= 0:
+            raise ValueError("背包中没有斗铠,先锻造或获得一具斗铠")
+        current_tier = int((row.item_meta or {}).get("tier") or 1)
+        next_tier = battle_armor_tier_by_index(current_tier + 1)
+        if next_tier is None:
+            raise ValueError("斗铠已达最高等阶(六字斗铠)")
+        stage = str(profile.realm_stage or "魂士")
+        if realm_index(stage) < realm_index(str(next_tier.get("realm_required") or "魂王")):
+            raise ValueError(f"淬炼【{next_tier['name']}】需要达到 {next_tier['realm_required']}")
+        materials = dict(next_tier.get("recipe") or {})
+        coin_cost = max(_coerce_int(settings.get("armor_upgrade_coin"), 1500), 0) + int(next_tier.get("coin") or 0)
+        if int(profile.coin or 0) < coin_cost:
+            raise ValueError(f"淬炼斗铠需要 {coin_cost} 金魂币")
+        for material_key, quantity in materials.items():
+            have_row = (
+                session.query(DouluoInventoryItem)
+                .filter(
+                    DouluoInventoryItem.tg == tg,
+                    DouluoInventoryItem.item_key == str(material_key),
+                )
+                .first()
+            )
+            have = int(have_row.quantity or 0) if have_row else 0
+            if have < int(quantity):
+                name = material_by_key(str(material_key)) or {"name": material_key}
+                raise ValueError(f"淬炼材料不足:缺少 {name['name']} ×{int(quantity)}(现有 {have})")
+        action_counter, _, _ = _check_daily_action_points(session, tg, "armor", settings, now)
+        daily_counter, limit = _check_daily_action_limit(session, tg, "armor", settings, now)
+        for material_key, quantity in materials.items():
+            _consume_inventory_item_session(session, tg, str(material_key), int(quantity))
+        profile.coin = int(profile.coin or 0) - coin_cost
+        _consume_daily_action_points(action_counter, _action_point_cost(settings, "armor"))
+        _increment_daily_action_counter(daily_counter)
+        meta = dict(row.item_meta or {})
+        meta.update(
+            {
+                "tier": int(next_tier["tier"]),
+                "attack": int(next_tier.get("attack") or 0),
+                "defense": int(next_tier.get("defense") or 0),
+                "speed": int(next_tier.get("speed") or 0),
+                "spirit": int(next_tier.get("spirit") or 0),
+                "trigger_chance": next_tier.get("trigger_chance"),
+                "skill": next_tier.get("skill"),
+            }
+        )
+        row.item_meta = meta
+        row.name = str(next_tier["name"])
+        row.rarity = str(next_tier.get("rarity") or row.rarity)
+        row.updated_at = now
+        profile.updated_at = now
+        session.commit()
+        session.refresh(row)
+        session.refresh(profile)
+        power = _compute_battle_power_session(session, profile)
+    result = {
+        "tg": tg,
+        "tier": int(next_tier["tier"]),
+        "result_text": f"斗铠淬炼成功!晋升为【{next_tier['name']}】",
+        "profile": _serialize_profile_row(profile),
+        "battle_power": power,
+    }
+    result["broadcast"] = _build_douluo_broadcast_event(profile, result, settings)
+    return result
+
+
+def _condense_tier_pool(stage: str) -> list[int]:
+    if stage == "神王":
+        return [3, 4, 5, 5]
+    if stage == "神":
+        return [2, 3, 4, 4]
+    if stage == "封号斗罗":
+        return [1, 2, 3, 3]
+    return [1, 2]
+
+
+def condense_soul_core(tg: int) -> dict[str, Any]:
+    settings = get_settings()
+    tg = int(tg)
+    now = utcnow()
+    with Session() as session:
+        profile = _load_profile(session, tg, for_update=True)
+        stage = str(profile.realm_stage or "魂士")
+        if realm_index(stage) < realm_index("魂斗罗"):
+            raise ValueError("至少达到魂斗罗才能凝聚魂核")
+        action_counter, _, _ = _check_daily_action_points(session, tg, "condense", settings, now)
+        daily_counter, limit = _check_daily_action_limit(session, tg, "condense", settings, now)
+        coin_cost = _coerce_int(settings.get("condense_coin_cost"), 2000)
+        sp_cost = _coerce_int(settings.get("condense_soul_power_cost"), 3000)
+        if int(profile.coin or 0) < coin_cost:
+            raise ValueError(f"凝聚魂核需要 {coin_cost} 金魂币")
+        if int(profile.soul_power or 0) < sp_cost:
+            raise ValueError(f"凝聚魂核需要消耗 {sp_cost} 魂力")
+        profile.coin = int(profile.coin or 0) - coin_cost
+        profile.soul_power = max(int(profile.soul_power or 0) - sp_cost, 0)
+        _consume_daily_action_points(action_counter, _action_point_cost(settings, "condense"))
+        _increment_daily_action_counter(daily_counter)
+        pool = _condense_tier_pool(stage)
+        tier_index = random.choice(pool)
+        from bot.plugins.douluo_game.core.soul_core import soul_core_tier_by_index
+
+        core = soul_core_tier_by_index(tier_index)
+        item_key = str(core["item_key"])
+        _grant_inventory_item_session(session, tg, item_key, 1)
+        profile.updated_at = utcnow()
+        session.commit()
+        session.refresh(profile)
+        power = _compute_battle_power_session(session, profile)
+    result = {
+        "tg": tg,
+        "item_key": item_key,
+        "core": core,
+        "result_text": f"魂力凝聚成功!获得【{core['name']}】({core['rarity']})\n精神力 +{core.get('spirit')}",
+        "profile": _serialize_profile_row(profile),
+        "battle_power": power,
+    }
+    result["broadcast"] = _build_douluo_broadcast_event(profile, result, settings)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# 后续作品内容目录(listers 供 bundle / bot 展示)
+# ---------------------------------------------------------------------------
+def list_bloodline_catalog() -> list[dict[str, Any]]:
+    from bot.plugins.douluo_game.core.bloodline import BLOODLINE_CATALOG
+
+    return BLOODLINE_CATALOG
+
+
+def list_material_catalog() -> list[dict[str, Any]]:
+    return MATERIAL_CATALOG
+
+
+def list_prospect_regions() -> list[dict[str, Any]]:
+    return PROSPECT_REGIONS
+
+
+def list_soul_device_catalog() -> list[dict[str, Any]]:
+    return SOUL_DEVICE_CATALOG
+
+
+def list_battle_armor_tiers() -> list[dict[str, Any]]:
+    return BATTLE_ARMOR_TIERS
+
+
+def list_soul_core_tiers() -> list[dict[str, Any]]:
+    return SOUL_CORE_TIERS
+
+
+def get_sequel_catalog() -> dict[str, Any]:
+    """静态目录:供 Mini App 渲染锻造/斗铠/魂核界面。"""
+    return {
+        "bloodlines": list_bloodline_catalog(),
+        "materials": list_material_catalog(),
+        "prospect_regions": list_prospect_regions(),
+        "soul_devices": list_soul_device_catalog(),
+        "battle_armor_tiers": list_battle_armor_tiers(),
+        "soul_core_tiers": list_soul_core_tiers(),
+        "craftsman_rank_exp": CRAFTSMAN_RANK_EXP,
+    }

@@ -13,21 +13,25 @@ from bot import LOGGER, admin_p, group, owner_p, prefixes, user_p
 from bot.plugins.sdk import build_plugin_url
 from bot.scheduler.bot_commands import BotCommands
 from bot.sql_helper.sql_douluo import (
+    awaken_bloodline,
     awaken_wuhun,
     build_douluo_leaderboard,
     compute_duel_preview,
+    get_bloodline_payload,
+    get_craftsman_info,
     get_daily_action_usage,
     get_settings,
     get_wuhun_payload,
     hunt_soul_beast,
     list_player_inventory_grouped,
+    prospect_materials,
     resolve_duel,
     serialize_profile,
     train_soul_power,
     upsert_profile_identity,
 )
 
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "0.2.0"
 
 DOULUO_BOT_COMMANDS = [
     BotCommand("douluo", "打开斗罗大陆玩法入口 [私聊/群聊]"),
@@ -38,6 +42,8 @@ DOULUO_BOT_COMMANDS = [
     BotCommand("dl_hunt", "群内猎杀魂兽获取魂环 [群聊]"),
     BotCommand("dl_wuhun", "觉醒/查看武魂 [群聊]"),
     BotCommand("dl_duel", "回复目标发起斗魂 [群聊]"),
+    BotCommand("dl_bloodline", "觉醒/查看血脉 [群聊]"),
+    BotCommand("dl_prospect", "群内勘探矿脉获取锻造材料 [群聊]"),
 ]
 
 GROUP_ACTION_COMMANDS = {
@@ -217,7 +223,10 @@ def _action_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton("💍 魂环·魂骨", callback_data="douluo:rings"),
             ],
             [
+                InlineKeyboardButton("🩸 血脉", callback_data="douluo:bloodline"),
                 InlineKeyboardButton("🎒 背包", callback_data="douluo:bag"),
+            ],
+            [
                 InlineKeyboardButton("🏆 排行榜", callback_data="douluo:rank"),
             ],
         ]
@@ -295,7 +304,8 @@ def _ring_line(ring: dict[str, Any]) -> str:
         years_text = f"{years // 10000}万" if years % 10000 == 0 else f"{years / 10000:.1f}万"
     else:
         years_text = str(years)
-    return f"{emoji}第{ring.get('slot')}魂环·{ring.get('tier')}({years_text}年) {ring.get('skill_name') or ''}".rstrip()
+    source = f"【{ring.get('source_name')}】" if ring.get("source_name") else ""
+    return f"{emoji}{source}第{ring.get('slot')}魂环·{ring.get('tier')}({years_text}年) {ring.get('skill_name') or ''}".rstrip()
 
 
 def _profile_bundle(tg: int) -> dict[str, Any]:
@@ -401,6 +411,37 @@ def _format_inventory_text(inventory: dict[str, Any], display: str | None = None
     return "\n".join(lines)
 
 
+def _format_bloodline_text(payload: dict[str, Any] | None, display: str | None = None, craftsman: dict[str, Any] | None = None) -> str:
+    lines: list[str] = []
+    header = f"🧬【{display} · 血脉与魂导】" if display else "🧬 血脉与魂导"
+    if payload:
+        lines.append(f"{header}\n血脉:{payload.get('name')}({payload.get('rarity')}) Lv.{payload.get('level')}")
+        lines.append(f"🌀 体系:{payload.get('system')} ｜ 📜 特性:{payload.get('skill') or '无'}")
+        lines.append(f"💪 血脉加成战力:{payload.get('power')}")
+    else:
+        lines.append(f"{header}\n血脉:未觉醒\n(需达到 魂尊 且已觉醒武魂,使用 /dl_bloodline 觉醒)")
+    if craftsman:
+        rank = int(craftsman.get("rank") or 1)
+        exp = int(craftsman.get("exp") or 0)
+        next_exp = craftsman.get("next_exp")
+        progress = f"{exp}/{next_exp}" if next_exp else f"{exp}(已满级)"
+        lines.append(f"🔧 魂导师等级:{rank} ｜ 熟练度:{progress}")
+    return "\n".join(lines)
+
+
+def _format_prospect_text(result: dict[str, Any], display: str | None = None) -> str:
+    region = result.get("region") or {}
+    materials = result.get("materials") or []
+    lines = [
+        f"⛏️ {display} 在【{region.get('name')}】勘探矿脉!" if display else f"⛏️ 在【{region.get('name')}】勘探矿脉!",
+        "🏺 收获锻造材料:",
+    ]
+    for material in materials:
+        lines.append(f"  · {material.get('name')}({material.get('rarity')})")
+    lines.append(f"🏔️ 当前境界:{result['profile']['realm_stage']} {result['profile']['realm_stars']}星")
+    return "\n".join(lines)
+
+
 def _format_leaderboard_text(result: dict[str, Any]) -> str:
     lines = [f"🏆【斗罗排行榜 · {result.get('label')}】"]
     for index, item in enumerate(result.get("items") or [], start=1):
@@ -432,11 +473,11 @@ def _format_hunt_text(result: dict[str, Any], display: str | None = None) -> str
     ring = result.get("ring") or {}
     action = ring.get("action")
     if action == "absorb":
-        lines.append(f"{emoji} 吸收 {ring.get('tier')}魂环({ring.get('years')}年),解锁第{ring.get('slot')}魂技·{ring.get('skill_name')}")
+        lines.append(f"{emoji} 吸收【{ring.get('source_name')}】的 {ring.get('tier')}魂环({ring.get('years')}年),解锁第{ring.get('slot')}魂技·{ring.get('skill_name')}")
     elif action == "replace":
-        lines.append(f"{emoji} 以 {ring.get('tier')}魂环({ring.get('years')}年)替换第{ring.get('slot')}魂环")
+        lines.append(f"{emoji} 以【{ring.get('source_name')}】的 {ring.get('tier')}魂环({ring.get('years')}年)替换第{ring.get('slot')}魂环")
     elif action == "give_up":
-        lines.append(f"{emoji} 斩获 {ring.get('tier')}魂环({ring.get('years')}年),但{ring.get('reason')}")
+        lines.append(f"{emoji} 斩获【{ring.get('source_name')}】的 {ring.get('tier')}魂环({ring.get('years')}年),但{ring.get('reason')}")
     event = result.get("event")
     if event:
         lines.append(f"✨ 奇遇:{event.get('title')}:{event.get('text', '')}")
@@ -492,7 +533,7 @@ def register_bot(bot_instance) -> None:
             bundle = await run_in_threadpool(_profile_bundle, actor_tg)
             await _reply_text(
                 message,
-                _format_profile_text(bundle) + "\n\n群内可用:/dl_me /dl_bag /dl_rank /dl_train /dl_hunt /dl_wuhun /dl_duel",
+                _format_profile_text(bundle) + "\n\n群内可用:/dl_me /dl_bag /dl_rank /dl_train /dl_hunt /dl_wuhun /dl_bloodline /dl_prospect /dl_duel",
                 reply_markup=_action_keyboard(),
                 persistent=True,
             )
@@ -509,9 +550,9 @@ def register_bot(bot_instance) -> None:
                 "🎮【斗罗大陆玩法】",
                 "💬 私聊机器人发送 /douluo 可打开斗罗总览与行动面板。",
                 "📋 群内命令:/dl_me 名帖,/dl_bag 背包,/dl_rank 排行。",
-                "🧬 互动命令:/dl_wuhun 觉醒武魂,回复玩家 /dl_duel [金魂币] 发起斗魂。",
-                "⚔️ 群内行动:/dl_train 修炼,/dl_hunt 猎杀魂兽获取魂环。",
-                "🏛️ 宗门、拍卖、每日任务、魂兽讨伐、碎片兑换请在 Mini App 中展开。",
+                "🧬 互动命令:/dl_wuhun 觉醒武魂,/dl_bloodline 觉醒血脉,回复玩家 /dl_duel [金魂币] 发起斗魂。",
+                "⚔️ 群内行动:/dl_train 修炼,/dl_hunt 猎杀魂兽,/dl_prospect 勘探矿脉获取锻造材料。",
+                "🏛️ 宗门、拍卖、每日任务、魂兽讨伐、魂导锻造、斗铠与魂核请在 Mini App 中展开。",
                 "📢 关键突破、高阶魂环、稀有魂骨和讨伐会自动播报。",
             ]
             await _reply_text(message, "\n".join(lines), quote=True, reply_markup=_miniapp_keyboard())
@@ -587,6 +628,62 @@ def register_bot(bot_instance) -> None:
         except Exception as exc:
             LOGGER.exception(f"douluo wuhun command failed: {exc}")
             await _reply_text(message, f"❌ 武魂操作失败:{exc}", quote=True)
+        finally:
+            await _delete_user_command_message(message)
+
+    @bot_instance.on_message(filters.command(["dl_bloodline", "douluo_bloodline"], prefixes) & filters.chat(group))
+    async def douluo_bloodline_command(_, message):
+        try:
+            if not _register_command_dispatch(message, "dl_bloodline"):
+                return
+            actor_tg = await run_in_threadpool(_sync_actor_identity, message)
+            display = _actor_name_label(message)
+            payload = await run_in_threadpool(get_bloodline_payload, actor_tg)
+            craftsman = await run_in_threadpool(get_craftsman_info, actor_tg)
+            if not payload:
+                result = await run_in_threadpool(awaken_bloodline, actor_tg)
+                await _reply_text(
+                    message,
+                    f"🧬 {display} 血脉觉醒!\n"
+                    f"血脉:{result['bloodline']['name']}({result['bloodline']['rarity']}) Lv.{result['bloodline']['level']}\n"
+                    f"🌀 体系:{result['bloodline'].get('system')} ｜ 📜 特性:{result['bloodline'].get('skill')}\n"
+                    f"💪 血脉加成战力:{result['bloodline'].get('power')}\n\n"
+                    f"使用 /dl_bloodline 查看详情,或打开 Mini App 淬炼血脉。",
+                    quote=True,
+                )
+                chat_id = int(getattr(getattr(message, "chat", None), "id", 0) or 0)
+                if chat_id:
+                    await _push_broadcast_if_needed(bot_instance, chat_id, result)
+                return
+            await _reply_text(
+                message, _format_bloodline_text(payload, display=display, craftsman=craftsman), quote=True
+            )
+        except ValueError as exc:
+            await _reply_text(message, f"❌ 血脉操作失败:{exc}", quote=True)
+        except Exception as exc:
+            LOGGER.exception(f"douluo bloodline command failed: {exc}")
+            await _reply_text(message, f"❌ 血脉操作失败:{exc}", quote=True)
+        finally:
+            await _delete_user_command_message(message)
+
+    @bot_instance.on_message(filters.command(["dl_prospect", "douluo_prospect"], prefixes) & filters.chat(group))
+    async def douluo_prospect_command(_, message):
+        try:
+            if not _register_command_dispatch(message, "dl_prospect"):
+                return
+            actor_tg = await run_in_threadpool(_sync_actor_identity, message)
+            args = getattr(message, "command", None) or []
+            region_key = str(args[1]) if len(args) > 1 else None
+            result = await run_in_threadpool(prospect_materials, actor_tg, region_key)
+            await _reply_text(message, _format_prospect_text(result, display=_actor_name_label(message)), quote=True)
+            chat_id = int(getattr(getattr(message, "chat", None), "id", 0) or 0)
+            if chat_id:
+                await _push_broadcast_if_needed(bot_instance, chat_id, result)
+        except ValueError as exc:
+            await _reply_text(message, f"❌ 勘探失败:{exc}", quote=True)
+        except Exception as exc:
+            LOGGER.exception(f"douluo prospect command failed: {exc}")
+            await _reply_text(message, f"❌ 勘探失败:{exc}", quote=True)
         finally:
             await _delete_user_command_message(message)
 
@@ -717,6 +814,11 @@ def register_bot(bot_instance) -> None:
                 "train": (train_soul_power, _format_train_text, "修炼失败"),
                 "hunt": (lambda: hunt_soul_beast(tg), _format_hunt_text, "猎杀失败"),
                 "wuhun": (lambda: get_wuhun_payload(tg), _format_wuhun_text, "武魂读取失败"),
+                "bloodline": (
+                    lambda: (get_bloodline_payload(tg), get_craftsman_info(tg)),
+                    lambda data: _format_bloodline_text(data[0], craftsman=data[1]),
+                    "血脉读取失败",
+                ),
                 "bag": (lambda: list_player_inventory_grouped(tg), _format_inventory_text, "背包读取失败"),
                 "rank": (lambda: build_douluo_leaderboard("power", 10), _format_leaderboard_text, "排行榜读取失败"),
             }

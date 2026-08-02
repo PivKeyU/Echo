@@ -148,6 +148,7 @@ def hunt_soul_beast(tg: int, region_key: str | None = None) -> dict[str, Any]:
                 years=years,
                 tier=str(tier_info["tier"]),
                 color=str(tier_info["color"]),
+                source_name=beast["name"],
                 skill_name=skill_name,
                 attack=stats["attack"],
                 defense=stats["defense"],
@@ -162,6 +163,7 @@ def hunt_soul_beast(tg: int, region_key: str | None = None) -> dict[str, Any]:
                 "years": years,
                 "tier": str(tier_info["tier"]),
                 "color": str(tier_info["color"]),
+                "source_name": beast["name"],
                 "skill_name": skill_name,
                 "absorb_fee": 0,
                 "replaced": False,
@@ -178,6 +180,7 @@ def hunt_soul_beast(tg: int, region_key: str | None = None) -> dict[str, Any]:
                 weakest.years = years
                 weakest.tier = str(tier_info["tier"])
                 weakest.color = str(tier_info["color"])
+                weakest.source_name = beast["name"]
                 weakest.attack = stats["attack"]
                 weakest.defense = stats["defense"]
                 weakest.speed = stats["speed"]
@@ -189,6 +192,7 @@ def hunt_soul_beast(tg: int, region_key: str | None = None) -> dict[str, Any]:
                     "years": years,
                     "tier": str(tier_info["tier"]),
                     "color": str(tier_info["color"]),
+                    "source_name": beast["name"],
                     "skill_name": weakest.skill_name,
                     "replaced_skill": old_skill,
                     "absorb_fee": absorb_fee,
@@ -201,6 +205,7 @@ def hunt_soul_beast(tg: int, region_key: str | None = None) -> dict[str, Any]:
                     "years": years,
                     "tier": str(tier_info["tier"]),
                     "color": str(tier_info["color"]),
+                    "source_name": beast["name"],
                     "absorb_fee": 0,
                     "replaced": False,
                     "reason": f"新魂环年限低于你已吸收的最弱魂环({weakest.years}年),放弃吸收",

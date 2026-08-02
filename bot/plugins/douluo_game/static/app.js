@@ -3,7 +3,7 @@
 /* ============ 斗罗大陆 Mini App ============ */
 
 const RING_COLOR_EMOJI = { "白": "⚪", "黄": "🟡", "紫": "🟣", "黑": "⚫", "红": "🔴", "蓝金": "💎" };
-const CATEGORY_LABELS = { soulbone: "魂骨", ambush: "暗器", pill: "丹药", material: "材料", contract: "契约", ticket: "凭证" };
+const CATEGORY_LABELS = { soulbone: "魂骨", ambush: "暗器", pill: "丹药", material: "材料", contract: "契约", ticket: "凭证", craft_material: "锻造材料", soul_device: "魂导器", battle_armor: "斗铠", soul_core: "魂核" };
 
 const state = {
   initData: "",
@@ -15,6 +15,7 @@ const state = {
   authMode: "login",
   busy: false,
   selectedRegion: "",
+  selectedProspectRegion: "",
   rankKind: "power",
 };
 
@@ -231,6 +232,9 @@ function renderAll() {
   renderTrain(d);
   renderHunt(d);
   renderBreakthrough(d);
+  renderSequel(d);
+  renderCraft(d);
+  renderArmor(d);
   renderInventory(d);
   renderSect(d);
   renderTasks(d);
@@ -265,7 +269,8 @@ function ringText(ring) {
   const emoji = RING_COLOR_EMOJI[ring.color] || "⚪";
   const years = Number(ring.years || 0);
   const yearsText = years >= 10000 && years % 10000 === 0 ? (years / 10000) + "万" : String(years);
-  return `${emoji}第${ring.slot}环·${ring.tier}(${yearsText}年)${ring.skill_name ? " " + esc(ring.skill_name) : ""}`;
+  const source = ring.source_name ? `【${esc(ring.source_name)}】` : "";
+  return `${emoji}${source}第${ring.slot}环·${ring.tier}(${yearsText}年)${ring.skill_name ? " " + esc(ring.skill_name) : ""}`;
 }
 
 function renderWuhun(d) {
@@ -333,6 +338,128 @@ function renderBreakthrough(d) {
   const btn = el('<button type="button" data-action="breakthrough">🚀 尝试突破</button>');
   const info = el(`<div class="entry"><div class="row"><span>当前 ${esc(d.realm_stage || "魂士")} ${d.realm_stars || 1} 星</span><span class="muted">${d.breakthrough_failures ? "失败保底 " + d.breakthrough_failures + " 次" : "突破失败将损失魂力"}</span></div></div>`);
   box.replaceChildren(info, btn);
+}
+
+function renderSequel(d) {
+  const box = qs("#bloodline-status");
+  const actions = qs("#bloodline-actions");
+  const bl = d.bloodline || null;
+  const settings = d.settings || {};
+  const lines = [];
+  if (bl) {
+    lines.push(el(`<div class="entry"><div class="row"><span><strong>${esc(bl.name)}</strong>（${esc(bl.rarity)}）Lv.${bl.level}</span><span class="muted">血脉加成战力 ${fmtNum(bl.power || 0)}</span></div></div>`));
+    lines.push(el(`<div class="entry"><div class="row"><span>🌀 ${esc(bl.system || "")}</span><span class="muted">📜 ${esc(bl.skill || "无")}</span></div></div>`));
+  } else {
+    lines.push(el(`<div class="entry">血脉未觉醒。达到 <strong>魂尊</strong> 且已觉醒武魂后，可消耗 <strong>${fmtNum(settings.bloodline_awaken_coin || 2000)}</strong> 魂币觉醒血脉（龙王传说 / 终极斗罗）。</div>`));
+  }
+  box.replaceChildren(...lines);
+  const buttons = [];
+  if (!bl) {
+    buttons.push(el('<button type="button" data-action="bloodline-awaken">🩸 觉醒血脉</button>'));
+  } else if (bl.level < 50) {
+    buttons.push(el(`<button type="button" data-action="bloodline-enhance" class="ghost">⬆️ 淬炼血脉（${fmtNum(settings.bloodline_enhance_coin || 800)} 魂币 + ${fmtNum(settings.bloodline_enhance_soul_power || 2000)} 魂力）</button>`));
+  } else {
+    buttons.push(el('<div class="entry muted" style="font-size:12px">血脉已淬炼至圆满。</div>'));
+  }
+  actions.replaceChildren(...buttons);
+
+  const cm = d.craftsman || {};
+  const cmBox = qs("#craftsman-status");
+  const cmExp = cm.exp || 0;
+  const cmNext = cm.next_exp;
+  cmBox.innerHTML = `<div class="row"><span>🔧 魂导师 ${cm.rank || 1} 阶</span><span class="muted">熟练度 ${cmNext ? cmExp + "/" + cmNext : cmExp + "（已满级）"}</span></div>`;
+}
+
+function renderCraft(d) {
+  const settings = d.settings || {};
+  const regions = d.sequel?.prospect_regions || [];
+  const grid = qs("#prospect-regions");
+  grid.replaceChildren(...regions.map((region) => {
+    const node = el(`<div class="module-item" data-prospect-region="${esc(region.key)}">
+      <div class="name">${esc(region.name)}</div>
+      <div class="meta">入场 ${fmtNum(region.entry_coin || 0)} 魂币</div>
+    </div>`);
+    if (region.key === state.selectedProspectRegion) node.classList.add("selected");
+    return node;
+  }));
+
+  const actions = qs("#actions-prospect");
+  const usage = (d.action_usage || {}).prospect || {};
+  const remain = usage.remaining;
+  actions.replaceChildren(
+    el(`<div class="entry"><div class="row"><span>⛏️ 勘探矿脉</span><span class="muted">${remain === null ? "不限次数" : "今日剩余 " + remain + " 次"} · 消耗 ${fmtNum(settings.prospect_coin_cost || 100)} 魂币</span></div></div>`),
+    el(`<button type="button" data-action="prospect">⛏️ 勘探${state.selectedProspectRegion ? "（当前区域）" : ""}</button>`)
+  );
+
+  const defs = d.item_definitions || [];
+  const defMap = {};
+  defs.forEach((def) => { defMap[def.item_key] = def; });
+  const held = {};
+  (d.inventory?.categories?.craft_material || []).forEach((item) => { held[item.item_key] = item.quantity; });
+  const devices = defs.filter((x) => x.category === "soul_device");
+  const cmRank = d.craftsman?.rank || 1;
+  const nodes = devices.map((def) => {
+    const recipe = (def.recipe_config || {}).materials || {};
+    const coin = (def.recipe_config || {}).coin || 0;
+    const needRank = (def.recipe_config || {}).craftsman_rank || 1;
+    const matText = Object.entries(recipe).map(([key, qty]) => {
+      const m = defMap[key];
+      const have = held[key] || 0;
+      const ok = have >= qty;
+      return `<span class="${ok ? "" : "lack"}">${esc(m ? m.name : key)} ${have}/${qty}</span>`;
+    }).join(" ");
+    const locked = cmRank < needRank;
+    const btn = locked
+      ? `<span class="muted" style="font-size:12px">需魂导师 ${needRank} 阶</span>`
+      : `<button type="button" class="mini" data-action="craft" data-item="${esc(def.item_key)}" ${def.enabled === false ? "disabled" : ""}>锻造</button>`;
+    return el(`<div class="entry">
+      <div class="row"><span><strong>${esc(def.name)}</strong> <span class="muted">${esc(def.rarity || "")}</span></span>${btn}</div>
+      <div class="meta muted" style="font-size:12px">攻 ${def.attack || 0} 防 ${def.defense || 0} 速 ${def.speed || 0} 精 ${def.spirit || 0} ｜ 魂币 ${fmtNum(coin)}</div>
+      <div class="meta" style="font-size:12px">${matText}</div>
+    </div>`);
+  });
+  const craftBox = qs("#craft-devices");
+  craftBox.replaceChildren(...nodes.length ? nodes : [el('<div class="entry">暂无魂导器配方。</div>')]);
+}
+
+function renderArmor(d) {
+  const settings = d.settings || {};
+  const box = qs("#armor-status");
+  const actions = qs("#actions-armor");
+  const armor = d.equipment?.battle_armor || null;
+  const tiers = d.sequel?.battle_armor_tiers || [];
+  const lines = [];
+  if (armor) {
+    lines.push(el(`<div class="entry"><div class="row"><span><strong>${esc(armor.name)}</strong>（${esc(armor.rarity || "")}）</span><span class="muted">攻 ${armor.attack || 0} 防 ${armor.defense || 0} 速 ${armor.speed || 0}</span></div></div>`));
+    const nextTier = tiers.find((t) => Number(t.tier) === Number(armor.tier || 0) + 1);
+    if (nextTier) {
+      const matText = Object.entries(nextTier.recipe || {}).map(([key, qty]) => key + "×" + qty).join(" ");
+      lines.push(el(`<div class="entry"><div class="row"><span>下一阶</span><span class="muted">${esc(nextTier.name)}（需 ${esc(nextTier.realm_required)}）</span></div><div class="meta muted" style="font-size:12px">${matText} ｜ 魂币 ${fmtNum(nextTier.coin)}</div></div>`));
+    } else {
+      lines.push(el('<div class="entry"><div class="row"><span class="muted">斗铠已至最高阶。</span></div></div>'));
+    }
+  } else {
+    const first = tiers[0];
+    lines.push(el(`<div class="entry">未穿戴斗铠。${first ? "达到 <strong>" + esc(first.realm_required) + "</strong> 并集齐材料后可锻造，锻造后在背包中装备。" : ""}</div>`));
+  }
+  box.replaceChildren(...lines);
+  const buttons = [];
+  const nextTier = armor ? tiers.find((t) => Number(t.tier) === Number(armor.tier || 0) + 1) : null;
+  if (nextTier) {
+    buttons.push(el(`<button type="button" data-action="armor-upgrade">⬆️ 升级斗铠（${fmtNum(settings.armor_upgrade_coin || 1500)} 魂币）</button>`));
+  }
+  if (armor) {
+    buttons.push(el(`<button type="button" data-action="unequip" data-slot="battle_armor" class="ghost">卸下斗铠</button>`));
+  }
+  actions.replaceChildren(...buttons);
+
+  const core = d.equipment?.soul_core || null;
+  const coreBox = qs("#soul-core-status");
+  coreBox.innerHTML = core
+    ? `<div class="row"><span>💎 <strong>${esc(core.name)}</strong>（${esc(core.rarity || "")}）</span><span class="muted">精 ${fmtNum(core.spirit || 0)} ｜ 攻 ${fmtNum(core.attack || 0)} 防 ${fmtNum(core.defense || 0)}</span></div>`
+    : `<div class="row"><span>💎 魂核未凝聚</span><span class="muted">魂斗罗及以上可凝聚（${fmtNum(settings.condense_coin_cost || 2000)} 魂币 + ${fmtNum(settings.condense_soul_power_cost || 3000)} 魂力）</span></div>`;
+  const condenseBtn = el('<button type="button" data-action="soul-core-condense" class="ghost">💎 凝聚魂核</button>');
+  actions.appendChild(condenseBtn);
 }
 
 function renderInventory(d) {
@@ -515,6 +642,8 @@ function renderBottomNav() {
   const sections = [
     ["#wuhun-card", "武魂"],
     ["#hunt-card", "猎杀"],
+    ["#bloodline-card", "血脉"],
+    ["#craft-card", "魂导"],
     ["#inventory-card", "背包"],
     ["#task-card", "任务"],
     ["#auction-card", "拍卖"],
@@ -576,6 +705,11 @@ function wireEvents() {
     if (region) {
       state.selectedRegion = region.dataset.region;
       qsa("[data-region]").forEach((n) => n.classList.toggle("selected", n.dataset.region === state.selectedRegion));
+    }
+    const prospectRegion = event.target.closest("[data-prospect-region]");
+    if (prospectRegion) {
+      state.selectedProspectRegion = prospectRegion.dataset.prospectRegion;
+      qsa("[data-prospect-region]").forEach((n) => n.classList.toggle("selected", n.dataset.prospectRegion === state.selectedProspectRegion));
     }
     const rankBtn = event.target.closest("[data-rank-kind]");
     if (rankBtn) {
@@ -675,6 +809,30 @@ async function handleAction(node) {
         payload = await postJson("/plugins/douluo/api/boss/challenge", { boss_key: node.dataset.boss });
         showResult({ detail: describeBoss(payload.result) });
         break;
+      case "bloodline-awaken":
+        payload = await postJson("/plugins/douluo/api/bloodline/awaken", {});
+        showResult(payload.result);
+        break;
+      case "bloodline-enhance":
+        payload = await postJson("/plugins/douluo/api/bloodline/enhance", {});
+        showResult(payload.result);
+        break;
+      case "prospect":
+        payload = await postJson("/plugins/douluo/api/prospect", { region_key: state.selectedProspectRegion || "" });
+        showResult(payload.result);
+        break;
+      case "craft":
+        payload = await postJson("/plugins/douluo/api/craft", { item_key: node.dataset.item });
+        showResult(payload.result);
+        break;
+      case "armor-upgrade":
+        payload = await postJson("/plugins/douluo/api/armor/upgrade", {});
+        showResult(payload.result);
+        break;
+      case "soul-core-condense":
+        payload = await postJson("/plugins/douluo/api/soul-core/condense", {});
+        showResult({ detail: `凝聚【${payload.result.core?.name || "魂核"}】！可在背包中装备` });
+        break;
       default:
         return;
     }
@@ -692,10 +850,11 @@ async function promptBid(listingId) {
 
 function describeHunt(result) {
   const ring = result.ring || {};
+  const src = ring.source_name ? `【${ring.source_name}】` : "";
   let text = `在【${result.region?.name}】猎杀 ${result.beast?.name}，魂力 +${result.soul_power_gained}，魂币 +${result.coin_gained}。`;
-  if (ring.action === "absorb") text += `\n吸收第${ring.slot}魂环·${ring.tier}(${ring.years}年)，解锁魂技【${ring.skill_name}】！`;
-  else if (ring.action === "replace") text += `\n以${ring.tier}魂环(${ring.years}年)替换第${ring.slot}魂环！`;
-  else if (ring.action === "give_up") text += `\n斩获${ring.tier}魂环(${ring.years}年)，但${ring.reason}。`;
+  if (ring.action === "absorb") text += `\n吸收${src}第${ring.slot}魂环·${ring.tier}(${ring.years}年)，解锁魂技【${ring.skill_name}】！`;
+  else if (ring.action === "replace") text += `\n以${src}${ring.tier}魂环(${ring.years}年)替换第${ring.slot}魂环！`;
+  else if (ring.action === "give_up") text += `\n斩获${src}${ring.tier}魂环(${ring.years}年)，但${ring.reason}。`;
   if (result.event) text += `\n✨ 奇遇：${result.event.title}`;
   return text;
 }
@@ -705,6 +864,7 @@ function describeBoss(result) {
     ? `讨伐【${result.boss?.name}】胜利！魂币 +${result.rewards?.coin}，魂力 +${result.rewards?.soul_power}，战绩分 +${result.rewards?.score}`
     : `讨伐【${result.boss?.name}】失败...`;
   if (result.rewards?.soulbone) text += `\n获得魂骨【${result.rewards.soulbone.name}】！`;
+  if (result.rewards?.armor) text += `\n🛡️ 获得斗铠【${result.rewards.armor.name}】，在背包中装备后可在斗铠页升级！`;
   return text;
 }
 
