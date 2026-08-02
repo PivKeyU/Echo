@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 from pathlib import Path
+from urllib.parse import urlsplit
 from pydantic import BaseModel, Field
 from sqlalchemy.engine import make_url
 from typing import Dict, List, Optional, Union
@@ -242,6 +243,7 @@ class API(BaseModel):
     http_port: Optional[int] = 8838
     public_url: Optional[str] = ""
     miniapp_title: Optional[str] = "片刻面板"
+    access_token: Optional[str] = ""
     admin_token: Optional[str] = ""
     webapp_auth_max_age: int = 86400
     allow_origins: Optional[List[Union[str, int]]] = None
@@ -249,8 +251,8 @@ class API(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
         if self.allow_origins is None:
-            self.allow_origins = ["*"]
-            # 如果未设置，默认为 ["*"]，为了安全可以设置成本机ip&反代的域名，列表可包含多个
+            parsed = urlsplit(str(self.public_url or "").strip())
+            self.allow_origins = [f"{parsed.scheme}://{parsed.netloc}"] if parsed.scheme and parsed.netloc else []
 
 
 class RedEnvelope(BaseModel):

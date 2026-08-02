@@ -66,6 +66,18 @@ class SectJoinPayload(InitDataPayload):
     sect_key: str
 
 
+class SectTransferPayload(InitDataPayload):
+    sect_key: str
+
+
+class SectLeavePayload(InitDataPayload):
+    pass
+
+
+class SectQuestClaimPayload(InitDataPayload):
+    pass
+
+
 class AdminBootstrapPayload(BaseModel):
     token: str | None = None
     init_data: str | None = None
@@ -93,6 +105,13 @@ class AdminSettingsPayload(BaseModel):
     duel_max_stake: int | None = None
     duel_prepare_seconds: int | None = None
     broadcast_enabled: bool | None = None
+    message_auto_delete_seconds: int | None = None
+    expedition_boss_chance: int | None = None
+    expedition_hidden_event_chance: int | None = None
+    sect_transfer_cooldown_days: int | None = None
+    sect_transfer_cost: int | None = None
+    sect_transfer_contribution_retain: int | None = None
+    sect_leave_gold_cost: int | None = None
 
 
 class PlayerResourceGrantPayload(BaseModel):
@@ -105,10 +124,19 @@ class PlayerResourceGrantPayload(BaseModel):
         "sect_contribution",
         "pill_stock",
         "technique_level",
+        "method_level",
+        "fire_rank",
+        "pet_level",
+        "academy_fire_energy",
+        "faction_reputation",
+        "black_corner_infamy",
         "fire_progress",
         "boss_score",
         "tower_floor",
         "auction_credit",
+        "realm_stage",
+        "realm_stars",
+        "fire_name",
     ] = "gold"
     amount: int = 1
 

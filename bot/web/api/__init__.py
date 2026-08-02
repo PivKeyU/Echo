@@ -6,8 +6,9 @@ Author:susu
 Date:2024/8/27
 """
 from fastapi import APIRouter, Depends, HTTPException, Request
+from secrets import compare_digest
 
-from bot import LOGGER, admins, api as config_api, bot_token, owner
+from bot import LOGGER, api as config_api, owner
 
 from .admin import router as admin_router
 from .ban_playlist import route as ban_playlist_route
@@ -25,8 +26,7 @@ miniapp_api_route = APIRouter(tags=["小程序"])
 
 def _resolve_token(request: Request) -> str | None:
     token = (
-        request.query_params.get("token")
-        or request.headers.get("x-api-token")
+        request.headers.get("x-api-token")
         or request.headers.get("x-admin-token")
     )
     if token:
@@ -39,15 +39,19 @@ def _resolve_token(request: Request) -> str | None:
 
 
 def _resolve_telegram_init_data(request: Request) -> str | None:
-    return request.headers.get("x-telegram-init-data") or request.query_params.get("tg_init_data")
+    return request.headers.get("x-telegram-init-data")
 
 
 async def verify_token(request: Request):
     try:
+        expected_token = str(config_api.access_token or "").strip()
+        if not expected_token:
+            LOGGER.error("api.access_token 未配置，已拒绝通用 API 请求")
+            raise HTTPException(status_code=503, detail="API 访问令牌尚未配置。")
         token = _resolve_token(request)
         if not token:
             raise HTTPException(status_code=401, detail="本女仆没看到访问令牌呢...")
-        if token != bot_token:
+        if not compare_digest(str(token), expected_token):
             LOGGER.warning("Invalid token attempt")
             raise HTTPException(status_code=403, detail="这个令牌不对啦，本女仆不认识！")
         return True
@@ -60,12 +64,12 @@ async def verify_token(request: Request):
 
 async def verify_admin_token(request: Request):
     token = _resolve_token(request)
-    expected_token = config_api.admin_token or bot_token
+    expected_token = str(config_api.admin_token or "").strip()
     init_data = _resolve_telegram_init_data(request)
 
-    if token and token == expected_token:
+    if token and expected_token and compare_digest(str(token), expected_token):
         request.state.admin_auth = "token"
-        request.state.admin_user = {"id": owner if token == expected_token else None}
+        request.state.admin_user = {"id": owner}
         return True
 
     if init_data:
@@ -88,6 +92,7 @@ async def verify_admin_token(request: Request):
 
 emby_api_route.include_router(
     ban_playlist_route,
+    dependencies=[Depends(verify_token)],
 )
 emby_api_route.include_router(
     client_filter_router,

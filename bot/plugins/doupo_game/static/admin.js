@@ -606,6 +606,13 @@ async function bootstrapAdmin(forceToken = false) {
   document.querySelector("#setting-duel-max-stake").value = Number(data.settings?.duel_max_stake || 500);
   document.querySelector("#setting-duel-prepare-seconds").value = Number(data.settings?.duel_prepare_seconds || 8);
   document.querySelector("#setting-broadcast-enabled").checked = Boolean(data.settings?.broadcast_enabled ?? true);
+  document.querySelector("#setting-message-auto-delete").value = Number(data.settings?.message_auto_delete_seconds ?? 180);
+  document.querySelector("#setting-expedition-boss-chance").value = Number(data.settings?.expedition_boss_chance ?? 14);
+  document.querySelector("#setting-expedition-hidden-chance").value = Number(data.settings?.expedition_hidden_event_chance ?? 8);
+  document.querySelector("#setting-sect-transfer-cooldown").value = Number(data.settings?.sect_transfer_cooldown_days ?? 7);
+  document.querySelector("#setting-sect-transfer-cost").value = Number(data.settings?.sect_transfer_cost ?? 1500);
+  document.querySelector("#setting-sect-transfer-retain").value = Number(data.settings?.sect_transfer_contribution_retain ?? 50);
+  document.querySelector("#setting-sect-leave-cost").value = Number(data.settings?.sect_leave_gold_cost ?? 0);
   renderActionList(data);
   renderAdminMetrics(data);
   renderContentCatalog(data);
@@ -645,6 +652,13 @@ async function saveSettings() {
     duel_max_stake: Number(document.querySelector("#setting-duel-max-stake").value || 500),
     duel_prepare_seconds: Number(document.querySelector("#setting-duel-prepare-seconds").value || 8),
     broadcast_enabled: document.querySelector("#setting-broadcast-enabled").checked,
+    message_auto_delete_seconds: Number(document.querySelector("#setting-message-auto-delete").value || 180),
+    expedition_boss_chance: Number(document.querySelector("#setting-expedition-boss-chance").value || 0),
+    expedition_hidden_event_chance: Number(document.querySelector("#setting-expedition-hidden-chance").value || 0),
+    sect_transfer_cooldown_days: Number(document.querySelector("#setting-sect-transfer-cooldown").value || 0),
+    sect_transfer_cost: Number(document.querySelector("#setting-sect-transfer-cost").value || 0),
+    sect_transfer_contribution_retain: Number(document.querySelector("#setting-sect-transfer-retain").value || 0),
+    sect_leave_gold_cost: Number(document.querySelector("#setting-sect-leave-cost").value || 0),
   };
   await request("POST", "/plugins/doupo/admin-api/settings", payload);
   setStatus("设置已保存");

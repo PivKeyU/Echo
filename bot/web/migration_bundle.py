@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import shutil
 import stat
 import tempfile
@@ -30,6 +31,22 @@ CONFIG_DIRNAME = "config"
 MANIFEST_FILENAME = "manifest.json"
 PLUGIN_SNAPSHOT_FILENAME = "plugins.json"
 CONFIG_SNAPSHOT_FILENAME = "data-config.json"
+
+
+def _env_limit(name: str, default: int, minimum: int) -> int:
+    try:
+        return max(int(os.getenv(name, str(default)) or default), minimum)
+    except (TypeError, ValueError):
+        return default
+
+
+MAX_ARCHIVE_BYTES = _env_limit("PIVKEYU_MIGRATION_MAX_ARCHIVE_BYTES", 512 * 1024 * 1024, 1024 * 1024)
+MAX_ARCHIVE_MEMBERS = _env_limit("PIVKEYU_MIGRATION_MAX_ARCHIVE_MEMBERS", 20_000, 100)
+MAX_MEMBER_BYTES = _env_limit("PIVKEYU_MIGRATION_MAX_MEMBER_BYTES", 1024 * 1024 * 1024, 1024 * 1024)
+MAX_UNCOMPRESSED_BYTES = _env_limit("PIVKEYU_MIGRATION_MAX_UNCOMPRESSED_BYTES", 4 * 1024 * 1024 * 1024, 1024 * 1024)
+MAX_COMPRESSION_RATIO = _env_limit("PIVKEYU_MIGRATION_MAX_COMPRESSION_RATIO", 500, 10)
+MAX_MANIFEST_BYTES = 1024 * 1024
+MAX_METADATA_JSON_BYTES = 16 * 1024 * 1024
 EXPORT_EXCLUDED_DATA_NAMES = {
     "__pycache__",
     "config.json",
@@ -107,6 +124,16 @@ def _json_dump(path: Path, payload: Any) -> None:
 
 def _json_load(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _json_load_limited(path: Path, max_bytes: int, label: str) -> Any:
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        raise MigrationBundleError(f"无法读取{label}。") from exc
+    if size > max_bytes:
+        raise MigrationBundleError(f"{label}不能超过 {max_bytes // (1024 * 1024)}MB。")
+    return _json_load(path)
 
 
 def _is_zero_date_string(value: str) -> bool:
@@ -292,6 +319,8 @@ def _write_archive_to_temp(archive_source: bytes | BinaryIO, target: Path) -> No
     if isinstance(archive_source, (bytes, bytearray)):
         if not archive_source:
             raise MigrationBundleError("上传的迁移压缩包为空。")
+        if len(archive_source) > MAX_ARCHIVE_BYTES:
+            raise MigrationBundleError(f"迁移压缩包不能超过 {MAX_ARCHIVE_BYTES // (1024 * 1024)}MB。")
         target.write_bytes(bytes(archive_source))
         return
 
@@ -301,7 +330,18 @@ def _write_archive_to_temp(archive_source: bytes | BinaryIO, target: Path) -> No
 
     try:
         with target.open("wb") as destination:
-            shutil.copyfileobj(source, destination, length=1024 * 1024)
+            written = 0
+            while True:
+                chunk = source.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > MAX_ARCHIVE_BYTES:
+                    raise MigrationBundleError(f"迁移压缩包不能超过 {MAX_ARCHIVE_BYTES // (1024 * 1024)}MB。")
+                destination.write(chunk)
+    except MigrationBundleError:
+        target.unlink(missing_ok=True)
+        raise
     except Exception as exc:
         raise MigrationBundleError("上传的迁移压缩包无法写入临时目录。") from exc
 
@@ -319,14 +359,30 @@ def _extract_bundle(archive_source: bytes | BinaryIO) -> tuple[Path, dict[str, A
         with zipfile.ZipFile(archive_path) as archive:
             normalized_members: list[tuple[zipfile.ZipInfo, PurePosixPath]] = []
             visible_paths: set[PurePosixPath] = set()
+            total_uncompressed = 0
+            archive_members = archive.infolist()
+            if len(archive_members) > MAX_ARCHIVE_MEMBERS:
+                raise MigrationBundleError(f"迁移压缩包文件数量不能超过 {MAX_ARCHIVE_MEMBERS}。")
 
-            for info in archive.infolist():
+            for info in archive_members:
                 normalized = _normalize_archive_path(info.filename)
                 if normalized is None:
                     continue
                 mode = info.external_attr >> 16
                 if stat.S_ISLNK(mode):
                     raise MigrationBundleError("迁移压缩包中不能包含符号链接。")
+                if info.flag_bits & 0x1:
+                    raise MigrationBundleError("迁移压缩包中不能包含加密文件。")
+                if info.file_size > MAX_MEMBER_BYTES:
+                    raise MigrationBundleError(f"迁移压缩包中的单个文件不能超过 {MAX_MEMBER_BYTES // (1024 * 1024)}MB。")
+                total_uncompressed += int(info.file_size or 0)
+                if total_uncompressed > MAX_UNCOMPRESSED_BYTES:
+                    raise MigrationBundleError(
+                        f"迁移压缩包解压后的总大小不能超过 {MAX_UNCOMPRESSED_BYTES // (1024 * 1024)}MB。"
+                    )
+                compressed_size = max(int(info.compress_size or 0), 1)
+                if info.file_size > 1024 * 1024 and info.file_size / compressed_size > MAX_COMPRESSION_RATIO:
+                    raise MigrationBundleError("迁移压缩包包含异常压缩比文件，已拒绝导入。")
                 normalized_members.append((info, normalized))
                 visible_paths.add(normalized)
 
@@ -349,8 +405,16 @@ def _extract_bundle(archive_source: bytes | BinaryIO) -> tuple[Path, dict[str, A
         if not manifest_path.exists():
             raise MigrationBundleError("迁移压缩包缺少 manifest.json。")
 
-        manifest = _json_load(manifest_path)
-        schema_version = int(manifest.get("schema_version") or 0)
+        try:
+            manifest = _json_load_limited(manifest_path, MAX_MANIFEST_BYTES, "manifest.json")
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise MigrationBundleError("迁移压缩包中的 manifest.json 不是有效 JSON。") from exc
+        if not isinstance(manifest, dict):
+            raise MigrationBundleError("迁移压缩包中的 manifest.json 顶层必须是 JSON 对象。")
+        try:
+            schema_version = int(manifest.get("schema_version") or 0)
+        except (TypeError, ValueError) as exc:
+            raise MigrationBundleError("迁移压缩包中的 schema_version 格式无效。") from exc
         if schema_version != BUNDLE_SCHEMA_VERSION:
             raise MigrationBundleError(
                 f"迁移压缩包版本不兼容：当前仅支持 schema_version={BUNDLE_SCHEMA_VERSION}，实际为 {schema_version}。"
@@ -475,6 +539,8 @@ def _restore_data_snapshot(data_root: Path) -> dict[str, Any]:
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     for source in sorted(data_root.iterdir(), key=lambda item: item.name.lower()):
+        if not _clean_data_name(source.name):
+            raise MigrationBundleError(f"迁移压缩包包含不允许恢复的运行时数据项：{source.name}")
         target = DATA_DIR / source.name
         if target.exists():
             if target.is_dir():
@@ -491,6 +557,45 @@ def _restore_data_snapshot(data_root: Path) -> dict[str, Any]:
         restored_items.append({"name": source.name, "type": item_type})
 
     return {"count": len(restored_items), "items": restored_items}
+
+
+def _snapshot_data_targets(data_root: Path, rollback_root: Path) -> list[str]:
+    names: list[str] = []
+    if not data_root.exists():
+        return names
+    rollback_root.mkdir(parents=True, exist_ok=True)
+    for source in sorted(data_root.iterdir(), key=lambda item: item.name.lower()):
+        if not _clean_data_name(source.name):
+            raise MigrationBundleError(f"迁移压缩包包含不允许恢复的运行时数据项：{source.name}")
+        names.append(source.name)
+        current = DATA_DIR / source.name
+        if not current.exists():
+            continue
+        backup = rollback_root / source.name
+        if current.is_dir():
+            shutil.copytree(current, backup)
+        else:
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(current, backup)
+    return names
+
+
+def _rollback_data_targets(rollback_root: Path, names: list[str]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        target = DATA_DIR / name
+        if target.exists():
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+        backup = rollback_root / name
+        if not backup.exists():
+            continue
+        if backup.is_dir():
+            shutil.copytree(backup, target)
+        else:
+            shutil.copy2(backup, target)
 
 
 def _restore_config_snapshot(config_root: Path) -> dict[str, Any]:
@@ -511,19 +616,81 @@ def restore_migration_bundle(archive_source: bytes | BinaryIO, *, restore_config
         if not database_root.exists() or not any(database_root.glob("*.json")):
             raise MigrationBundleError("迁移压缩包中未找到数据库快照，已拒绝导入。")
 
-        data_result = _restore_data_snapshot(extract_root / DATA_DIRNAME)
-        database_result = _restore_database_snapshot(database_root)
-        config_result = (
-            _restore_config_snapshot(extract_root / CONFIG_DIRNAME)
-            if restore_config_file
-            else {
-                "restored": False,
-                "available": bool((extract_root / CONFIG_DIRNAME / CONFIG_SNAPSHOT_FILENAME).exists()),
-                "filename": CONFIG_SNAPSHOT_FILENAME,
-            }
-        )
+        config_snapshot = extract_root / CONFIG_DIRNAME / CONFIG_SNAPSHOT_FILENAME
+        if restore_config_file and config_snapshot.exists():
+            try:
+                if config_snapshot.stat().st_size > MAX_METADATA_JSON_BYTES:
+                    raise MigrationBundleError("迁移压缩包中的配置快照不能超过 16MB。")
+                json.loads(config_snapshot.read_text(encoding="utf-8-sig"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise MigrationBundleError("迁移压缩包中的配置快照不是有效 JSON，已拒绝导入。") from exc
+
         plugin_snapshot_path = extract_root / PLUGIN_DIRNAME / PLUGIN_SNAPSHOT_FILENAME
-        plugin_items = _json_load(plugin_snapshot_path) if plugin_snapshot_path.exists() else []
+        try:
+            plugin_items = (
+                _json_load_limited(plugin_snapshot_path, MAX_METADATA_JSON_BYTES, "插件清单")
+                if plugin_snapshot_path.exists()
+                else []
+            )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise MigrationBundleError("迁移压缩包中的插件清单不是有效 JSON，已拒绝导入。") from exc
+        if not isinstance(plugin_items, list):
+            raise MigrationBundleError("迁移压缩包中的插件清单格式不正确，已拒绝导入。")
+
+        rollback_root = temp_root / "rollback"
+        rollback_database_root = rollback_root / DATABASE_DIRNAME
+        rollback_data_root = rollback_root / DATA_DIRNAME
+        rollback_config_path = rollback_root / "config.json"
+        current_config_path = DATA_DIR / "config.json"
+        imported_data_root = extract_root / DATA_DIRNAME
+        imported_data_names = _snapshot_data_targets(imported_data_root, rollback_data_root)
+        _write_database_snapshot(rollback_database_root)
+        config_previously_existed = current_config_path.exists()
+        if restore_config_file and config_previously_existed:
+            rollback_config_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(current_config_path, rollback_config_path)
+
+        restore_started = False
+        try:
+            restore_started = True
+            database_result = _restore_database_snapshot(database_root)
+            data_result = _restore_data_snapshot(imported_data_root)
+            config_result = (
+                _restore_config_snapshot(extract_root / CONFIG_DIRNAME)
+                if restore_config_file
+                else {
+                    "restored": False,
+                    "available": bool(config_snapshot.exists()),
+                    "filename": CONFIG_SNAPSHOT_FILENAME,
+                }
+            )
+        except Exception as restore_exc:
+            rollback_errors: list[str] = []
+            if restore_started:
+                try:
+                    _restore_database_snapshot(rollback_database_root)
+                except Exception as rollback_exc:
+                    rollback_errors.append(f"数据库回滚失败：{rollback_exc}")
+                try:
+                    _rollback_data_targets(rollback_data_root, imported_data_names)
+                except Exception as rollback_exc:
+                    rollback_errors.append(f"运行时数据回滚失败：{rollback_exc}")
+                if restore_config_file:
+                    try:
+                        if config_previously_existed:
+                            shutil.copy2(rollback_config_path, current_config_path)
+                        else:
+                            current_config_path.unlink(missing_ok=True)
+                    except Exception as rollback_exc:
+                        rollback_errors.append(f"配置回滚失败：{rollback_exc}")
+            if rollback_errors:
+                LOGGER.critical("迁移导入失败且未能完整回滚：%s", "；".join(rollback_errors))
+                raise MigrationBundleError(
+                    f"迁移导入失败，且未能完整回滚：{'；'.join(rollback_errors)}"
+                ) from restore_exc
+            if isinstance(restore_exc, MigrationBundleError):
+                raise
+            raise MigrationBundleError("迁移导入失败，已恢复导入前的数据。") from restore_exc
         if database_result["skipped_archive_tables"]:
             warnings.append(
                 "以下归档表未在当前数据库结构中找到，已跳过恢复："

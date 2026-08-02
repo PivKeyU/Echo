@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import random
+from datetime import timedelta
 from typing import Any
 
 from bot.plugins.doupo_game.core import (
+    EXPEDITION_BOSSES,
     EXPEDITION_EVENTS,
+    EXPEDITION_HIDDEN_EVENTS,
     EXPEDITION_REGIONS,
+    expedition_boss_for_region,
+    expedition_event_for_key,
     expedition_region,
     realm_rank,
 )
@@ -41,6 +46,16 @@ def _active_expedition(session, tg: int, *, lock: bool = False) -> DoupoExpediti
     return query.order_by(DoupoExpedition.id.desc()).first()
 
 
+_STALE_EXPEDITION_HOURS = 24
+
+
+def _expedition_is_stale(row: DoupoExpedition, hours: int = _STALE_EXPEDITION_HOURS) -> bool:
+    """超过 24 小时未推进的游历视为超时，避免 0 步游历软锁永久占位。"""
+    if row is None or not row.updated_at:
+        return False
+    return utcnow() - row.updated_at > timedelta(hours=max(int(hours or 0), 1))
+
+
 def _roll_pair(value: Any, default: tuple[int, int] = (0, 0)) -> int:
     if not isinstance(value, (list, tuple)) or len(value) < 2:
         low, high = default
@@ -70,7 +85,7 @@ def _region_available(profile: DoupoProfile, region: dict[str, Any], settings: d
         return False, f"需要达到{required}"
     entry_gold = max(int(region.get("entry_gold") or 0), 0)
     if int(profile.gold or 0) < entry_gold:
-        return False, f"需要 {entry_gold} 金币作为补给"
+        return False, f"需要 🪙 {entry_gold} 金币作为补给"
     return True, ""
 
 
@@ -80,11 +95,13 @@ def _success_chance(
     choice: dict[str, Any],
     danger: int,
     settings: dict[str, Any] | None = None,
+    *,
+    power_override: int | None = None,
 ) -> int:
     base = int(choice.get("base_chance") or 100)
     if base >= 100:
         return 100
-    recommended = max(int(region.get("recommended_power") or 1), 1)
+    recommended = power_override if power_override else max(int(region.get("recommended_power") or 1), 1)
     power = _battle_power(profile, settings)
     power_adjustment = round(((power / recommended) - 1.0) * 18)
     power_adjustment = min(max(power_adjustment, -18), 18)
@@ -93,12 +110,51 @@ def _success_chance(
     return min(max(base + power_adjustment + technique_bonus + fire_bonus - max(int(danger or 0), 0) * 2, 20), 95)
 
 
-def _pick_next_event(row: DoupoExpedition, region: dict[str, Any]) -> str:
+def _coerce_chance(value: Any, default: int) -> int:
+    if value is None or value == "":
+        return min(max(int(default), 0), 100)
+    try:
+        return min(max(int(value), 0), 100)
+    except (TypeError, ValueError):
+        return min(max(int(default), 0), 100)
+
+
+def _pick_next_event(
+    row: DoupoExpedition,
+    region: dict[str, Any],
+    profile: DoupoProfile | None = None,
+    settings: dict[str, Any] | None = None,
+) -> str:
+    """Pick the next event key.
+
+    优先级：隐藏事件（低概率、境界达标）→ 区域首领（``boss:<region_key>``，每步小概率）→
+    常规事件。Boss 与隐藏事件不会紧接同一种连续出现。
+    """
+    settings = settings or {}
+    hidden_chance = _coerce_chance(settings.get("expedition_hidden_event_chance"), 8)
+    boss_chance = _coerce_chance(settings.get("expedition_boss_chance"), 14)
+    history = list(row.history or [])
+    previous = str((history[-1] if history else {}).get("event_key") or row.current_event_key or "")
+    if profile is not None and hidden_chance > 0 and random.randint(1, 100) <= hidden_chance:
+        thresholds = settings.get("realm_thresholds") or []
+        player_realm = str(profile.realm_stage or "斗之气")
+        hidden_pool = [
+            hk
+            for hk, hv in EXPEDITION_HIDDEN_EVENTS.items()
+            if realm_rank(player_realm, thresholds) >= realm_rank(str(hv.get("realm_stage_min") or "斗之气"), thresholds)
+        ]
+        non_repeat = [hk for hk in hidden_pool if hk != previous] or hidden_pool
+        if non_repeat:
+            return random.choice(non_repeat)
+    if boss_chance > 0 and random.randint(1, 100) <= boss_chance:
+        boss = expedition_boss_for_region(str(region.get("key") or ""))
+        if boss is not None:
+            boss_key = f"boss:{region['key']}"
+            if boss_key != previous:
+                return boss_key
     event_keys = [key for key in region.get("event_keys") or [] if key in EXPEDITION_EVENTS]
     if not event_keys:
         raise ValueError("该区域暂未配置游历事件")
-    history = list(row.history or [])
-    previous = str((history[-1] if history else {}).get("event_key") or row.current_event_key or "")
     choices = [key for key in event_keys if key != previous] or event_keys
     return random.choice(choices)
 
@@ -132,9 +188,11 @@ def _serialize_current_event(
     region: dict[str, Any],
     settings: dict[str, Any],
 ) -> dict[str, Any] | None:
-    event = dict(EXPEDITION_EVENTS.get(str(row.current_event_key or "")) or {})
+    event = expedition_event_for_key(str(row.current_event_key or ""))
     if not event:
         return None
+    kind = str(event.get("kind") or "normal")
+    boss_power = max(int(event.get("boss_power") or 0), 1) if kind == "boss" else None
     options = []
     for choice in event.get("choices") or []:
         item = dict(choice)
@@ -143,14 +201,27 @@ def _serialize_current_event(
             "label": str(item.get("label") or "继续"),
             "description": str(item.get("description") or ""),
             "risk": str(item.get("risk") or "未知"),
-            "success_chance": _success_chance(profile, region, item, int(row.danger or 0), settings),
+            "success_chance": _success_chance(
+                profile,
+                region,
+                item,
+                int(row.danger or 0),
+                settings,
+                power_override=boss_power if (kind == "boss" and bool(item.get("boss_fight"))) else None,
+            ),
         })
-    return {
+    serialized = {
         "key": str(row.current_event_key),
+        "kind": kind,
         "title": str(event.get("title") or "未知事件"),
         "story": str(event.get("story") or ""),
         "choices": options,
     }
+    if kind == "boss":
+        serialized["boss_key"] = str(event.get("boss_key") or "")
+        serialized["boss_name"] = str(event.get("boss_name") or "区域首领")
+        serialized["boss_power"] = boss_power
+    return serialized
 
 
 def _serialize_run(row: DoupoExpedition, profile: DoupoProfile, settings: dict[str, Any]) -> dict[str, Any]:
@@ -190,6 +261,11 @@ def get_expedition_overview(tg: int) -> dict[str, Any]:
     with Session() as session:
         profile = session.query(DoupoProfile).filter(DoupoProfile.tg == actor_tg).first()
         active = _active_expedition(session, actor_tg)
+        if active is not None and _expedition_is_stale(active):
+            # 超时游历自动按失败结算，释放占位，玩家可重新开始。
+            _settle_expedition(session, active, profile, settings, "failed")
+            session.commit()
+            active = None
         latest = (
             session.query(DoupoExpedition)
             .filter(DoupoExpedition.tg == actor_tg, DoupoExpedition.status != "active")
@@ -204,6 +280,7 @@ def get_expedition_overview(tg: int) -> dict[str, Any]:
                 available, reason = False, "今日游历次数已用完"
             if action_points.get("remaining") is not None and int(action_points["remaining"]) < point_cost:
                 available, reason = False, f"今日行动力不足，需要 {point_cost} 点"
+            boss = expedition_boss_for_region(region["key"])
             regions.append({
                 "key": region["key"],
                 "name": region["name"],
@@ -214,6 +291,12 @@ def get_expedition_overview(tg: int) -> dict[str, Any]:
                 "max_steps": int(region["max_steps"]),
                 "available": available and active is None,
                 "disabled_reason": "已有一段游历正在进行" if active is not None else reason,
+                "boss": {
+                    "key": str(boss["key"]),
+                    "name": str(boss["name"]),
+                    "realm_stage_min": str(boss.get("realm_stage_min") or "斗之气"),
+                    "power": int(boss.get("power") or 0),
+                } if boss else None,
             })
         return {
             "daily_usage": daily_usage,
@@ -233,7 +316,12 @@ def start_expedition(tg: int, region_key: str) -> dict[str, Any]:
         raise ValueError("未知游历区域")
     with Session() as session:
         profile = session.query(DoupoProfile).filter(DoupoProfile.tg == actor_tg).with_for_update().first()
-        if _active_expedition(session, actor_tg, lock=True):
+        stale = _active_expedition(session, actor_tg, lock=True)
+        if stale is not None and _expedition_is_stale(stale):
+            # 超时游历先按失败结算，再允许新开，避免永久占位。
+            _settle_expedition(session, stale, profile, settings, "failed")
+            stale = None
+        if stale:
             raise ValueError("你已有一段游历正在进行")
         available, reason = _region_available(profile, region, settings)
         if not available:
@@ -272,12 +360,12 @@ def start_expedition(tg: int, region_key: str) -> dict[str, Any]:
         )
         session.add(row)
         session.flush()
-        row.current_event_key = _pick_next_event(row, region)
+        row.current_event_key = _pick_next_event(row, region, profile, settings)
         session.commit()
         session.refresh(row)
         return {
             "profile": serialize_profile(profile, settings),
-            "detail": f"已进入{region['name']}，第一段事件已出现。",
+            "detail": f"🗺️ 已进入{region['name']}，第一段事件已出现。",
             "expedition_result": _serialize_run(row, profile, settings),
         }
 
@@ -303,8 +391,8 @@ def _settle_expedition(
     loot = _loot_payload(row.loot)
     kept_douqi = loot["douqi"] * retention // 100
     kept_gold = loot["gold"] * retention // 100
-    kept_items = {key: quantity * retention // 100 for key, quantity in loot["items"].items()}
-    kept_items = {key: quantity for key, quantity in kept_items.items() if quantity > 0}
+    # 单件物品至少保留 1 件（30% 时 1*30//100=0 的边界修复）。
+    kept_items = {key: max(quantity * retention // 100, 1) for key, quantity in loot["items"].items()}
     result = {
         "gold_capped_delta": 0,
         "economy_capped": False,
@@ -336,15 +424,15 @@ def _settle_expedition(
         "items": granted_items,
     }
     status_label = {"completed": "完成游历", "retreated": "安全撤离", "failed": "重伤撤回"}[status]
-    detail = f"{status_label}，带回斗气 {douqi_actual}、金币 {gold_actual}"
+    detail = f"🗺️ {status_label}，带回 🌀 斗气 {douqi_actual}、🪙 金币 {gold_actual}"
     if granted_items:
-        detail += "、" + "、".join(f"{_catalog_item(key).get('name', key)} x{qty}" for key, qty in granted_items.items())
+        detail += "、💍 " + "、".join(f"{_catalog_item(key).get('name', key)} x{qty}" for key, qty in granted_items.items())
     if result["gold_capped_delta"]:
-        detail += f"；另有 {result['gold_capped_delta']} 金币触及今日上限"
+        detail += f"；🪙 另有 {result['gold_capped_delta']} 金币触及今日上限"
     if result["douqi_capped_delta"]:
-        detail += f"；另有 {result['douqi_capped_delta']} 斗气受今日衰减影响"
+        detail += f"；🌀 另有 {result['douqi_capped_delta']} 斗气受今日衰减影响"
     if result["douqi_bottleneck_delta"]:
-        detail += f"；另有 {result['douqi_bottleneck_delta']} 斗气因境界瓶颈未吸收"
+        detail += f"；🌀 另有 {result['douqi_bottleneck_delta']} 斗气因境界瓶颈未吸收"
     session.add(DoupoJournal(tg=int(profile.tg), action_type="expedition", title=f"游历：{status_label}", detail=detail))
     return {"detail": detail, "status": status, "settlement": dict(row.settlement or {})}
 
@@ -359,16 +447,33 @@ def choose_expedition_event(tg: int, choice_key: str, focus_score: int = 50) -> 
         row = _active_expedition(session, actor_tg, lock=True)
         if row is None:
             raise ValueError("当前没有进行中的游历")
+        if _expedition_is_stale(row):
+            # 超时游历自动按失败结算，玩家需重新开始。
+            _settle_expedition(session, row, profile, settings, "failed")
+            session.commit()
+            raise ValueError("上一段游历已超时结算，请重新开始游历")
         region = expedition_region(str(row.region_key))
-        event = dict(EXPEDITION_EVENTS.get(str(row.current_event_key or "")) or {})
+        event = expedition_event_for_key(str(row.current_event_key or ""))
         if not region or not event:
             raise ValueError("当前游历事件配置已失效，请联系管理员")
         choice = next((dict(item) for item in event.get("choices") or [] if str(item.get("key")) == str(choice_key)), None)
         if not choice:
             raise ValueError("无效的事件选择")
+        kind = str(event.get("kind") or "normal")
+        boss = expedition_boss_for_region(str(row.region_key)) if kind == "boss" else None
+        boss_rewards = dict((boss or {}).get("rewards") or {})
+        is_boss_fight = kind == "boss" and bool(choice.get("boss_fight"))
+        power_override = max(int(event.get("boss_power") or boss.get("power") or 0), 1) if is_boss_fight else None
         bounded_focus = min(max(int(focus_score or 0), 0), 100)
         focus_chance, focus_damage, focus_grade = _focus_profile(bounded_focus)
-        chance = min(max(_success_chance(profile, region, choice, int(row.danger or 0), settings) + focus_chance, 10), 98)
+        chance = min(
+            max(
+                _success_chance(profile, region, choice, int(row.danger or 0), settings, power_override=power_override)
+                + focus_chance,
+                10,
+            ),
+            98,
+        )
         if int(choice.get("base_chance") or 100) >= 100:
             chance = 100
         roll = random.randint(1, 100)
@@ -393,9 +498,24 @@ def choose_expedition_event(tg: int, choice_key: str, focus_score: int = 50) -> 
         row.danger = min(max(int(row.danger or 0) + int(effect.get("danger") or 0), 0), 10)
         row.step = int(row.step or 0) + 1
         outcome = "成功" if success else "失手"
-        summary = f"{outcome}，{focus_grade}聚气，体力 -{damage}，暂存斗气 +{douqi_gain}、金币 +{gold_gain}"
+        summary = f"{'✅ 成功' if success else '💥 失手'}，{focus_grade}聚气，❤️ 体力 -{damage}，暂存 🌀 斗气 +{douqi_gain}、🪙 金币 +{gold_gain}"
+        boss_defeated = None
+        boss_score_gained = 0
+        if is_boss_fight and success:
+            boss_defeated = str(event.get("boss_name") or "区域首领")
+            boss_score_gained = max(int(boss_rewards.get("boss_score") or 0), 0)
+            if boss_score_gained:
+                profile.boss_score = int(profile.boss_score or 0) + boss_score_gained
+            journal = DoupoJournal(
+                tg=int(profile.tg),
+                action_type="expedition",
+                title=f"讨伐 {boss_defeated}",
+                detail=f"👹 在「{region.get('name')}」讨伐区域首领 {boss_defeated} 成功，获得首领积分 +{boss_score_gained}。",
+            )
+            db.add(journal)
+            summary += f"，👹 讨伐首领 {boss_defeated} 成功（首领积分 +{boss_score_gained}）"
         if dropped:
-            summary += "，获得" + "、".join(f"{item['name']} x{item['quantity']}" for item in dropped)
+            summary += "，获得 💍 " + "、".join(f"{item['name']} x{item['quantity']}" for item in dropped)
         history = list(row.history or [])
         history.append({
             "event_key": str(row.current_event_key),
@@ -412,21 +532,26 @@ def choose_expedition_event(tg: int, choice_key: str, focus_score: int = 50) -> 
         row.history = history[-20:]
         row.updated_at = utcnow()
         settlement = None
-        if row.vitality <= 0:
-            settlement = _settle_expedition(session, row, profile, settings, "failed")
-        elif row.step >= row.max_steps:
+        # 结算优先级：走满且体力 > 0 → 完成；否则体力耗尽 → 失败（修"最后一步死亡覆盖完成"）。
+        if row.step >= row.max_steps and row.vitality > 0:
             _add_completion_bonus(row, region)
             settlement = _settle_expedition(session, row, profile, settings, "completed")
+        elif row.vitality <= 0:
+            settlement = _settle_expedition(session, row, profile, settings, "failed")
         else:
-            row.current_event_key = _pick_next_event(row, region)
+            row.current_event_key = _pick_next_event(row, region, profile, settings)
         session.commit()
         session.refresh(row)
         detail = settlement["detail"] if settlement else summary
-        return {
+        result: dict[str, Any] = {
             "profile": serialize_profile(profile, settings),
             "detail": detail,
             "expedition_result": _serialize_run(row, profile, settings),
         }
+        if boss_defeated:
+            result["boss_defeated"] = boss_defeated
+            result["boss_score_gained"] = boss_score_gained
+        return result
 
 
 def retreat_expedition(tg: int) -> dict[str, Any]:
@@ -438,8 +563,11 @@ def retreat_expedition(tg: int) -> dict[str, Any]:
         if profile is None or row is None:
             raise ValueError("当前没有进行中的游历")
         if int(row.step or 0) <= 0:
-            raise ValueError("至少完成一个事件后才能撤离")
-        settlement = _settle_expedition(session, row, profile, settings, "retreated")
+            # 0 步游历（未完成任何事件）允许结束，按失败结算，避免软锁。
+            settlement = _settle_expedition(session, row, profile, settings, "failed")
+            settlement["detail"] = "🗺️ 未完成任何事件，游历已结束"
+        else:
+            settlement = _settle_expedition(session, row, profile, settings, "retreated")
         session.commit()
         session.refresh(row)
         return {

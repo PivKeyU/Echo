@@ -194,7 +194,7 @@ async def _perform_create_user(status_message, user_id: int, username: str, secu
         f'__正在为您初始化账户，更新用户策略__......'
     )
 
-    data = await emby.emby_create(name=username, days=days)
+    data = await emby.emby_create(name=username, days=days, tg_id=user_id)
     if not data:
         await editMessage(
             status_message,

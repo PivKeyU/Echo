@@ -1,0 +1,202 @@
+{
+  "bosses": [
+    {
+      "key": "renmian_mozhu",
+      "name": "人面魔蛛",
+      "description": "落日森林深处的万年人面魔蛛,背后诡异地生着人面般的斑纹,八条蛛腿如钢铁长矛,口喷毒丝蛛网,最喜以毒液麻痹猎物后吸食其魂力。八蛛矛齐出,连封号斗罗也不敢小觑。",
+      "realm_stage_min": "魂王",
+      "recommended_power": 95000,
+      "entry_coin": 500,
+      "rewards": {
+        "coin_min": 600,
+        "coin_max": 1200,
+        "soul_power_min": 300,
+        "soul_power_max": 600,
+        "score_min": 20,
+        "score_max": 40,
+        "soulbone_chance": 0.08,
+        "soulbone_part": "右腿骨"
+      }
+    },
+    {
+      "key": "mantuoluo_she",
+      "name": "曼陀罗蛇",
+      "description": "星斗大森林外围的万年曼陀罗蛇,通体紫黑,蛇牙暗藏剧毒,凡被其咬中者片刻即亡。身法极快,善于隐匿于密林之中突袭,是初入猎场的新手魂师闻之色变的凶物。",
+      "realm_stage_min": "魂王",
+      "recommended_power": 120000,
+      "entry_coin": 800,
+      "rewards": {
+        "coin_min": 800,
+        "coin_max": 1500,
+        "soul_power_min": 400,
+        "soul_power_max": 800,
+        "score_min": 25,
+        "score_max": 50,
+        "soulbone_chance": 0.1,
+        "soulbone_part": "躯干骨"
+      }
+    },
+    {
+      "key": "gui_hu",
+      "name": "鬼虎",
+      "description": "星斗大森林的万年鬼虎,周身缭绕幽魂鬼气,一双碧绿兽瞳摄人心魄,可召唤怨灵幻影迷惑对手。夜行之物,行走无声,爪风所过寸草不生。",
+      "realm_stage_min": "魂帝",
+      "recommended_power": 160000,
+      "entry_coin": 1200,
+      "rewards": {
+        "coin_min": 1000,
+        "coin_max": 2000,
+        "soul_power_min": 600,
+        "soul_power_max": 1000,
+        "score_min": 30,
+        "score_max": 60,
+        "soulbone_chance": 0.13,
+        "soulbone_part": "头骨"
+      }
+    },
+    {
+      "key": "qianjun_yihuang",
+      "name": "千钧蚁皇",
+      "description": "地底深处的万年千钧蚁皇,通体如金石浇筑,巨力无匹,一对蚁钳可夹断精铁,号令万千工蚁蜂拥而至。防御惊人,是无数猎魂师折戟沉沙的拦路巨兽。",
+      "realm_stage_min": "魂帝",
+      "recommended_power": 185000,
+      "entry_coin": 1500,
+      "rewards": {
+        "coin_min": 1200,
+        "coin_max": 2400,
+        "soul_power_min": 700,
+        "soul_power_max": 1200,
+        "score_min": 35,
+        "score_max": 70,
+        "soulbone_chance": 0.15,
+        "soulbone_part": "左臂骨"
+      }
+    },
+    {
+      "key": "anmo_xieshenhu",
+      "name": "暗魔邪神虎",
+      "description": "流淌着邪神血脉的十万年凶虎,双目血红,獠牙倒生,以吞噬魂力为生。暗魔邪力凝于利爪,可撕裂空间裂隙,邪虎神威令星斗大森林的魂兽闻风丧胆。",
+      "realm_stage_min": "魂圣",
+      "recommended_power": 260000,
+      "entry_coin": 2000,
+      "rewards": {
+        "coin_min": 1800,
+        "coin_max": 3600,
+        "soul_power_min": 1000,
+        "soul_power_max": 1800,
+        "score_min": 50,
+        "score_max": 100,
+        "soulbone_chance": 0.2,
+        "soulbone_part": "躯干骨"
+      }
+    },
+    {
+      "key": "yaoyan_moshu",
+      "name": "妖眼魔树",
+      "description": "落日森林深处的万年妖眼魔树,树干上生着数十只血色魔眼,藤蔓如触手般缠绕攫取,花粉可使人致幻。扎根大地近乎不死,是极难缠的植物系魂兽之王。",
+      "realm_stage_min": "魂圣",
+      "recommended_power": 290000,
+      "entry_coin": 2500,
+      "rewards": {
+        "coin_min": 2200,
+        "coin_max": 4400,
+        "soul_power_min": 1200,
+        "soul_power_max": 2000,
+        "score_min": 60,
+        "score_max": 110,
+        "soulbone_chance": 0.22,
+        "soulbone_part": "头骨"
+      }
+    },
+    {
+      "key": "taitan_juyuan",
+      "name": "泰坦巨猿",
+      "description": "星斗大森林的森林之王,十万年修为的泰坦巨猿,身高二十丈,一拳可裂山岳。双拳撼地,怒吼震天,连封号斗罗都要退避三舍,是公认的近战无敌霸主。",
+      "realm_stage_min": "魂斗罗",
+      "recommended_power": 390000,
+      "entry_coin": 3500,
+      "rewards": {
+        "coin_min": 3000,
+        "coin_max": 6000,
+        "soul_power_min": 1600,
+        "soul_power_max": 2800,
+        "score_min": 80,
+        "score_max": 160,
+        "soulbone_chance": 0.28,
+        "soulbone_part": "右臂骨"
+      }
+    },
+    {
+      "key": "tianqing_niumang",
+      "name": "天青牛蟒",
+      "description": "星斗大森林的森林帝皇,十万年天青牛蟒,牛首蟒身,通体青碧如天。头生双角,可呼风唤雨,蟒身一卷山岳崩碎,是整片森林中最接近神的存在。",
+      "realm_stage_min": "封号斗罗",
+      "recommended_power": 560000,
+      "entry_coin": 5000,
+      "rewards": {
+        "coin_min": 4200,
+        "coin_max": 8400,
+        "soul_power_min": 2200,
+        "soul_power_max": 3800,
+        "score_min": 110,
+        "score_max": 220,
+        "soulbone_chance": 0.34,
+        "soulbone_part": "左腿骨"
+      }
+    },
+    {
+      "key": "bingbi_dihuangxie",
+      "name": "冰碧帝皇蝎",
+      "description": "自极北冰原走出的百万年冰碧帝皇蝎,通体冰碧剔透,尾钩凝集极寒之毒。身周寒气冻彻灵魂,一尾刺出万里冰封,被誉为十大凶兽中最强的寒毒之皇。",
+      "realm_stage_min": "封号斗罗",
+      "recommended_power": 650000,
+      "entry_coin": 6500,
+      "rewards": {
+        "coin_min": 5500,
+        "coin_max": 11000,
+        "soul_power_min": 2800,
+        "soul_power_max": 4600,
+        "score_min": 140,
+        "score_max": 280,
+        "soulbone_chance": 0.4,
+        "soulbone_part": "躯干骨"
+      }
+    },
+    {
+      "key": "diyu_molongwang",
+      "name": "地狱魔龙王",
+      "description": "自深渊裂缝中爬出的地狱魔龙王,通体漆黑龙鳞燃烧着暗焰,龙息可焚尽万灵。龙吟裂空,魔焰焚山,是连武魂殿都忌惮三分的异界魔龙。",
+      "realm_stage_min": "封号斗罗",
+      "recommended_power": 720000,
+      "entry_coin": 7500,
+      "rewards": {
+        "coin_min": 6500,
+        "coin_max": 13000,
+        "soul_power_min": 3200,
+        "soul_power_max": 5400,
+        "score_min": 170,
+        "score_max": 340,
+        "soulbone_chance": 0.44,
+        "soulbone_part": "头骨"
+      }
+    },
+    {
+      "key": "shenhai_mojingwang",
+      "name": "深海魔鲸王",
+      "description": "百万年深海魔鲸王,统治整片海域的海之霸主,体型庞大如岛,一尾可掀滔天海啸。吞噬魂力无数,是公认最接近神级的魂兽,神临之下唯此一尊。",
+      "realm_stage_min": "神",
+      "recommended_power": 950000,
+      "entry_coin": 10000,
+      "rewards": {
+        "coin_min": 9000,
+        "coin_max": 18000,
+        "soul_power_min": 5000,
+        "soul_power_max": 8000,
+        "score_min": 250,
+        "score_max": 500,
+        "soulbone_chance": 0.55,
+        "soulbone_part": "躯干骨"
+      }
+    }
+  ]
+}

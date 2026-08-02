@@ -44,7 +44,7 @@ EXPEDITION_REGIONS: list[dict[str, Any]] = [
         "recommended_power": 34000,
         "entry_gold": 100,
         "max_steps": 6,
-        "event_keys": ["black_market", "road_ambush", "ancient_ruin", "fire_vein"],
+        "event_keys": ["black_market", "road_ambush", "ancient_ruin", "black_corner_pit"],
         "completion_bonus": {
             "douqi": 220,
             "gold": 110,
@@ -222,6 +222,15 @@ EXPEDITION_EVENTS: dict[str, dict[str, Any]] = {
             {"key": "main_hall", "label": "闯入主殿", "description": "硬抗残阵，争夺核心传承。", "risk": "凶险", "base_chance": 43, "success": {"damage": [15, 25], "douqi": [75, 120], "gold": [55, 90], "danger": 5, "drops": {"flame_divide_scroll": 34, "thunder_steps_scroll": 30}}, "failure": {"damage": [42, 62], "douqi": [9, 20], "danger": 6}},
         ],
     },
+    "black_corner_pit": {
+        "title": "黑角域斗兽坑",
+        "story": "城下的石坑中传出此起彼伏的嘶吼，围观的斗者把金魂币扔进坑中，赌斗的奴隶与魔兽在血腥味里缠斗。",
+        "choices": [
+            {"key": "watch", "label": "观战押注", "description": "不下场，只观察斗兽规律并小押一手。", "risk": "稳妥", "base_chance": 100, "success": {"damage": [0, 3], "douqi": [14, 24], "gold": [12, 22], "danger": -1, "drops": {"beast_hide": 45, "black_corner_black_card": 8}}},
+            {"key": "fix_fight", "label": "暗手操盘", "description": "暗中买通看台，操纵一场赌斗的走向。", "risk": "均衡", "base_chance": 66, "success": {"damage": [4, 10], "douqi": [34, 58], "gold": [42, 72], "danger": 2, "drops": {"black_corner_black_card": 30, "mid_grade_storage_ring": 6}}, "failure": {"damage": [18, 30], "douqi": [5, 12], "danger": 4}},
+            {"key": "step_in", "label": "下场生死斗", "description": "被认作过江猛龙，不得不上台一战。", "risk": "凶险", "base_chance": 47, "success": {"damage": [13, 22], "douqi": [62, 102], "gold": [66, 108], "danger": 5, "drops": {"black_corner_black_card": 68, "monster_core_mid": 55, "low_grade_storage_ring": 10}}, "failure": {"damage": [36, 54], "douqi": [8, 18], "danger": 6}},
+        ],
+    },
     "fire_energy_forest": {
         "title": "火能森林",
         "story": "古木间漂浮着细碎火能，寒潭与兽径把森林分成数条路线。",
@@ -335,3 +344,259 @@ EXPEDITION_EVENTS: dict[str, dict[str, Any]] = {
 
 def expedition_region(region_key: str) -> dict[str, Any] | None:
     return next((dict(region) for region in EXPEDITION_REGIONS if region["key"] == str(region_key)), None)
+
+
+# ---------------------------------------------------------------------------
+# 区域首领（Boss）：每个正典区域一位，战力门槛、讨伐奖励与讨伐战绩可配。
+# ---------------------------------------------------------------------------
+EXPEDITION_BOSSES: list[dict[str, Any]] = [
+    {
+        "key": "purple_wing_lion",
+        "region_key": "magic_beast_mountains",
+        "name": "紫晶翼狮王",
+        "title": "魔兽山脉之王",
+        "story": "紫晶翼狮王盘踞山脉最深处，紫晶鳞甲能抵卸寻常斗气，嘶吼间林海为之震颤。若能胜之，其幼崽与晶核皆归你手。",
+        "realm_stage_min": "斗师",
+        "power": 6800,
+        "rewards": {
+            "douqi": [140, 220],
+            "gold": [60, 100],
+            "boss_score": 30,
+            "items": {"amethyst_lion_cub": 30, "purple_spirit_crystal": 55, "monster_core_mid": 80, "beast_hide": 100},
+        },
+    },
+    {
+        "key": "twin_head_fire_serpent",
+        "region_key": "tagor_desert",
+        "name": "双头火灵蛇",
+        "title": "塔戈尔沙渊之蟒",
+        "story": "潜伏于沙漠地火深处的双头火灵蛇，两首各喷灼焰与毒息，靠吞噬魔兽晋阶，守着一处异火线索。",
+        "realm_stage_min": "斗师",
+        "power": 26000,
+        "rewards": {
+            "douqi": [200, 320],
+            "gold": [90, 150],
+            "boss_score": 45,
+            "items": {"sea_heart_flame_trace": 18, "flame_crystal_core": 70, "monster_core_mid": 85, "snake_shed_grass": 100},
+        },
+    },
+    {
+        "key": "blood_butcher",
+        "region_key": "black_corner",
+        "name": "黑角域血屠",
+        "title": "黑榜前茅的杀神",
+        "story": "黑角域赫赫有名的血屠，以屠戮成名，名下护着整条黑市街。他腰间那枚纳戒，据说装着半座城的财富。",
+        "realm_stage_min": "大斗师",
+        "power": 60000,
+        "rewards": {
+            "douqi": [300, 460],
+            "gold": [130, 210],
+            "boss_score": 60,
+            "items": {"black_corner_black_card": 35, "mid_grade_storage_ring": 12, "monster_core_mid": 80, "beast_bone_shard": 90},
+        },
+    },
+    {
+        "key": "magma_fire_spirit_king",
+        "region_key": "canaan_inner_academy",
+        "name": "岩浆火灵王",
+        "title": "天焚炼气塔底之灵",
+        "story": "蛰伏在天焚炼气塔底层岩浆中的火灵王，凝聚万载地火而生，火劲之纯几乎不输异火，令整座塔都隐隐发热。",
+        "realm_stage_min": "大斗师",
+        "power": 90000,
+        "rewards": {
+            "douqi": [380, 580],
+            "gold": [160, 260],
+            "boss_score": 75,
+            "items": {"fallen_heart_flame_trace": 22, "earth_core_body_milk": 40, "flame_crystal_core": 85, "meteorite_iron": 35},
+        },
+    },
+    {
+        "key": "myriad_pill_beast_king",
+        "region_key": "central_plains_dan_domain",
+        "name": "万药丹兽王",
+        "title": "丹域古药园之主",
+        "story": "丹域深处由万载药力孕育的丹兽之王，以奇药为食，吐息带药香，周身筋骨早已化作最上等的炼丹材料。",
+        "realm_stage_min": "斗王",
+        "power": 170000,
+        "rewards": {
+            "douqi": [520, 780],
+            "gold": [240, 380],
+            "boss_score": 95,
+            "items": {"emperor_flow_serum": 35, "nine_leaf_reincarnation_grass": 18, "danta_exam_token": 70, "ancient_dragon_saliva": 25},
+        },
+    },
+    {
+        "key": "taixu_ancient_dragon_wraith",
+        "region_key": "ancient_starfall_ruins",
+        "name": "太虚古龙残魂",
+        "title": "星陨遗迹的龙威",
+        "story": "远古遗迹最深处盘踞着一缕太虚古龙残魂，龙威如实质般压下。若能取走它凝出的古龙鳞，无异于得到一条龙脉机缘。",
+        "realm_stage_min": "斗宗",
+        "power": 320000,
+        "rewards": {
+            "douqi": [720, 1080],
+            "gold": [360, 560],
+            "boss_score": 120,
+            "items": {"taixu_dragon_scale": 45, "ancient_dragon_saliva": 70, "nine_leaf_reincarnation_grass": 30, "space_stone": 55, "void_spirit_leaf": 35},
+        },
+    },
+]
+
+
+# ---------------------------------------------------------------------------
+# 隐藏事件：低概率触发，需达到对应境界才可能遇见，回报远超常规事件。
+# ---------------------------------------------------------------------------
+EXPEDITION_HIDDEN_EVENTS: dict[str, dict[str, Any]] = {
+    "hidden_void_crack": {
+        "title": "虚空裂缝",
+        "story": "空间突然裂开一道仅供一人穿行的细缝，缝隙中溢出的空间之力卷着宝光，正缓缓闭合。",
+        "realm_stage_min": "斗之气",
+        "choices": [
+            {"key": "record", "label": "记录坐标", "description": "记下裂缝坐标，交给途经的炼药师换些报酬。", "risk": "稳妥", "base_chance": 100, "success": {"damage": [0, 2], "douqi": [18, 30], "gold": [12, 20], "danger": -1, "drops": {"space_stone": 18}}},
+            {"key": "collect_edge", "label": "捞取边缘残片", "description": "在裂缝边缘抄起坠落的空间晶石。", "risk": "均衡", "base_chance": 62, "success": {"damage": [6, 12], "douqi": [40, 66], "gold": [24, 40], "danger": 2, "drops": {"space_stone": 55, "mid_grade_storage_ring": 6}}, "failure": {"damage": [20, 32], "douqi": [6, 13], "danger": 4}},
+            {"key": "dive", "label": "纵身跃入", "description": "在裂缝闭合前钻入空间夹层，赌一场大机缘。", "risk": "凶险", "base_chance": 40, "success": {"damage": [12, 20], "douqi": [70, 112], "gold": [44, 76], "danger": 4, "drops": {"space_stone": 100, "void_spirit_leaf": 25, "mid_grade_storage_ring": 12}}, "failure": {"damage": [30, 48], "douqi": [8, 18], "danger": 6}},
+        ],
+    },
+    "hidden_herb_whirlwind": {
+        "title": "药灵旋涡",
+        "story": "一阵反常的药香卷成旋涡，灵草随着气流倒卷上天，数株高阶药材在半空旋转不止。",
+        "realm_stage_min": "斗者",
+        "choices": [
+            {"key": "net", "label": "张网截取", "description": "用斗气织网兜住外围药材。", "risk": "稳妥", "base_chance": 100, "success": {"damage": [1, 4], "douqi": [24, 38], "gold": [8, 14], "danger": -1, "drops": {"emperor_flow_serum": 22, "star_mist_grass": 40}}},
+            {"key": "chase", "label": "追入旋涡", "description": "追着灵草旋入药气最浓处。", "risk": "均衡", "base_chance": 58, "success": {"damage": [9, 16], "douqi": [62, 96], "gold": [30, 52], "danger": 3, "drops": {"emperor_flow_serum": 55, "nine_leaf_reincarnation_grass": 15}}, "failure": {"damage": [26, 40], "douqi": [8, 17], "danger": 5}},
+            {"key": "devour", "label": "张口鲸吞", "description": "引动斗气强行吞噬药灵，淬炼自身。", "risk": "凶险", "base_chance": 36, "success": {"damage": [16, 26], "douqi": [98, 148], "gold": [30, 56], "danger": 5, "drops": {"emperor_flow_serum": 100, "nine_leaf_reincarnation_grass": 30, "bodhi_seed": 12}}, "failure": {"damage": [42, 62], "douqi": [14, 28], "danger": 7}},
+        ],
+    },
+    "hidden_fallen_fire": {
+        "title": "陨火遗烬",
+        "story": "夜空划过一道赤红流星，坠地后留下仍在灼烧的陨火遗烬，余温中透着异常精纯的火劲。",
+        "realm_stage_min": "大斗师",
+        "choices": [
+            {"key": "study", "label": "远观研习", "description": "不近火源，只揣摩其火势轨迹。", "risk": "稳妥", "base_chance": 100, "success": {"damage": [2, 6], "douqi": [30, 48], "gold": [6, 12], "danger": -1, "drops": {"flame_crystal_core": 30}}},
+            {"key": "absorb", "label": "引火入体", "description": "牵引陨火淬炼经脉，借其纯粹火劲修行。", "risk": "均衡", "base_chance": 54, "success": {"damage": [12, 20], "douqi": [74, 116], "gold": [16, 30], "danger": 4, "drops": {"fallen_heart_flame_trace": 30, "flame_crystal_core": 85, "fire_spirit_root": 60}}, "failure": {"damage": [32, 48], "douqi": [10, 20], "danger": 6}},
+            {"key": "core", "label": "夺取陨火之核", "description": "深入灼烧核心，取出火种级的晶核。", "risk": "凶险", "base_chance": 33, "success": {"damage": [18, 30], "douqi": [120, 178], "gold": [28, 50], "danger": 6, "drops": {"fallen_heart_flame_trace": 70, "flame_crystal_core": 100, "qinglian_fire_map": 22}}, "failure": {"damage": [48, 70], "douqi": [16, 32], "danger": 8}},
+        ],
+    },
+    "hidden_treasure_hunt": {
+        "title": "前贤洞天",
+        "story": "岩壁后藏着一座封存多年的洞府，石台上留有高阶斗技残卷与一炉未冷却的矿材。",
+        "realm_stage_min": "斗王",
+        "choices": [
+            {"key": "rubbing", "label": "临摹石壁", "description": "只拓下可辨认的斗技路线。", "risk": "稳妥", "base_chance": 100, "success": {"damage": [2, 5], "douqi": [38, 60], "gold": [10, 18], "danger": -1, "drops": {"flame_method_fragment": 40}}},
+            {"key": "open", "label": "开启洞府", "description": "破解禁制，取走完整传承与矿材。", "risk": "均衡", "base_chance": 50, "success": {"damage": [14, 22], "douqi": [84, 128], "gold": [40, 68], "danger": 4, "drops": {"flame_divide_scroll": 35, "thunder_steps_scroll": 25, "meteorite_iron": 55}}, "failure": {"damage": [34, 50], "douqi": [12, 24], "danger": 6}},
+            {"key": "deep", "label": "闯阵眼密室", "description": "直奔洞府最深处，赌一份压箱底的机缘。", "risk": "凶险", "base_chance": 30, "success": {"damage": [20, 32], "douqi": [128, 190], "gold": [60, 100], "danger": 6, "drops": {"flame_divide_scroll": 100, "thunder_steps_scroll": 40, "meteorite_iron": 80, "buddha_lotus_scroll": 10}}, "failure": {"damage": [52, 74], "douqi": [18, 36], "danger": 8}},
+        ],
+    },
+    "hidden_soul_fragment": {
+        "title": "残魂洞窟",
+        "story": "阴风从地窟深处涌出，石壁上浮现着破碎的魂印，一缕远古残魂正低声呓语。",
+        "realm_stage_min": "斗皇",
+        "choices": [
+            {"key": "listen", "label": "静听残魂", "description": "不打断呓语，从中捕捉修炼心得。", "risk": "稳妥", "base_chance": 100, "success": {"damage": [3, 7], "douqi": [46, 70], "gold": [8, 16], "danger": -1, "drops": {"soul_warming_lotus": 35}}},
+            {"key": "converse", "label": "与残魂交易", "description": "以心头精血为代价，换一段失传魂术。", "risk": "均衡", "base_chance": 46, "success": {"damage": [12, 20], "douqi": [90, 136], "gold": [24, 44], "danger": 4, "drops": {"soul_restoring_pill": 30, "yin_yang_life_soul_pill": 12, "soul_warming_lotus": 70}}, "failure": {"damage": [30, 48], "douqi": [12, 24], "danger": 6}},
+            {"key": "seize", "label": "炼化残魂", "description": "强行镇压残魂，吞噬其精纯魂力。", "risk": "凶险", "base_chance": 28, "success": {"damage": [22, 34], "douqi": [136, 204], "gold": [30, 56], "danger": 7, "drops": {"yin_yang_life_soul_pill": 45, "soul_restoring_pill": 80, "bone_spirit_cold_fire_trace": 18}}, "failure": {"damage": [55, 78], "douqi": [20, 40], "danger": 9}},
+        ],
+    },
+    "hidden_dragon_relic": {
+        "title": "古龙遗骸",
+        "story": "巨骨斜插在深谷间，骨髓早已枯竭，但龙骨表面仍浮着淡淡龙威与金色灵光。",
+        "realm_stage_min": "斗宗",
+        "choices": [
+            {"key": "carve", "label": "刮取龙屑", "description": "小心刮取骨面碎屑，不惊动残余龙威。", "risk": "稳妥", "base_chance": 100, "success": {"damage": [4, 8], "douqi": [54, 82], "gold": [10, 20], "danger": -1, "drops": {"ancient_dragon_saliva": 35}}},
+            {"key": "extract", "label": "抽取髓液", "description": "以斗气引渡深藏的龙髓灵液。", "risk": "均衡", "base_chance": 44, "success": {"damage": [14, 24], "douqi": [104, 156], "gold": [34, 60], "danger": 5, "drops": {"taixu_dragon_scale": 30, "ancient_dragon_saliva": 85, "dragon_blood_branch": 30}}, "failure": {"damage": [38, 58], "douqi": [14, 28], "danger": 7}},
+            {"key": "channel", "label": "引龙威淬体", "description": "直面龙威，借古龙残威冲刷道基。", "risk": "凶险", "base_chance": 26, "success": {"damage": [24, 38], "douqi": [152, 228], "gold": [40, 76], "danger": 8, "drops": {"taixu_dragon_scale": 100, "ancient_dragon_saliva": 100, "nine_leaf_reincarnation_grass": 25, "emperor_flow_serum": 40}}, "failure": {"damage": [58, 82], "douqi": [22, 44], "danger": 10}},
+        ],
+    },
+}
+
+
+def expedition_boss_for_region(region_key: str) -> dict[str, Any] | None:
+    for boss in EXPEDITION_BOSSES:
+        if boss["region_key"] == str(region_key):
+            return dict(boss)
+    return None
+
+
+def _boss_event_payload(boss: dict[str, Any]) -> dict[str, Any] | None:
+    if not boss:
+        return None
+    rewards = dict(boss.get("rewards") or {})
+    douqi_range = list(rewards.get("douqi") or [0, 0])
+    gold_range = list(rewards.get("gold") or [0, 0])
+    items = dict(rewards.get("items") or {})
+    low_douqi = max(int(douqi_range[0] if len(douqi_range) > 0 else 0) * 3 // 5, 20)
+    high_douqi = max(int(douqi_range[1] if len(douqi_range) > 1 else 0) * 3 // 5, 40)
+    low_gold = max(int(gold_range[0] if len(gold_range) > 0 else 0) * 2 // 5, 10)
+    high_gold = max(int(gold_range[1] if len(gold_range) > 1 else 0) * 2 // 5, 20)
+    return {
+        "kind": "boss",
+        "boss_key": str(boss.get("key") or ""),
+        "boss_name": str(boss.get("name") or "区域首领"),
+        "boss_power": max(int(boss.get("power") or 0), 1),
+        "title": f"区域首领：{boss.get('name')}",
+        "story": str(boss.get("story") or ""),
+        "choices": [
+            {
+                "key": "fight",
+                "label": "正面讨伐",
+                "description": "正面对决区域首领，胜则名扬四方并记讨伐战绩。",
+                "risk": "凶险",
+                "base_chance": 60,
+                "boss_fight": True,
+                "success": {
+                    "damage": [12, 22],
+                    "douqi": douqi_range,
+                    "gold": gold_range,
+                    "danger": 3,
+                    "drops": dict(items),
+                },
+                "failure": {"damage": [34, 55], "douqi": [8, 18], "danger": 5},
+            },
+            {
+                "key": "stalk",
+                "label": "伺机截宝",
+                "description": "借其分神之际夺取外围战利品，风险更低但无战绩。",
+                "risk": "均衡",
+                "base_chance": 80,
+                "success": {
+                    "damage": [7, 14],
+                    "douqi": [low_douqi, high_douqi],
+                    "gold": [low_gold, high_gold],
+                    "danger": 1,
+                    "drops": {key: max(int(chance or 0) * 2 // 5, 5) for key, chance in items.items()},
+                },
+                "failure": {"damage": [24, 38], "douqi": [6, 13], "danger": 4},
+            },
+            {
+                "key": "shun",
+                "label": "暂避锋芒",
+                "description": "记住首领行踪，等实力足够再来讨伐。",
+                "risk": "稳妥",
+                "base_chance": 100,
+                "success": {"damage": [2, 6], "douqi": [10, 18], "gold": [0, 4], "danger": -2},
+            },
+        ],
+    }
+
+
+def expedition_event_for_key(event_key: str | None) -> dict[str, Any] | None:
+    """Resolve a stored event key to a playable event dict.
+
+    优先级：常规事件 → Boss 伪事件（``boss:<region_key>``，动态由首领目录生成）→ 隐藏事件。
+    返回的事件一律携带 ``kind`` 供前端区分渲染。
+    """
+    key = str(event_key or "")
+    normal = EXPEDITION_EVENTS.get(key)
+    if normal is not None:
+        return {**dict(normal), "kind": "normal"}
+    if key.startswith("boss:"):
+        boss = expedition_boss_for_region(key.split(":", 1)[1])
+        return _boss_event_payload(boss)
+    hidden = EXPEDITION_HIDDEN_EVENTS.get(key)
+    if hidden is not None:
+        return {**dict(hidden), "kind": "hidden"}
+    return None
+
+
+def expedition_boss_keys() -> set[str]:
+    return {f"boss:{boss['region_key']}" for boss in EXPEDITION_BOSSES if boss.get("region_key")}

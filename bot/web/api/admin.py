@@ -78,6 +78,30 @@ _TELEGRAM_IDENTITY_CACHE_TTL = 300.0
 _telegram_identity_cache: dict[int, tuple[float, dict[str, str]]] = {}
 
 
+def _env_upload_limit(name: str, default: int) -> int:
+    try:
+        return max(int(os.getenv(name, str(default)) or default), 1024 * 1024)
+    except (TypeError, ValueError):
+        return default
+
+
+_PLUGIN_ARCHIVE_MAX_BYTES = _env_upload_limit("PIVKEYU_PLUGIN_MAX_ARCHIVE_BYTES", 128 * 1024 * 1024)
+
+
+async def _read_upload_limited(file: UploadFile, limit: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            raise HTTPException(status_code=413, detail=f"上传文件不能超过 {limit // (1024 * 1024)}MB")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 class AdminUserPatch(BaseModel):
     embyid: str | None = None
     name: str | None = None
@@ -1087,7 +1111,7 @@ async def patch_auto_update(payload: AdminAutoUpdatePatch):
 
 @router.get("/system/migration/export")
 async def export_migration_bundle():
-    exported = create_migration_bundle()
+    exported = await run_in_threadpool(create_migration_bundle)
     return FileResponse(
         exported["archive_path"],
         media_type="application/zip",
@@ -1104,7 +1128,11 @@ async def import_migration_bundle_api(
 ):
     try:
         await file.seek(0)
-        imported = restore_migration_bundle(file.file, restore_config_file=restore_config_file)
+        imported = await run_in_threadpool(
+            restore_migration_bundle,
+            file.file,
+            restore_config_file=restore_config_file,
+        )
     except MigrationBundleError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -2022,8 +2050,10 @@ async def import_plugin(
     replace_existing: bool = Form(False),
 ):
     try:
-        imported = import_plugin_archive(
-            await file.read(),
+        archive_bytes = await _read_upload_limited(file, _PLUGIN_ARCHIVE_MAX_BYTES)
+        imported = await run_in_threadpool(
+            import_plugin_archive,
+            archive_bytes,
             file.filename or "plugin.zip",
             replace_existing=replace_existing,
         )

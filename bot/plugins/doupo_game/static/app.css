@@ -1264,6 +1264,27 @@ body.auth-locked .auth-card:not(.hidden) {
   margin-top: 11px;
 }
 
+.expedition-head-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.expedition-tag-boss {
+  color: var(--danger);
+  background: var(--warm-soft);
+}
+
+.expedition-tag-hidden {
+  color: var(--violet, var(--accent));
+  background: var(--violet-soft, var(--accent-soft));
+}
+
+.expedition-boss-hint {
+  color: var(--danger);
+}
+
 .expedition-layout {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -1582,6 +1603,89 @@ body.auth-locked .auth-card:not(.hidden) {
 
 .sect-item button {
   margin-top: 10px;
+  width: 100%;
+}
+
+.sect-panel .meta-line {
+  margin-top: 7px;
+}
+
+.sect-quest {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.sect-quest strong {
+  display: block;
+  font-size: 14px;
+}
+
+.sect-quest p {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sect-quest button {
+  flex: 0 0 auto;
+  min-width: 96px;
+}
+
+.sect-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sect-members {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.sect-members > strong {
+  font-size: 13px;
+}
+
+.sect-member {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.sect-member-name {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.sect-member .tag {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.sect-member-meta {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.sect-back-button {
+  margin-top: 12px;
   width: 100%;
 }
 

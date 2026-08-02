@@ -305,6 +305,19 @@
         <label><span>斗战最高金币</span><input id="setting-duel-max-stake" type="number" min="0" value="500" /></label>
         <label><span>斗战备战秒数</span><input id="setting-duel-prepare-seconds" type="number" min="0" max="600" value="8" /></label>
         <label class="inline-setting"><input id="setting-broadcast-enabled" type="checkbox" checked /> 开启播报</label>
+        <label><span>消息自动删除秒数</span><input id="setting-message-auto-delete" type="number" min="0" value="180" /></label>
+      </div>
+
+      <div class="section-heading compact-heading">
+        <div><p class="eyebrow">游历与宗门</p><h3>首领/隐藏事件与社交调优</h3></div>
+      </div>
+      <div class="balance-settings-grid">
+        <label><span>游历首领触发概率%</span><input id="setting-expedition-boss-chance" type="number" min="0" max="100" value="14" /></label>
+        <label><span>隐藏事件触发概率%</span><input id="setting-expedition-hidden-chance" type="number" min="0" max="100" value="8" /></label>
+        <label><span>转宗冷却天数</span><input id="setting-sect-transfer-cooldown" type="number" min="0" value="7" /></label>
+        <label><span>转宗费用</span><input id="setting-sect-transfer-cost" type="number" min="0" value="1500" /></label>
+        <label><span>转宗贡献保留%</span><input id="setting-sect-transfer-retain" type="number" min="0" max="100" value="50" /></label>
+        <label><span>离宗费用</span><input id="setting-sect-leave-cost" type="number" min="0" value="0" /></label>
       </div>
       <div class="row"><button id="save-settings-btn">保存全部设置</button></div>
     </section>

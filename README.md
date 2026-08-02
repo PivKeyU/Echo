@@ -90,6 +90,7 @@ cp config_example.json data/config.json
 
 - `api.status = true`
 - `api.public_url`
+- `api.access_token`
 - `api.admin_token`
 
 最常见的 Web 配置示例：
@@ -101,11 +102,14 @@ cp config_example.json data/config.json
   "http_port": 8838,
   "public_url": "https://bot.example.com",
   "miniapp_title": "片刻面板",
+  "access_token": "replace_with_a_separate_api_access_token",
   "admin_token": "replace_with_a_long_random_admin_token",
   "webapp_auth_max_age": 86400,
-  "allow_origins": ["*"]
+  "allow_origins": ["https://bot.example.com"]
 }
 ```
+
+`access_token` 用于 Emby Webhook 及普通 API，`admin_token` 只用于后台管理；两者必须不同，且只能通过请求头传递。`allow_origins` 必须填写实际访问后台的站点来源，不再支持 `*`。
 
 ### 5. 可选：配置 Caddy 域名
 
@@ -492,6 +496,28 @@ docker compose up -d --build pivkeyu_emby
 - 启动后自动插件迁移
 
 这也是插件作者最推荐的开发姿势。
+
+## 对接 Emotion
+
+把 `data/config.json` 中的 Emby 地址和管理密钥指向 Emotion：
+
+```json
+{
+  "emby_url": "https://emotion.example.com",
+  "emby_api": "Emotion 后台生成的独立 API Key"
+}
+```
+
+不要使用 Emotion 的主 `API_KEY`，建议在 Emotion 后台为 Bot 单独生成密钥，备注为 `pivkeyu_emby`，便于单独撤销。
+
+联动后：
+
+- TG 注册创建 Emotion 用户时会同步 Telegram User ID。
+- TG 绑定已有账号时，密码验证成功后会回写 Telegram 身份。
+- 原有创建、改密、封禁、媒体库权限和会话管理继续使用 Emby 兼容接口。
+- TG 管理员可使用 `/emotionaudit 24` 查看最近 24 小时 Google Drive 实际回源、流量、登录失败和设备异常。
+
+Bot 与 Emotion 之间应优先走 Docker 内网或私有网络，不要把管理 API Key 暴露在公网 URL 查询参数中。
 
 ## 开发检查
 

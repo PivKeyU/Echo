@@ -27,6 +27,23 @@ BUILTIN_PLUGIN_ROOT = PLUGIN_ROOT
 RUNTIME_PLUGIN_ROOT = PROJECT_ROOT / "data" / "runtime_plugins"
 RUNTIME_PLUGIN_BACKUP_ROOT = PROJECT_ROOT / "data" / "runtime_plugin_backups"
 PLUGIN_NAMESPACE = "bot.plugins"
+
+
+def _env_archive_limit(name: str, default: int, minimum: int) -> int:
+    try:
+        return max(int(os.getenv(name, str(default)) or default), minimum)
+    except (TypeError, ValueError):
+        return default
+
+
+PLUGIN_MAX_ARCHIVE_BYTES = _env_archive_limit("PIVKEYU_PLUGIN_MAX_ARCHIVE_BYTES", 128 * 1024 * 1024, 1024 * 1024)
+PLUGIN_MAX_ARCHIVE_MEMBERS = _env_archive_limit("PIVKEYU_PLUGIN_MAX_ARCHIVE_MEMBERS", 10_000, 100)
+PLUGIN_MAX_MEMBER_BYTES = _env_archive_limit("PIVKEYU_PLUGIN_MAX_MEMBER_BYTES", 256 * 1024 * 1024, 1024 * 1024)
+PLUGIN_MAX_UNCOMPRESSED_BYTES = _env_archive_limit(
+    "PIVKEYU_PLUGIN_MAX_UNCOMPRESSED_BYTES", 1024 * 1024 * 1024, 1024 * 1024
+)
+PLUGIN_MAX_COMPRESSION_RATIO = _env_archive_limit("PIVKEYU_PLUGIN_MAX_COMPRESSION_RATIO", 500, 10)
+PLUGIN_MAX_MANIFEST_BYTES = 1024 * 1024
 KNOWN_PLUGIN_PERMISSIONS = {
     "telegram.commands",
     "telegram.callback_query",
@@ -763,6 +780,8 @@ def import_plugin_archive(
 
     if not archive_bytes:
         raise PluginImportError("上传文件为空，无法导入插件。")
+    if len(archive_bytes) > PLUGIN_MAX_ARCHIVE_BYTES:
+        raise PluginImportError(f"插件压缩包不能超过 {PLUGIN_MAX_ARCHIVE_BYTES // (1024 * 1024)}MB。")
 
     try:
         archive = zipfile.ZipFile(io.BytesIO(archive_bytes))
@@ -772,8 +791,12 @@ def import_plugin_archive(
     with archive:
         normalized_members: list[tuple[zipfile.ZipInfo, PurePosixPath]] = []
         visible_paths: set[PurePosixPath] = set()
+        total_uncompressed = 0
+        archive_members = archive.infolist()
+        if len(archive_members) > PLUGIN_MAX_ARCHIVE_MEMBERS:
+            raise PluginImportError(f"插件压缩包文件数量不能超过 {PLUGIN_MAX_ARCHIVE_MEMBERS}。")
 
-        for info in archive.infolist():
+        for info in archive_members:
             normalized_path = _normalize_archive_path(info.filename)
             if normalized_path is None or _is_ignored_archive_path(normalized_path):
                 continue
@@ -781,6 +804,18 @@ def import_plugin_archive(
             mode = info.external_attr >> 16
             if stat.S_ISLNK(mode):
                 raise PluginImportError("插件压缩包中不能包含符号链接。")
+            if info.flag_bits & 0x1:
+                raise PluginImportError("插件压缩包中不能包含加密文件。")
+            if info.file_size > PLUGIN_MAX_MEMBER_BYTES:
+                raise PluginImportError(f"插件压缩包中的单个文件不能超过 {PLUGIN_MAX_MEMBER_BYTES // (1024 * 1024)}MB。")
+            total_uncompressed += int(info.file_size or 0)
+            if total_uncompressed > PLUGIN_MAX_UNCOMPRESSED_BYTES:
+                raise PluginImportError(
+                    f"插件压缩包解压后的总大小不能超过 {PLUGIN_MAX_UNCOMPRESSED_BYTES // (1024 * 1024)}MB。"
+                )
+            compressed_size = max(int(info.compress_size or 0), 1)
+            if info.file_size > 1024 * 1024 and info.file_size / compressed_size > PLUGIN_MAX_COMPRESSION_RATIO:
+                raise PluginImportError("插件压缩包包含异常压缩比文件，已拒绝导入。")
 
             normalized_members.append((info, normalized_path))
             visible_paths.add(normalized_path)
@@ -792,6 +827,9 @@ def import_plugin_archive(
         manifest_path = PurePosixPath("plugin.json") if archive_root is None else PurePosixPath(archive_root, "plugin.json")
 
         try:
+            manifest_info = archive.getinfo(manifest_path.as_posix())
+            if manifest_info.file_size > PLUGIN_MAX_MANIFEST_BYTES:
+                raise PluginImportError("plugin.json 不能超过 1MB。")
             manifest_raw = json.loads(archive.read(manifest_path.as_posix()).decode("utf-8-sig"))
         except KeyError as exc:
             raise PluginImportError("压缩包中缺少 plugin.json。") from exc
@@ -877,8 +915,8 @@ def import_plugin_archive(
                     continue
 
                 target_path.parent.mkdir(parents=True, exist_ok=True)
-                with target_path.open("wb") as extracted_file:
-                    extracted_file.write(archive.read(info))
+                with archive.open(info, "r") as source, target_path.open("wb") as extracted_file:
+                    shutil.copyfileobj(source, extracted_file, length=1024 * 1024)
 
             if replace_existing and destination_path.exists():
                 shutil.rmtree(destination_path)

@@ -26,6 +26,9 @@ from bot.plugins.doupo_game.api_models import (
     InventoryEquipmentPayload,
     PlayerResourceGrantPayload,
     SectJoinPayload,
+    SectLeavePayload,
+    SectQuestClaimPayload,
+    SectTransferPayload,
     WebAuthBindTelegramPayload,
     WebAuthLoginPayload,
     WebAuthRegisterPayload,
@@ -52,18 +55,26 @@ from bot.sql_helper.sql_doupo import (
     admin_reset_all_player_data,
     admin_upsert_action,
     admin_upsert_item_definition,
+    build_duel_standings,
+    claim_sect_quest,
     exchange_currency,
     equip_inventory_item,
     choose_expedition_event,
+    get_sect_panel,
     join_sect,
+    leave_sect,
+    list_duel_history,
     list_item_definition_versions,
+    list_sect_members,
     retreat_expedition,
     run_action,
     set_settings,
     start_expedition,
+    transfer_sect,
     unequip_inventory_item,
 )
 from bot.sql_helper.sql_xiuxian.web_auth import (
+    WebAuthRateLimitError,
     authenticate_xiuxian_web_session,
     bind_xiuxian_web_account_to_telegram,
     login_xiuxian_web_account,
@@ -198,6 +209,12 @@ def register_web(app) -> None:
 
         try:
             return {"code": 200, "data": await run_in_threadpool(_run)}
+        except WebAuthRateLimitError as exc:
+            raise HTTPException(
+                status_code=429,
+                detail=str(exc),
+                headers={"Retry-After": str(exc.retry_after)},
+            ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
 
@@ -330,6 +347,49 @@ def register_web(app) -> None:
             "code": 200,
             "data": bundle,
         }
+
+    @user_router.post("/api/sect/transfer")
+    async def doupo_sect_transfer(payload: SectTransferPayload):
+        telegram_user = await run_in_threadpool(_verify_user_from_auth, payload.init_data, payload.session_token)
+        try:
+            result = await run_in_threadpool(transfer_sect, int(telegram_user["id"]), payload.sect_key)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"code": 200, "data": await run_in_threadpool(build_action_result_bundle, int(telegram_user["id"]), result)}
+
+    @user_router.post("/api/sect/leave")
+    async def doupo_sect_leave(payload: SectLeavePayload):
+        telegram_user = await run_in_threadpool(_verify_user_from_auth, payload.init_data, payload.session_token)
+        try:
+            result = await run_in_threadpool(leave_sect, int(telegram_user["id"]))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"code": 200, "data": await run_in_threadpool(build_action_result_bundle, int(telegram_user["id"]), result)}
+
+    @user_router.post("/api/sect/quest/claim")
+    async def doupo_sect_quest_claim(payload: SectQuestClaimPayload):
+        telegram_user = await run_in_threadpool(_verify_user_from_auth, payload.init_data, payload.session_token)
+        try:
+            result = await run_in_threadpool(claim_sect_quest, int(telegram_user["id"]))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"code": 200, "data": await run_in_threadpool(build_action_result_bundle, int(telegram_user["id"]), result)}
+
+    @user_router.post("/api/sect/members")
+    async def doupo_sect_members(payload: InitDataPayload):
+        telegram_user = await run_in_threadpool(_verify_user_from_auth, payload.init_data, payload.session_token)
+        panel = await run_in_threadpool(get_sect_panel, int(telegram_user["id"]))
+        return {"code": 200, "data": panel}
+
+    @user_router.post("/api/duel/history")
+    async def doupo_duel_history(payload: InitDataPayload):
+        telegram_user = await run_in_threadpool(_verify_user_from_auth, payload.init_data, payload.session_token)
+        return {"code": 200, "data": await run_in_threadpool(list_duel_history, int(telegram_user["id"]), 20)}
+
+    @user_router.post("/api/duel/standings")
+    async def doupo_duel_standings(payload: InitDataPayload):
+        telegram_user = await run_in_threadpool(_verify_user_from_auth, payload.init_data, payload.session_token)
+        return {"code": 200, "data": await run_in_threadpool(build_duel_standings, int(telegram_user["id"]))}
 
     @admin_router.post("/bootstrap")
     async def doupo_admin_bootstrap(payload: AdminBootstrapPayload):

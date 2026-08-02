@@ -208,13 +208,14 @@
     "http_port": 8838,
     "public_url": "https://bot.example.com",
     "miniapp_title": "片刻面板",
+    "access_token": "replace_with_a_separate_api_access_token",
     "admin_token": "replace_with_a_long_random_admin_token",
     "webapp_auth_max_age": 86400,
     "allow_origins": [
-      "*"
+      "https://bot.example.com"
     ]
   },
-  "_comment_api_2": "public_url 必须改成外网可访问的 HTTPS 地址；admin_token 必须改成你自己的随机字符串。",
+  "_comment_api_2": "public_url 必须改成外网可访问的 HTTPS 地址；access_token 与 admin_token 必须使用两个不同的随机字符串；allow_origins 请填写实际站点来源，不要使用 *。",
 
   "plugin_nav": {},
   "_comment_plugin_nav": "插件首页底栏显示开关。例如 {\"xiuxian-game\": true}。",

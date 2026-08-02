@@ -1,6 +1,15 @@
 """Core constants and helpers for the Doupo mini game."""
 
-from .expedition import EXPEDITION_EVENTS, EXPEDITION_REGIONS, expedition_region
+from .expedition import (
+    EXPEDITION_BOSSES,
+    EXPEDITION_EVENTS,
+    EXPEDITION_HIDDEN_EVENTS,
+    EXPEDITION_REGIONS,
+    expedition_boss_for_region,
+    expedition_boss_keys,
+    expedition_event_for_key,
+    expedition_region,
+)
 
 from .realm import (
     ACTION_TYPE_LABELS,
@@ -20,10 +29,13 @@ from .realm import (
     TECHNIQUES,
     clamp_int,
     realm_rank,
+    resolve_stage_index,
 )
 
 __all__ = [
+    "EXPEDITION_BOSSES",
     "EXPEDITION_EVENTS",
+    "EXPEDITION_HIDDEN_EVENTS",
     "EXPEDITION_REGIONS",
     "ACTION_TYPE_LABELS",
     "ALCHEMY_RANKS",
@@ -42,5 +54,9 @@ __all__ = [
     "TECHNIQUES",
     "clamp_int",
     "realm_rank",
+    "resolve_stage_index",
     "expedition_region",
+    "expedition_boss_for_region",
+    "expedition_boss_keys",
+    "expedition_event_for_key",
 ]

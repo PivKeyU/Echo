@@ -313,6 +313,7 @@ from bot.scheduler.bot_commands import BotCommands
 from bot.sql_helper.sql_xiuxian import (
     DEFAULT_SETTINGS,
     REALM_ORDER,
+    WebAuthRateLimitError,
     cancel_personal_shop_item,
     create_achievement,
     create_artifact,
@@ -1103,6 +1104,12 @@ def register_web(app) -> None:
 
         try:
             data = await run_in_threadpool(_run)
+        except WebAuthRateLimitError as exc:
+            raise HTTPException(
+                status_code=429,
+                detail=str(exc),
+                headers={"Retry-After": str(exc.retry_after)},
+            ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
         return {"code": 200, "data": data}

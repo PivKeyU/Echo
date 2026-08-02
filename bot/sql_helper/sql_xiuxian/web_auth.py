@@ -22,8 +22,61 @@ PASSWORD_ALGORITHM = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = max(int(os.getenv("PIVKEYU_XIUXIAN_PASSWORD_ITERATIONS", "200000") or 200000), 120000)
 WEB_SESSION_DAYS = max(int(os.getenv("PIVKEYU_XIUXIAN_WEB_SESSION_DAYS", "30") or 30), 1)
 WEB_SESSION_CACHE_TTL = max(int(os.getenv("PIVKEYU_XIUXIAN_WEB_SESSION_CACHE_TTL", "30") or 30), 5)
+WEB_LOGIN_FAILURE_LIMIT = max(int(os.getenv("PIVKEYU_WEB_LOGIN_FAILURE_LIMIT", "6") or 6), 1)
+WEB_LOGIN_FAILURE_WINDOW = max(int(os.getenv("PIVKEYU_WEB_LOGIN_FAILURE_WINDOW", "300") or 300), 30)
+WEB_LOGIN_MAX_CONCURRENCY = max(int(os.getenv("PIVKEYU_WEB_LOGIN_MAX_CONCURRENCY", "4") or 4), 1)
 _WEB_AUTH_CACHE_LOCK = threading.RLock()
 _WEB_AUTH_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_WEB_LOGIN_LOCK = threading.RLock()
+_WEB_LOGIN_FAILURES: dict[str, list[float]] = {}
+_WEB_LOGIN_SLOTS = threading.BoundedSemaphore(WEB_LOGIN_MAX_CONCURRENCY)
+
+
+class WebAuthRateLimitError(ValueError):
+    def __init__(self, retry_after: int):
+        self.retry_after = max(int(retry_after or 1), 1)
+        super().__init__(f"登录尝试过于频繁，请在 {self.retry_after} 秒后重试")
+
+
+def _login_failure_key(username: str) -> str:
+    return hashlib.sha256(str(username or "").encode("utf-8")).hexdigest()
+
+
+def _prune_login_failures(key: str, now: float) -> list[float]:
+    threshold = now - WEB_LOGIN_FAILURE_WINDOW
+    attempts = [item for item in _WEB_LOGIN_FAILURES.get(key, []) if item > threshold]
+    if attempts:
+        _WEB_LOGIN_FAILURES[key] = attempts
+    else:
+        _WEB_LOGIN_FAILURES.pop(key, None)
+    return attempts
+
+
+def _check_login_rate_limit(username: str) -> None:
+    now = time.monotonic()
+    key = _login_failure_key(username)
+    with _WEB_LOGIN_LOCK:
+        attempts = _prune_login_failures(key, now)
+        if len(attempts) >= WEB_LOGIN_FAILURE_LIMIT:
+            retry_after = int(max(attempts[0] + WEB_LOGIN_FAILURE_WINDOW - now, 1))
+            raise WebAuthRateLimitError(retry_after)
+
+
+def _record_login_failure(username: str) -> None:
+    now = time.monotonic()
+    key = _login_failure_key(username)
+    with _WEB_LOGIN_LOCK:
+        attempts = _prune_login_failures(key, now)
+        attempts.append(now)
+        _WEB_LOGIN_FAILURES[key] = attempts
+        if len(_WEB_LOGIN_FAILURES) > 4096:
+            oldest_key = min(_WEB_LOGIN_FAILURES, key=lambda item: _WEB_LOGIN_FAILURES[item][-1])
+            _WEB_LOGIN_FAILURES.pop(oldest_key, None)
+
+
+def _clear_login_failures(username: str) -> None:
+    with _WEB_LOGIN_LOCK:
+        _WEB_LOGIN_FAILURES.pop(_login_failure_key(username), None)
 
 
 def _cache_get(key: str) -> dict[str, Any] | None:
@@ -184,18 +237,26 @@ def register_xiuxian_web_account(
 def login_xiuxian_web_account(username: str, password: str) -> dict[str, Any]:
     normalized_username = _normalize_username(username)
     password_value = _validate_password(password)
+    _check_login_rate_limit(normalized_username)
+    if not _WEB_LOGIN_SLOTS.acquire(blocking=False):
+        raise WebAuthRateLimitError(1)
     now = utcnow()
-    with Session() as session:
-        account = session.query(XiuxianWebAccount).filter(XiuxianWebAccount.username == normalized_username).first()
-        if account is None or not _verify_password(password_value, account.password_hash):
-            raise ValueError("账号或密码错误")
-        if not bool(account.enabled):
-            raise ValueError("账号已被管理员停用")
-        token, _ = _create_session_row(session, int(account.id), now)
-        account.last_login_at = now
-        account.updated_at = now
-        session.commit()
-        session.refresh(account)
+    try:
+        with Session() as session:
+            account = session.query(XiuxianWebAccount).filter(XiuxianWebAccount.username == normalized_username).first()
+            if account is None or not _verify_password(password_value, account.password_hash):
+                _record_login_failure(normalized_username)
+                raise ValueError("账号或密码错误")
+            if not bool(account.enabled):
+                raise ValueError("账号已被管理员停用")
+            _clear_login_failures(normalized_username)
+            token, _ = _create_session_row(session, int(account.id), now)
+            account.last_login_at = now
+            account.updated_at = now
+            session.commit()
+            session.refresh(account)
+    finally:
+        _WEB_LOGIN_SLOTS.release()
     return _session_response(token, account)
 
 

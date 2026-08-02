@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+logger = logging.getLogger("doupo.realm")
 
 
 DEFAULT_REALM_THRESHOLDS: list[dict[str, Any]] = [
@@ -12,9 +15,20 @@ DEFAULT_REALM_THRESHOLDS: list[dict[str, Any]] = [
     {"stage": "斗王", "star_cap": 9, "douqi_per_star": 1320},
     {"stage": "斗皇", "star_cap": 9, "douqi_per_star": 1850},
     {"stage": "斗宗", "star_cap": 9, "douqi_per_star": 2550},
-    {"stage": "斗尊", "star_cap": 9, "douqi_per_star": 3400},
+    {"stage": "斗尊·一转", "star_cap": 9, "douqi_per_star": 3400},
+    {"stage": "斗尊·二转", "star_cap": 9, "douqi_per_star": 3900},
+    {"stage": "斗尊·三转", "star_cap": 9, "douqi_per_star": 4400},
+    {"stage": "斗尊·四转", "star_cap": 9, "douqi_per_star": 4950},
+    {"stage": "斗尊·五转", "star_cap": 9, "douqi_per_star": 5550},
+    {"stage": "斗尊·六转", "star_cap": 9, "douqi_per_star": 6200},
+    {"stage": "斗尊·七转", "star_cap": 9, "douqi_per_star": 6900},
+    {"stage": "斗尊·八转", "star_cap": 9, "douqi_per_star": 7650},
+    {"stage": "斗尊·九转", "star_cap": 9, "douqi_per_star": 8450},
     {"stage": "半圣", "star_cap": 3, "douqi_per_star": 5200},
-    {"stage": "斗圣", "star_cap": 9, "douqi_per_star": 7600},
+    {"stage": "斗圣·初期", "star_cap": 9, "douqi_per_star": 7600},
+    {"stage": "斗圣·中期", "star_cap": 9, "douqi_per_star": 8600},
+    {"stage": "斗圣·后期", "star_cap": 9, "douqi_per_star": 9700},
+    {"stage": "斗圣·巅峰", "star_cap": 9, "douqi_per_star": 10800},
     {"stage": "斗帝", "star_cap": 1, "douqi_per_star": 12000},
 ]
 
@@ -63,9 +77,23 @@ BREAKTHROUGH_RULES: dict[str, dict[str, Any]] = {
     "斗王": {"gold_cost": 700, "success_percent": 45, "pity_after": 5, "item_costs": {"breaking_zong_pill": 1}},
     "斗皇": {"gold_cost": 950, "success_percent": 42, "pity_after": 5, "item_costs": {"breaking_zong_pill": 1}},
     "斗宗": {"gold_cost": 1300, "success_percent": 38, "pity_after": 6, "item_costs": {"breaking_zong_pill": 2}},
-    "斗尊": {"gold_cost": 1800, "success_percent": 35, "pity_after": 6, "item_costs": {"breaking_zong_pill": 2}},
+    "斗尊·一转": {"gold_cost": 2100, "success_percent": 32, "pity_after": 6, "item_costs": {"breaking_zong_pill": 2, "soul_restoring_pill": 1}},
+    "斗尊·二转": {"gold_cost": 2400, "success_percent": 31, "pity_after": 6, "item_costs": {"breaking_zong_pill": 2, "soul_restoring_pill": 1}},
+    "斗尊·三转": {"gold_cost": 2700, "success_percent": 30, "pity_after": 7, "item_costs": {"breaking_zong_pill": 3, "soul_restoring_pill": 1}},
+    "斗尊·四转": {"gold_cost": 3000, "success_percent": 29, "pity_after": 7, "item_costs": {"breaking_zong_pill": 3, "soul_restoring_pill": 1}},
+    "斗尊·五转": {"gold_cost": 3350, "success_percent": 28, "pity_after": 7, "item_costs": {"breaking_zong_pill": 4, "soul_restoring_pill": 1}},
+    "斗尊·六转": {"gold_cost": 3700, "success_percent": 27, "pity_after": 8, "item_costs": {"breaking_zong_pill": 4, "yin_yang_life_soul_pill": 1}},
+    "斗尊·七转": {"gold_cost": 4000, "success_percent": 27, "pity_after": 8, "item_costs": {"breaking_zong_pill": 4, "yin_yang_life_soul_pill": 1}},
+    "斗尊·八转": {"gold_cost": 4300, "success_percent": 26, "pity_after": 8, "item_costs": {"breaking_zong_pill": 5, "yin_yang_life_soul_pill": 1}},
+    "斗尊·九转": {"gold_cost": 4300, "success_percent": 26, "pity_after": 8, "item_costs": {"breaking_zong_pill": 5, "yin_yang_life_soul_pill": 1}},
     "半圣": {"gold_cost": 2600, "success_percent": 30, "pity_after": 7, "item_costs": {"breaking_zong_pill": 3}},
-    "斗圣": {"gold_cost": 4000, "success_percent": 25, "pity_after": 8, "item_costs": {"breaking_zong_pill": 5}},
+    "斗圣·初期": {"gold_cost": 4800, "success_percent": 24, "pity_after": 8, "item_costs": {"breaking_zong_pill": 5, "yin_yang_life_soul_pill": 1}},
+    "斗圣·中期": {"gold_cost": 5600, "success_percent": 22, "pity_after": 8, "item_costs": {"breaking_zong_pill": 6, "yin_yang_life_soul_pill": 1}},
+    "斗圣·后期": {"gold_cost": 6600, "success_percent": 20, "pity_after": 9, "item_costs": {"breaking_zong_pill": 7, "yin_yang_life_soul_pill": 1}},
+    "斗圣·巅峰": {"gold_cost": 7800, "success_percent": 18, "pity_after": 10, "item_costs": {"breaking_zong_pill": 8, "yin_yang_life_soul_pill": 1, "emperor_flow_pill": 1}},
+    # 旧名安全回退：迁移回填失败时仍可用（resolve_stage_index 别名兜底到新名，但规则表仍可命中旧 key）。
+    "斗尊": {"gold_cost": 2100, "success_percent": 32, "pity_after": 6, "item_costs": {"breaking_zong_pill": 2, "soul_restoring_pill": 1}},
+    "斗圣": {"gold_cost": 4800, "success_percent": 24, "pity_after": 8, "item_costs": {"breaking_zong_pill": 5, "yin_yang_life_soul_pill": 1}},
 }
 
 DEFAULT_SETTINGS: dict[str, Any] = {
@@ -88,6 +116,15 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "duel_max_stake": 500,
     "duel_prepare_seconds": 8,
     "broadcast_enabled": True,
+    "message_auto_delete_seconds": 180,
+    # P2 游历：每步触发区域首领与隐藏事件的概率（百分比）。
+    "expedition_boss_chance": 14,
+    "expedition_hidden_event_chance": 8,
+    # P3 宗门：转宗冷却天数、转宗/离宗费用与贡献折损比例。
+    "sect_transfer_cooldown_days": 7,
+    "sect_transfer_cost": 1500,
+    "sect_transfer_contribution_retain": 50,
+    "sect_leave_gold_cost": 0,
     "realm_thresholds": DEFAULT_REALM_THRESHOLDS,
 }
 
@@ -124,11 +161,11 @@ ALCHEMY_RANKS = [
 ]
 
 SECT_RANKS = [
-    {"name": "外门弟子", "contribution": 0},
-    {"name": "内门弟子", "contribution": 120},
-    {"name": "执事", "contribution": 420},
-    {"name": "长老", "contribution": 1100},
-    {"name": "宗主候选", "contribution": 2600},
+    {"name": "外门弟子", "contribution": 0, "multiplier": 1.0},
+    {"name": "内门弟子", "contribution": 120, "multiplier": 1.2},
+    {"name": "执事", "contribution": 420, "multiplier": 1.5},
+    {"name": "长老", "contribution": 1100, "multiplier": 1.8},
+    {"name": "宗主候选", "contribution": 2600, "multiplier": 2.0},
 ]
 
 SECT_OPTIONS = [
@@ -138,6 +175,7 @@ SECT_OPTIONS = [
         "description": "适合稳健成长，宗门任务更偏向金币、贡献与基础材料。",
         "bonus": "宗门委托收益均衡",
         "realm_stage_min": "斗之气",
+        "quest_rewards": {"gold": 260, "douqi": 320, "contribution": 40, "items": {"beast_hide": 1}},
     },
     {
         "key": "canaan_academy",
@@ -145,6 +183,7 @@ SECT_OPTIONS = [
         "description": "适合塔修和心火路线，后续更容易衔接天焚炼气塔。",
         "bonus": "塔修路线更顺滑",
         "realm_stage_min": "斗者",
+        "quest_rewards": {"gold": 240, "douqi": 360, "contribution": 40, "items": {"fire_energy_crystal": 1}},
     },
     {
         "key": "yunlan_sect",
@@ -152,6 +191,7 @@ SECT_OPTIONS = [
         "description": "适合宗门任务和阵营战路线，贡献成长较稳定。",
         "bonus": "宗门声望与阵营任务",
         "realm_stage_min": "斗者",
+        "quest_rewards": {"gold": 220, "douqi": 300, "contribution": 55, "items": {"yunlan_token": 1}},
     },
     {
         "key": "snake_people",
@@ -159,6 +199,7 @@ SECT_OPTIONS = [
         "description": "适合塔戈尔沙漠、火属性材料和异火线索路线。",
         "bonus": "沙漠历练与护火材料",
         "realm_stage_min": "斗者",
+        "quest_rewards": {"gold": 240, "douqi": 330, "contribution": 45, "items": {"snake_people_token": 1}},
     },
     {
         "key": "mitel_family",
@@ -166,6 +207,7 @@ SECT_OPTIONS = [
         "description": "适合拍卖、商队和材料流通，金币回收与拍卖声望更突出。",
         "bonus": "拍卖与商队路线",
         "realm_stage_min": "斗者",
+        "quest_rewards": {"gold": 340, "douqi": 260, "contribution": 40, "items": {"mitel_auction_token": 1}},
     },
     {
         "key": "xingyun_pavilion",
@@ -173,6 +215,7 @@ SECT_OPTIONS = [
         "description": "适合高阶斗技与异火路线，需要更高境界后加入。",
         "bonus": "斗技与异火成长",
         "realm_stage_min": "大斗师",
+        "quest_rewards": {"gold": 250, "douqi": 380, "contribution": 45, "items": {"starfall_token": 1}},
     },
     {
         "key": "danta",
@@ -180,6 +223,7 @@ SECT_OPTIONS = [
         "description": "适合高阶炼药师考核、丹方和中州路线。",
         "bonus": "炼药考核与丹方兑换",
         "realm_stage_min": "斗王",
+        "quest_rewards": {"gold": 300, "douqi": 300, "contribution": 50, "items": {"danta_exam_token": 1}},
     },
     {
         "key": "soul_palace",
@@ -187,6 +231,7 @@ SECT_OPTIONS = [
         "description": "高风险势力，适合黑角域、掠夺和限时冲突玩法。",
         "bonus": "高风险黑市与阵营冲突",
         "realm_stage_min": "斗皇",
+        "quest_rewards": {"gold": 360, "douqi": 420, "contribution": 60, "items": {"soul_palace_token": 1}},
     },
 ]
 
@@ -813,6 +858,18 @@ ITEM_CATALOG: dict[str, dict[str, Any]] = {
         "rarity": "九品",
         "description": "调和阴阳、护住命魂的九品丹药，代表炼药巅峰。",
     },
+    "emperor_flow_pill": {
+        "name": "帝流丹",
+        "category": "pill",
+        "rarity": "九品",
+        "description": "流转帝者之气的九品奇丹，突破时服用可临时提升成功率（一次性）。",
+    },
+    "realm_stabilizing_pill": {
+        "name": "定境丹",
+        "category": "pill",
+        "rarity": "六品",
+        "description": "稳固道基境界，突破失败时可减半斗气损失（一次性）。",
+    },
     "bronze_cauldron": {
         "name": "青铜药鼎",
         "category": "gear",
@@ -1037,7 +1094,10 @@ DEFAULT_ACTIONS: list[dict[str, Any]] = [
             "douqi_max": 25,
             "gold_cost": 20,
             "item_costs": {"ice_spirit_flame_grass": 2, "monster_core_low": 1},
-            "item_drops": [{"item_key": "qi_gathering_powder", "min": 1, "max": 1, "chance": 100}],
+            "item_drops": [
+                {"item_key": "qi_gathering_powder", "min": 1, "max": 1, "chance": 100},
+                {"item_key": "lotus_body_pill", "min": 1, "max": 1, "chance": 30},
+            ],
         },
         "requirement_config": {"gold_min": 20},
         "enabled": True,
@@ -1406,13 +1466,11 @@ DEFAULT_ACTIONS: list[dict[str, Any]] = [
         "action_key": "forge_flame_bracer",
         "name": "炼器坊打磨护腕",
         "description": "消耗矿材打造炎纹护腕，是装备线的稳定合成入口。",
-        "action_type": "auction",
+        "action_type": "craft",
         "cooldown_seconds": 160,
         "reward_config": {
             "recipe_version": 1,
             "gold_cost": 95,
-            "auction_min": 18,
-            "auction_max": 38,
             "item_costs": {"black_iron_ore": 2, "flame_pattern_steel": 1},
             "item_drops": [{"item_key": "flame_guard_bracer", "min": 1, "max": 1, "chance": 100}],
         },
@@ -1744,7 +1802,7 @@ DEFAULT_ACTIONS.extend(
                 "fire_rank_min": 0,
                 "fire_rank_max": 1,
                 "gold_cost": 900,
-                "item_costs": {"danta_exam_token": 2, "void_spirit_leaf": 1, "dragon_blood_branch": 1, "monster_core_high": 3},
+                "item_costs": {"danta_exam_token": 2, "void_spirit_leaf": 1, "dragon_blood_branch": 1, "monster_core_high": 3, "soul_restoring_pill": 1},
                 "item_drops": [{"item_key": "alchemist_badge_8", "min": 1, "max": 1, "chance": 100}],
             },
             "requirement_config": {"realm_stage_min": "斗宗", "gold_min": 900, "alchemy_min": 5200, "fire_rank_min": 1},
@@ -1766,7 +1824,7 @@ DEFAULT_ACTIONS.extend(
                 "faction_min": 36,
                 "faction_max": 72,
                 "gold_cost": 1500,
-                "item_costs": {"danta_exam_token": 3, "bodhi_seed": 1, "void_spirit_leaf": 2, "monster_core_high": 4},
+                "item_costs": {"danta_exam_token": 3, "bodhi_seed": 1, "void_spirit_leaf": 2, "monster_core_high": 4, "yin_yang_life_soul_pill": 1},
                 "item_drops": [{"item_key": "alchemist_badge_9", "min": 1, "max": 1, "chance": 100}],
             },
             "requirement_config": {"realm_stage_min": "斗尊", "gold_min": 1500, "alchemy_min": 8200, "fire_rank_min": 2},
@@ -2820,9 +2878,39 @@ def clamp_int(value: Any, default: int = 0, *, minimum: int | None = None, maxim
 
 
 def realm_rank(stage: str | None, thresholds: list[dict[str, Any]] | None = None) -> int:
-    rows = thresholds or DEFAULT_REALM_THRESHOLDS
+    """Return the index of ``stage`` in the realm threshold list.
+
+    旧版行为：未知境界返回 0（静默降级为「斗之气」，语义错误）。现委托
+    ``resolve_stage_index``，支持前缀匹配与别名兜底，保持返回 int 契约。
+    """
+    return resolve_stage_index(stage, thresholds)
+
+
+# 旧版数据里的阶段名 → 新拆分后的阶段名。用于老玩家数据回填前的读兼容。
+REALM_STAGE_ALIASES: dict[str, str] = {
+    "斗尊": "斗尊·一转",
+    "斗圣": "斗圣·初期",
+}
+
+
+def resolve_stage_index(stage: str | None, thresholds: list[dict[str, Any]] | None = None) -> int:
+    """Resolve ``stage`` to its index in ``thresholds``, tolerating legacy/alias names.
+
+    匹配优先级：精确匹配 → ``split("·")[0]`` 前缀匹配 → ``REALM_STAGE_ALIASES`` 别名 →
+    兜底 0（并告警）。保证任何输入都不抛异常、不返回 None。
+    """
+    rows = thresholds if isinstance(thresholds, list) and thresholds else DEFAULT_REALM_THRESHOLDS
     normalized = str(stage or "").strip()
     for index, row in enumerate(rows):
         if str(row.get("stage") or "").strip() == normalized:
             return index
+    for index, row in enumerate(rows):
+        if str(row.get("stage") or "").strip() and normalized.split("·")[0].strip() == str(row.get("stage") or "").strip().split("·")[0].strip():
+            return index
+    alias_target = REALM_STAGE_ALIASES.get(normalized)
+    if alias_target:
+        for index, row in enumerate(rows):
+            if str(row.get("stage") or "").strip() == alias_target:
+                return index
+    logger.warning("doupo: 未知境界「%s」已按斗之气(索引0)处理", normalized)
     return 0

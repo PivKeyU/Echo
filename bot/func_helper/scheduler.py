@@ -7,8 +7,15 @@ from bot.func_helper.utils import Singleton
 class Scheduler(metaclass=Singleton):
     def __init__(self, timezone='Asia/Shanghai', misfire_grace_time=60, event_loop=None):
         # 创建一个AsyncIOScheduler对象，并传入时区、容忍度和事件循环参数
-        self.SCHEDULER = AsyncIOScheduler(timezone=timezone, misfire_grace_time=misfire_grace_time, max_instances=5,
-                                          event_loop=event_loop or asyncio.get_event_loop())
+        self.SCHEDULER = AsyncIOScheduler(
+            timezone=timezone,
+            job_defaults={
+                "misfire_grace_time": misfire_grace_time,
+                "max_instances": 1,
+                "coalesce": True,
+            },
+            event_loop=event_loop or asyncio.get_event_loop(),
+        )
         # 启动调度器
         self.SCHEDULER.start()
         # 设置日志级别为INFO

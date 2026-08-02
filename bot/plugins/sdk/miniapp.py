@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from secrets import compare_digest
 from collections.abc import Callable
 from typing import Any
 
@@ -140,7 +141,7 @@ def verify_telegram_user(
 
 def verify_admin_credential(token: str | None, init_data: str | None) -> dict[str, Any]:
     expected_token = api_config.admin_token or ""
-    if token and expected_token and token == expected_token:
+    if token and expected_token and compare_digest(str(token), str(expected_token)):
         return {"id": owner, "auth": "token"}
 
     if init_data:

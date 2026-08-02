@@ -1,8 +1,14 @@
+import asyncio
+
 from bot import LOGGER, config, bot
 from bot.func_helper.moviepilot import get_download_task, get_history_transfer_task_by_title_download_id
 from bot.sql_helper.sql_request_record import sql_update_request_status, sql_get_request_record_by_transfer_state, sql_get_request_record_by_download_id
 from bot.func_helper.scheduler import scheduler
-async def sync_download_tasks():
+
+_SYNC_DOWNLOAD_LOCK = asyncio.Lock()
+
+
+async def _sync_download_tasks_once():
     """同步MoviePilot下载任务状态到数据库"""
     try:
         # 获取所有下载任务
@@ -78,7 +84,17 @@ async def sync_download_tasks():
             LOGGER.info(f"[MoviePilot] 同步了 {download_count} 个下载任务状态, {transfer_count} 个转移任务状态")
     except Exception as e:
         LOGGER.error(f"[MoviePilot] 同步下载任务状态时出错: {str(e)}")
+
+
+async def sync_download_tasks():
+    if _SYNC_DOWNLOAD_LOCK.locked():
+        LOGGER.warning("[MoviePilot] 上一轮同步尚未完成，跳过本轮重复执行")
+        return
+    async with _SYNC_DOWNLOAD_LOCK:
+        await _sync_download_tasks_once()
+
+
 # 如果MoviePilot功能开启，添加定时任务
 if config.moviepilot.status:
     scheduler.add_job(sync_download_tasks, 'interval',
-                     seconds=60, id='sync_download_tasks')
+                     seconds=60, id='sync_download_tasks', max_instances=1, coalesce=True)

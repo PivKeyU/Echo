@@ -291,8 +291,16 @@ def verify_init_data(init_data: str) -> dict:
     if not hmac.compare_digest(our_hash, their_hash):
         raise HTTPException(status_code=403, detail="小程序数据校验失败了...才不是本女仆的问题！")
 
-    auth_date = int(parsed.get("auth_date", "0"))
-    if auth_date and int(time()) - auth_date > api_config.webapp_auth_max_age:
+    try:
+        auth_date = int(parsed.get("auth_date", "0"))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="小程序认证时间格式无效。") from exc
+    now = int(time())
+    if auth_date <= 0:
+        raise HTTPException(status_code=400, detail="小程序认证数据缺少有效时间。")
+    if auth_date > now + 60:
+        raise HTTPException(status_code=401, detail="小程序认证时间异常，请重新进入页面。")
+    if now - auth_date > api_config.webapp_auth_max_age:
         raise HTTPException(status_code=401, detail="小程序数据过期了啦，重新进入页面吧~")
 
     user_data = parsed.get("user")

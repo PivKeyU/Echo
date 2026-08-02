@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#16102b">
+  <title>斗罗大陆 · 管理后台</title>
+  <link rel="preconnect" href="https://telegram.org" crossorigin>
+  <link rel="preload" href="/plugins/douluo/static/app.css" as="style">
+  <link rel="preload" href="/plugins/douluo/static/admin.js" as="script">
+  <link rel="stylesheet" href="/plugins/douluo/static/app.css">
+</head>
+<body class="douluo-app auth-locked">
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+  <main class="admin-shell">
+    <section class="card hero-panel">
+      <div class="hero-main">
+        <p class="eyebrow">斗罗大陆 · 执事</p>
+        <h1>管理后台</h1>
+        <p id="admin-status" class="hero-copy">正在验证管理员身份...</p>
+      </div>
+      <div class="hero-side">
+        <div class="hero-actions">
+          <button id="admin-token-toggle" type="button" class="ghost">使用 Token 鉴权</button>
+          <button id="admin-refresh" type="button" class="ghost">刷新数据</button>
+          <a href="/plugins/douluo/app" class="ghost" style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid var(--line);border-radius:10px;color:var(--accent-2);text-decoration:none;font-size:14px">返回游戏</a>
+        </div>
+        <div id="admin-token-panel" class="hidden" style="margin-top:8px">
+          <form id="admin-token-form" class="mini-form">
+            <label>管理员 Token <input id="admin-token-input" type="password" placeholder="粘贴后台 Token" autocomplete="off"></label>
+            <button type="submit">保存并鉴权</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <div id="admin-overview" class="hero-metrics admin-card"></div>
+
+    <div class="admin-grid">
+      <section class="card admin-card span-2">
+        <p class="eyebrow">统一账号</p>
+        <h2 style="margin:0 0 8px">账号与 TG 绑定</h2>
+        <p class="section-copy">账号由修仙、斗破、斗罗统一的网页登录系统管理；角色数据各自独立。</p>
+        <form id="account-search-form" class="admin-filter-row" style="margin-bottom:10px">
+          <input id="account-search-q" type="search" placeholder="搜索账号、昵称、TG ID 或 @username">
+          <select id="account-bound-filter">
+            <option value="">全部绑定状态</option>
+            <option value="true">已绑定 TG</option>
+            <option value="false">未绑定 TG</option>
+          </select>
+          <select id="account-enabled-filter">
+            <option value="">全部账号状态</option>
+            <option value="true">正常</option>
+            <option value="false">已停用</option>
+          </select>
+          <button type="submit">查询账号</button>
+        </form>
+        <div id="account-summary" class="admin-metrics"></div>
+        <div id="account-list" class="admin-list"></div>
+      </section>
+
+      <section class="card admin-card span-2">
+        <p class="eyebrow">玩家</p>
+        <h2 style="margin:0 0 8px">魂师管理</h2>
+        <div class="field-row">
+          <label>搜索 TG / 昵称</label>
+          <input id="player-query" type="text" placeholder="输入 TG 或昵称关键词">
+          <button id="player-search" type="button" class="mini">搜索</button>
+        </div>
+        <div class="field-row">
+          <label>分页</label>
+          <button id="player-prev" type="button" class="mini ghost">上一页</button>
+          <span id="player-page" class="muted" style="font-size:13px">第 1 页</span>
+          <button id="player-next" type="button" class="mini ghost">下一页</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="admin-table" id="player-table">
+            <thead><tr><th>TG</th><th>昵称</th><th>境界</th><th>魂力</th><th>魂币</th><th>战力</th><th>操作</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card admin-card">
+        <p class="eyebrow">参数</p>
+        <h2 style="margin:0 0 8px">全局设置</h2>
+        <form id="settings-form" class="admin-grid" style="grid-template-columns:1fr"></form>
+        <button id="settings-save" type="button" style="margin-top:10px">保存设置</button>
+      </section>
+
+      <section class="card admin-card">
+        <p class="eyebrow">物品</p>
+        <h2 style="margin:0 0 8px">物品目录</h2>
+        <button id="new-item-btn" type="button" class="mini" style="margin-bottom:10px">新建物品</button>
+        <div id="item-editor" class="item-editor hidden">
+          <div class="section-heading">
+            <div><p class="eyebrow">物品定义</p><h3 id="item-editor-title" style="margin:0">新建物品</h3></div>
+            <span id="item-version-badge" class="tag">未保存</span>
+          </div>
+          <div class="item-editor-grid">
+            <label><span>物品 key</span><input id="item-key" maxlength="64" placeholder="例如 hongxue_sword"></label>
+            <label><span>名称</span><input id="item-name" maxlength="128" placeholder="例如 红雪剑"></label>
+            <label><span>分类</span><select id="item-category">
+              <option value="material">材料</option>
+              <option value="soulbone">魂骨</option>
+              <option value="ambush">暗器</option>
+              <option value="pill">丹药</option>
+              <option value="contract">契约</option>
+              <option value="ticket">凭证</option>
+            </select></label>
+            <label><span>品质</span><input id="item-rarity" maxlength="32" value="凡品"></label>
+            <label><span>图标</span><input id="item-icon" maxlength="512" placeholder="emoji 或 HTTPS 图片地址"></label>
+            <label class="inline-setting"><input id="item-enabled" type="checkbox" checked> 启用物品</label>
+          </div>
+          <label class="editor-wide-label"><span>描述</span><textarea id="item-description" rows="3" maxlength="4000"></textarea></label>
+          <details class="admin-config-fold">
+            <summary>装备槽位与属性</summary>
+            <div class="item-editor-grid">
+              <label><span>装备槽位</span><select id="item-equipment-slot">
+                <option value="">不可穿戴</option>
+                <option value="weapon">武器</option>
+                <option value="armor">护甲</option>
+                <option value="accessory">饰品</option>
+                <option value="ring">魂导器</option>
+                <option value="boots">靴履</option>
+              </select></label>
+              <label><span>攻击</span><input id="item-attack" type="number" min="0" value="0"></label>
+              <label><span>防御</span><input id="item-defense" type="number" min="0" value="0"></label>
+              <label><span>速度</span><input id="item-speed" type="number" min="0" value="0"></label>
+              <label><span>精神力</span><input id="item-spirit" type="number" min="0" value="0"></label>
+              <label><span>触发概率(%)</span><input id="item-trigger-chance" type="number" min="0" max="100" value="0"></label>
+            </div>
+          </details>
+          <label class="editor-wide-label"><span>技能/效果 key</span><input id="item-skill" maxlength="64" placeholder="留空无技能"></label>
+          <div class="field-row">
+            <button id="save-item-btn" type="button">保存物品</button>
+            <button id="item-editor-cancel" type="button" class="mini ghost">取消</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="admin-table" id="item-table">
+            <thead><tr><th>Key</th><th>名称</th><th>类别</th><th>品质</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script async src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script defer src="/plugins/douluo/static/admin.js"></script>
+</body>
+</html>

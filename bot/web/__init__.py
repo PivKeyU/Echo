@@ -10,6 +10,7 @@ import errno
 import os
 from time import perf_counter
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -92,9 +93,13 @@ class Web:
 
             @self.app.get("/health", include_in_schema=False)
             async def health():
+                redis_status = get_redis_status()
                 return {
                     "ok": True,
-                    "redis": get_redis_status(),
+                    "redis": {
+                        "enabled": bool(redis_status.get("enabled")),
+                        "available": bool(redis_status.get("available")),
+                    },
                 }
 
             @self.app.get("/admin", include_in_schema=False)
@@ -105,9 +110,19 @@ class Web:
             async def miniapp_page():
                 return FileResponse(STATIC_DIR / "miniapp.html")
 
+        allowed_origins = [str(origin) for origin in (config_api.allow_origins or []) if str(origin).strip()]
+        if "*" in allowed_origins:
+            parsed_public_url = urlsplit(str(config_api.public_url or "").strip())
+            public_origin = (
+                f"{parsed_public_url.scheme}://{parsed_public_url.netloc}"
+                if parsed_public_url.scheme and parsed_public_url.netloc
+                else None
+            )
+            allowed_origins = [public_origin] if public_origin else []
+            LOGGER.warning("【API服务】allow_origins 不再接受通配符，已收紧为 public_url 同源访问")
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=config_api.allow_origins,
+            allow_origins=allowed_origins,
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],

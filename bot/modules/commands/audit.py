@@ -18,6 +18,39 @@ from bot.func_helper.utils import split_long_message
 import asyncio
 
 
+@bot.on_message(filters.command("emotionaudit") & admins_on_filter)
+async def emotion_audit_command(_, message: Message):
+    """Query Emotion Drive-origin and login security metrics."""
+    args = (message.text or "").split()
+    try:
+        hours = int(args[1]) if len(args) > 1 else 24
+    except ValueError:
+        return await sendMessage(message, "用法：`/emotionaudit [小时]`，例如 `/emotionaudit 24`")
+    result = await emby.emotion_security_summary(hours)
+    if not result.success or not isinstance(result.data, dict):
+        return await sendMessage(message, f"Emotion 安全审计查询失败：{result.error or '返回格式错误'}")
+    data = result.data
+    lines = [
+        f"**Emotion 安全审计（最近 {data.get('hours', hours)} 小时）**",
+        "",
+        f"• 网盘实际回源请求：`{data.get('drive_remote_requests', 0)}`",
+        f"• 网盘回源流量：`{int(data.get('drive_remote_bytes', 0)) / 1024 / 1024:.2f} MB`",
+        f"• 登录失败：`{data.get('login_failures', 0)}`",
+        f"• 未处理设备异常：`{data.get('active_anomalies', 0)}`",
+        "",
+        "**回源最多的用户/网盘：**",
+    ]
+    for item in (data.get("users") or [])[:20]:
+        name = item.get("username") or f"用户 {item.get('user_id', 0)}"
+        lines.append(
+            f"• `{name}` / `{item.get('account', 'default')}`："
+            f"{item.get('remote_requests', 0)} 次，"
+            f"{int(item.get('remote_bytes', 0)) / 1024 / 1024:.2f} MB，"
+            f"缓存命中块 {item.get('cached_blocks', 0)}"
+        )
+    await sendMessage(message, "\n".join(lines))
+
+
 @bot.on_message(filters.command("auditip") & admins_on_filter)
 async def audit_ip_command(_, message: Message):
     """

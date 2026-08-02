@@ -166,6 +166,7 @@ const state = {
   authAccount: null,
   authMode: "login",
   expeditionChoiceKey: "",
+  sectPanel: null,
   telegramInitData: "",
 };
 
@@ -758,6 +759,12 @@ function renderSectChoice(bundle = {}) {
   if (!root) return;
   const profile = bundle.profile || {};
   const sects = Array.isArray(bundle.sects) ? bundle.sects : [];
+  const panel = bundle.sect_panel || state.sectPanel || null;
+  if (bundle.sect_panel) state.sectPanel = bundle.sect_panel;
+  if (profile.sect_name && panel) {
+    renderSectPanel(root, profile, panel);
+    return;
+  }
   if (profile.sect_name) {
     root.innerHTML = `
       <article class="stack-item">
@@ -801,6 +808,143 @@ function renderSectChoice(bundle = {}) {
       }
     });
   });
+}
+
+function renderSectPanel(root, profile, panel) {
+  const quest = panel.quest || {};
+  const members = Array.isArray(panel.members) ? panel.members : [];
+  const transfer = panel.transfer || {};
+  const rewards = quest.rewards || {};
+  const multiplier = Number(quest.multiplier || 1);
+  const rewardText = [
+    `贡献 +${number(Math.round((Number(rewards.contribution) || 0) * multiplier))}`,
+    `金币 +${number(Math.round((Number(rewards.gold) || 0) * multiplier))}`,
+    `斗气 +${number(Math.round((Number(rewards.douqi) || 0) * multiplier))}`,
+  ].join("、");
+  root.innerHTML = `
+    <article class="stack-item sect-panel">
+      <div class="stack-item-head">
+        <div>
+          <p class="eyebrow">宗门面板</p>
+          <strong>${escapeHtml(profile.sect_name)}</strong>
+        </div>
+        <span class="tag">${escapeHtml(quest.rank || profile.sect_rank || "外门弟子")}</span>
+      </div>
+      <p class="meta-line">贡献 ${number(profile.sect_contribution)} · 委托倍率 x${number(multiplier)}</p>
+      <div class="sect-quest">
+        <div>
+          <strong>每日宗门委托</strong>
+          <p>${escapeHtml(rewardText)}</p>
+        </div>
+        <button type="button" data-sect-quest ${quest.claimed ? "disabled" : ""}>${quest.claimed ? "今日已领取" : "领取委托"}</button>
+      </div>
+      <div class="sect-actions">
+        <button type="button" data-sect-transfer>转宗</button>
+        <button type="button" data-sect-leave>离开宗门</button>
+      </div>
+      <p class="meta-line">转宗费 ${number(transfer.cost || 0)}${transfer.remaining_days > 0 ? ` · 冷却 ${number(transfer.remaining_days)} 天` : ""} · 离宗费 ${number(panel.leave_cost || 0)}</p>
+      ${members.length ? `
+        <div class="sect-members">
+          <strong>同门 · ${number(members.length)}</strong>
+          ${members.map((member) => `
+            <div class="sect-member">
+              <span class="sect-member-name">${escapeHtml(member.display_name)}</span>
+              <span class="tag">${escapeHtml(member.sect_rank)}</span>
+              <span class="sect-member-meta">${escapeHtml(member.realm_stage)} ${number(member.realm_stars)}星 · 贡献 ${number(member.sect_contribution)} · 战力 ${number(member.battle_power)}</span>
+            </div>
+          `).join("")}
+        </div>
+      ` : ""}
+    </article>
+  `;
+  root.querySelector("[data-sect-quest]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    setButtonBusy(button, true, "领取中...");
+    try {
+      const result = await postJson("/plugins/doupo/api/sect/quest/claim", {});
+      state.data = result;
+      renderAll(result);
+      const detail = result.detail || "委托完成";
+      setStatus(detail);
+      showToast(detail);
+    } catch (error) {
+      const message = String(error.message || error);
+      setStatus(message, "error");
+      showToast(message, "error");
+    } finally {
+      setButtonBusy(button, false);
+    }
+  });
+  root.querySelector("[data-sect-transfer]")?.addEventListener("click", () => renderSectTransfer(root));
+  root.querySelector("[data-sect-leave]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    if (!window.confirm("确认离开当前宗门？宗门贡献将清零，且进入转宗冷却。")) return;
+    setButtonBusy(button, true, "处理中...");
+    try {
+      const result = await postJson("/plugins/doupo/api/sect/leave", {});
+      state.data = result;
+      state.sectPanel = null;
+      renderAll(result);
+      const detail = result.detail || "已离开宗门";
+      setStatus(detail);
+      showToast(detail);
+    } catch (error) {
+      const message = String(error.message || error);
+      setStatus(message, "error");
+      showToast(message, "error");
+    } finally {
+      setButtonBusy(button, false);
+    }
+  });
+}
+
+function renderSectTransfer(root) {
+  const profile = state.data?.profile || {};
+  const sects = Array.isArray(state.data?.sects) ? state.data.sects : [];
+  const currentName = profile.sect_name;
+  const targets = sects.filter((sect) => sect.name !== currentName);
+  root.innerHTML = `
+    <article class="stack-item">
+      <div class="stack-item-head">
+        <strong>选择转宗目标</strong>
+        <span class="tag">当前 ${escapeHtml(currentName || "无")}</span>
+      </div>
+      ${targets.map((sect) => `
+        <div class="sect-item">
+          <div class="stack-item-head">
+            <strong>${escapeHtml(sect.name)}</strong>
+            <span class="tag">${escapeHtml(sect.realm_stage_min || "斗之气")}</span>
+          </div>
+          <p>${escapeHtml(sect.description || "")}</p>
+          <p class="meta-line">${escapeHtml(sect.bonus || "")}</p>
+          <button type="button" data-sect-transfer-key="${escapeHtml(sect.key)}">转入此宗</button>
+        </div>
+      `).join("")}
+      <button type="button" data-sect-back class="sect-back-button">返回面板</button>
+    </article>
+  `;
+  root.querySelectorAll("[data-sect-transfer-key]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const sectKey = button.getAttribute("data-sect-transfer-key");
+      if (!sectKey) return;
+      setButtonBusy(button, true, "转宗中...");
+      try {
+        const result = await postJson("/plugins/doupo/api/sect/transfer", { sect_key: sectKey });
+        state.data = result;
+        renderAll(result);
+        const detail = result.detail || "转宗成功";
+        setStatus(detail);
+        showToast(detail);
+      } catch (error) {
+        const message = String(error.message || error);
+        setStatus(message, "error");
+        showToast(message, "error");
+      } finally {
+        setButtonBusy(button, false);
+      }
+    });
+  });
+  root.querySelector("[data-sect-back]")?.addEventListener("click", () => renderAll(state.data || {}));
 }
 
 function actionTypes(actions) {
@@ -993,6 +1137,7 @@ function renderExpedition(bundle = {}) {
             </div>
             <p>${escapeHtml(region.description || "")}</p>
             <p class="meta-line">门槛 ${escapeHtml(region.realm_stage_min)} · 建议战力 ${number(region.recommended_power)} · 补给 ${number(region.entry_gold)} 金币</p>
+            ${region.boss ? `<p class="meta-line expedition-boss-hint">首领 ${escapeHtml(region.boss.name)} · 战力 ${number(region.boss.power)} · 需 ${escapeHtml(region.boss.realm_stage_min)}</p>` : ""}
             ${region.disabled_reason ? `<p class="action-disabled-reason">${escapeHtml(region.disabled_reason)}</p>` : ""}
             <button type="button" data-expedition-start="${escapeHtml(region.key)}" ${region.available ? "" : "disabled"}>进入区域</button>
           </article>
@@ -1013,6 +1158,15 @@ function renderExpedition(bundle = {}) {
   const vitalityPercent = percent(active.vitality, active.max_vitality);
   const loot = active.loot || {};
   const event = active.current_event || {};
+  const eventKind = event.kind || "normal";
+  const kindBadge = eventKind === "boss"
+    ? '<span class="tag expedition-tag-boss">首领讨伐</span>'
+    : eventKind === "hidden"
+      ? '<span class="tag expedition-tag-hidden">隐藏机缘</span>'
+      : "";
+  const bossPowerLine = eventKind === "boss" && event.boss_power
+    ? `<p class="eyebrow">${escapeHtml(event.boss_name || "区域首领")} · 战力 ${number(event.boss_power)}</p>`
+    : "";
   const choices = Array.isArray(event.choices) ? event.choices : [];
   const selectedChoice = choices.some((choice) => choice.key === state.expeditionChoiceKey)
     ? state.expeditionChoiceKey
@@ -1030,9 +1184,13 @@ function renderExpedition(bundle = {}) {
         <div class="stack-item-head">
           <div>
             <p class="eyebrow">${escapeHtml(active.region_name)}</p>
+            ${bossPowerLine}
             <strong>${escapeHtml(event.title || "前路未明")}</strong>
           </div>
-          <span class="tag">第 ${number(active.step) + 1} / ${number(active.max_steps)} 段</span>
+          <div class="expedition-head-tags">
+            ${kindBadge}
+            <span class="tag">第 ${number(active.step) + 1} / ${number(active.max_steps)} 段</span>
+          </div>
         </div>
         <div class="expedition-trail" aria-label="游历进度">${trail}</div>
         <p class="expedition-event-story">${escapeHtml(event.story || "前方的气息仍在变化。")}</p>

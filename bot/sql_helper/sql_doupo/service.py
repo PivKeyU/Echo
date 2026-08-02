@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import logging
 import os
 import random
 import re
@@ -9,6 +10,10 @@ import threading
 import time
 from datetime import datetime, timedelta
 from typing import Any
+
+from sqlalchemy.exc import IntegrityError
+
+logger = logging.getLogger("doupo.service")
 
 from bot.func_helper.emby_currency import get_emby_balance
 from bot.plugins.doupo_game.core import (
@@ -29,6 +34,7 @@ from bot.plugins.doupo_game.core import (
     TECHNIQUES,
     clamp_int,
     realm_rank,
+    resolve_stage_index,
 )
 from bot.sql_helper import Session
 from bot.sql_helper.sql_doupo.models import (
@@ -52,6 +58,9 @@ _CATEGORY_LOOKUP = {str(item["key"]): item for item in INVENTORY_CATEGORIES}
 _FIRE_ITEM_BY_NAME = {
     "青莲地心火": "qinglian_fire_seed",
     "海心焰": "sea_heart_flame_seed",
+    "陨落心炎": "fallen_heart_flame_seed",
+    "骨灵冷火": "bone_spirit_cold_fire_seed",
+    "三千焱炎火": "three_thousand_flame_seed",
 }
 _SECT_LOOKUP = {str(item["key"]): item for item in SECT_OPTIONS}
 _SECT_NAME_LOOKUP = {str(item["name"]): item for item in SECT_OPTIONS}
@@ -104,6 +113,12 @@ EQUIPMENT_STAT_WEIGHTS: dict[str, int] = {
 _ITEM_DEFINITION_CACHE_LOCK = threading.RLock()
 _ITEM_DEFINITION_CACHE_TTL = max(float(os.getenv("PIVKEYU_DOUPO_ITEM_CACHE_TTL", "15") or 15), 1.0)
 _ITEM_DEFINITION_CACHE: tuple[float, dict[str, dict[str, Any]]] | None = None
+
+# 32 位 Integer 列上限（DoupoProfile.gold 等），防管理端/兑换溢出。
+_INT32_MAX = 2_147_483_647
+# 首次建号并发保护：进程内锁 + 已初始化 tg 集合，避免无锁 SELECT+INSERT 竞态。
+_PROFILE_INIT_LOCK = threading.Lock()
+_INITIALIZED_PROFILES: set[int] = set()
 
 
 def _coerce_int(value: Any, default: int) -> int:
@@ -174,6 +189,7 @@ def get_settings() -> dict[str, Any]:
         merged["duel_prepare_seconds"] = min(max(_coerce_int(merged.get("duel_prepare_seconds"), 8), 0), 600)
         merged["exchange_enabled"] = bool(merged.get("exchange_enabled", True))
         merged["broadcast_enabled"] = bool(merged.get("broadcast_enabled", True))
+        merged["message_auto_delete_seconds"] = max(_coerce_int(merged.get("message_auto_delete_seconds"), 180), 0)
         if not isinstance(merged.get("realm_thresholds"), list) or not merged.get("realm_thresholds"):
             merged["realm_thresholds"] = copy.deepcopy(DEFAULT_SETTINGS["realm_thresholds"])
         _SETTINGS_CACHE = (now + _SETTINGS_CACHE_TTL, copy.deepcopy(merged))
@@ -245,8 +261,9 @@ def upsert_profile_identity(tg: int, *, display_name: str | None = None, usernam
     actor_tg = int(tg or 0)
     if actor_tg <= 0:
         return {}
+    get_or_create_profile(actor_tg)
     with Session() as session:
-        row = session.query(DoupoProfile).filter(DoupoProfile.tg == actor_tg).first()
+        row = session.query(DoupoProfile).filter(DoupoProfile.tg == actor_tg).with_for_update().first()
         if row is None:
             row = _new_profile(actor_tg, display_name=display_name, username=username)
             session.add(row)
@@ -265,13 +282,24 @@ def get_or_create_profile(tg: int) -> dict[str, Any]:
     actor_tg = int(tg or 0)
     if actor_tg <= 0:
         raise ValueError("非法用户")
+    if actor_tg not in _INITIALIZED_PROFILES:
+        with _PROFILE_INIT_LOCK:
+            if actor_tg not in _INITIALIZED_PROFILES:
+                with Session() as session:
+                    row = session.query(DoupoProfile).filter(DoupoProfile.tg == actor_tg).first()
+                    if row is None:
+                        try:
+                            row = _new_profile(actor_tg)
+                            session.add(row)
+                            session.commit()
+                            session.refresh(row)
+                        except IntegrityError:
+                            # 并发首建：另一进程/线程已插入，回滚后重查。
+                            session.rollback()
+                            row = session.query(DoupoProfile).filter(DoupoProfile.tg == actor_tg).first()
+                _INITIALIZED_PROFILES.add(actor_tg)
     with Session() as session:
         row = session.query(DoupoProfile).filter(DoupoProfile.tg == actor_tg).first()
-        if row is None:
-            row = _new_profile(actor_tg)
-            session.add(row)
-            session.commit()
-            session.refresh(row)
         return serialize_profile(row)
 
 
@@ -1236,7 +1264,7 @@ def equip_inventory_item(tg: int, item_key: str) -> dict[str, Any]:
     return {
         "profile": profile,
         "inventory": list_player_inventory_grouped(actor_tg),
-        "detail": f"已穿戴{catalog['name']}。",
+        "detail": f"⚔️ 已穿戴{catalog['name']}。",
     }
 
 
@@ -1261,7 +1289,7 @@ def unequip_inventory_item(tg: int, item_key: str) -> dict[str, Any]:
     return {
         "profile": profile,
         "inventory": list_player_inventory_grouped(actor_tg),
-        "detail": f"已卸下{catalog['name']}。",
+        "detail": f"⚔️ 已卸下{catalog['name']}。",
     }
 
 
@@ -1289,7 +1317,17 @@ def _get_or_create_economy_ledger_session(session, tg: int, day_key: str) -> Dou
             updated_at=now,
         )
         session.add(row)
-        session.flush()
+        try:
+            with session.begin_nested():
+                session.flush()
+        except IntegrityError:
+            # 并发首建：仅回滚保存点（不丢调用方同一事务的待提交改动），重查既有行。
+            row = (
+                session.query(DoupoEconomyLedger)
+                .filter(DoupoEconomyLedger.tg == int(tg), DoupoEconomyLedger.day_key == str(day_key))
+                .with_for_update()
+                .first()
+            )
     return row
 
 
@@ -1341,7 +1379,21 @@ def _get_or_create_daily_counter_session(session, tg: int, day_key: str, action_
             updated_at=now,
         )
         session.add(row)
-        session.flush()
+        try:
+            with session.begin_nested():
+                session.flush()
+        except IntegrityError:
+            # 并发首建：仅回滚保存点，重查既有计数行。
+            row = (
+                session.query(DoupoDailyActionCounter)
+                .filter(
+                    DoupoDailyActionCounter.tg == int(tg),
+                    DoupoDailyActionCounter.day_key == str(day_key),
+                    DoupoDailyActionCounter.action_type == str(action_type),
+                )
+                .with_for_update()
+                .first()
+            )
     return row
 
 
@@ -1501,7 +1553,7 @@ def join_sect(tg: int, sect_key: str) -> dict[str, Any]:
             session.add(profile)
             session.flush()
         if profile.sect_name:
-            raise ValueError(f"你已加入 {profile.sect_name}，当前版本暂不开放转宗。")
+            raise ValueError(f"你已加入 {profile.sect_name}，如需更换请使用转宗（冷却与贡献保留受设置约束）。")
         stage_min = str(option.get("realm_stage_min") or "").strip()
         if stage_min and realm_rank(profile.realm_stage, settings.get("realm_thresholds") or []) < realm_rank(stage_min, settings.get("realm_thresholds") or []):
             raise ValueError(f"加入 {option['name']} 至少需要达到 {stage_min}")
@@ -1513,15 +1565,18 @@ def join_sect(tg: int, sect_key: str) -> dict[str, Any]:
                 tg=int(tg),
                 action_type="sect",
                 title="加入宗门",
-                detail=f"加入 {option['name']}，获得入门贡献 +10",
+                detail=f"⛩️ 加入 {option['name']}，获得入门贡献 +10",
             )
         )
         session.commit()
         session.refresh(profile)
         profile_payload = serialize_profile(profile, settings)
+    # 函数级延迟导入，避免与 sect_service 的模块级循环依赖。
+    from bot.sql_helper.sql_doupo.sect_service import get_sect_panel  # noqa: PLC0415
     return {
         "profile": profile_payload,
         "sect": dict(option),
+        "sect_panel": get_sect_panel(int(tg), settings, profile_payload),
         "growth": build_growth_snapshot(profile_payload, settings),
         "features": build_feature_overview(profile_payload),
         "inventory": list_player_inventory_grouped(int(tg)),
@@ -1590,9 +1645,54 @@ def ensure_default_actions() -> None:
                         current_reward[merge_key] = default_reward[merge_key]
                         row.reward_config = current_reward
                         changed = True
+            # 检测重复 sort_order：自动 +1 偏移直到唯一，避免行动排序错乱。
+            rows_by_order: dict[int, list[DoupoAction]] = {}
+            for row in session.query(DoupoAction).order_by(DoupoAction.sort_order.asc(), DoupoAction.id.asc()).all():
+                rows_by_order.setdefault(int(row.sort_order or 0), []).append(row)
+            used_orders: set[int] = set()
+            for order, same_order_rows in rows_by_order.items():
+                if order not in used_orders:
+                    used_orders.add(order)
+                for row in same_order_rows[1:]:
+                    new_order = order + 1
+                    while new_order in used_orders:
+                        new_order += 1
+                    row.sort_order = new_order
+                    used_orders.add(new_order)
+                    changed = True
+                    logger.warning(
+                        f"doupo ensure_default_actions: 修复重复 sort_order {order} → {new_order}（{row.action_key}）"
+                    )
             if changed:
                 session.commit()
         _DEFAULT_ACTIONS_READY = True
+    _log_undefined_action_references()
+
+
+def _log_undefined_action_references() -> None:
+    """启动时校验全部 DEFAULT_ACTIONS 的物品引用，未定义/停用的列出告警（不抛错）。"""
+    problems: list[str] = []
+    for item in DEFAULT_ACTIONS:
+        key = str(item.get("action_key") or "?")
+        reward = dict(item.get("reward_config") or {})
+        for drop in reward.get("item_drops") or []:
+            if not isinstance(drop, dict):
+                continue
+            drop_key = str(drop.get("item_key") or drop.get("key") or "").strip()
+            if not drop_key:
+                continue
+            catalog = _catalog_item(drop_key)
+            if not bool(catalog.get("defined")):
+                problems.append(f"[{key}] 掉落物品未定义：{drop_key}")
+            elif not bool(catalog.get("enabled", True)):
+                problems.append(f"[{key}] 掉落物品已停用：{drop_key}")
+        for cost_key in _normalize_item_costs(reward.get("item_costs")):
+            catalog = _catalog_item(cost_key)
+            if not bool(catalog.get("defined")):
+                problems.append(f"[{key}] 消耗物品未定义：{cost_key}")
+    if problems:
+        for problem in problems:
+            logger.warning(f"doupo default action reference: {problem}")
 
 
 def list_actions(*, enabled_only: bool = True) -> list[dict[str, Any]]:
@@ -1735,7 +1835,7 @@ def _apply_realm_progress(profile: DoupoProfile, settings: dict[str, Any]) -> No
     current_stage = str(profile.realm_stage or "斗之气")
     current_star = max(int(profile.realm_stars or 1), 1)
     current_douqi = max(int(profile.douqi or 0), 0)
-    stage_idx = realm_rank(current_stage, thresholds)
+    stage_idx = resolve_stage_index(current_stage, thresholds)
     star_cap = max(_coerce_int(thresholds[stage_idx].get("star_cap"), 9), 1)
     douqi_per_star = max(_coerce_int(thresholds[stage_idx].get("douqi_per_star"), 100), 1)
 
@@ -1744,20 +1844,30 @@ def _apply_realm_progress(profile: DoupoProfile, settings: dict[str, Any]) -> No
         current_douqi -= douqi_per_star
         current_star += 1
     if current_star >= star_cap:
-        max_douqi = douqi_per_star if stage_idx + 1 < len(thresholds) else douqi_per_star - 1
+        # 终境也允许修满到 douqi_per_star（斗帝圆满），不再钳到 per_star-1。
+        max_douqi = douqi_per_star
         current_douqi = min(current_douqi, max(max_douqi, 0))
     profile.realm_stage = current_stage
     profile.realm_stars = current_star
     profile.douqi = current_douqi
 
 
+def _settle_realm_change(profile: DoupoProfile, old_stage: str) -> None:
+    """境界变更统一收口：仅在境界名真正改变时清零突破失败计数。
+
+    旧逻辑在突破成功与后台改境界的各路径手工归零，容易遗漏；这里集中处理。
+    """
+    if str(profile.realm_stage or "") != str(old_stage or ""):
+        profile.breakthrough_failures = 0
+
+
 def _breakthrough_rule(profile: DoupoProfile, settings: dict[str, Any]) -> dict[str, Any]:
     thresholds = settings.get("realm_thresholds") or []
     stage = str(profile.realm_stage or "斗之气")
-    stage_idx = realm_rank(stage, thresholds)
+    stage_idx = resolve_stage_index(stage, thresholds)
     row = thresholds[stage_idx] if thresholds else {}
     next_row = thresholds[stage_idx + 1] if thresholds and stage_idx + 1 < len(thresholds) else None
-    configured = dict(BREAKTHROUGH_RULES.get(stage) or {})
+    configured = dict(BREAKTHROUGH_RULES.get(stage) or BREAKTHROUGH_RULES.get(str(stage).split("·")[0]) or {})
     return {
         "stage": stage,
         "next_stage": None if next_row is None else str(next_row.get("stage") or ""),
@@ -1813,7 +1923,11 @@ def _breakthrough_state(
         + int(getattr(profile, "fire_rank", 0) or 0) * 2,
         15,
     )
-    success_percent = min(base_success + growth_bonus, 95)
+    # 帝流丹：临时 +5% 成功率（一次性，仅在成功突破时消耗）；定境丹：失败斗气损失减半（失败时消耗）。
+    has_emperor_pill = int((quantities or {}).get("emperor_flow_pill") or 0) > 0
+    has_stabilizing_pill = int((quantities or {}).get("realm_stabilizing_pill") or 0) > 0
+    pill_bonus = 5 if has_emperor_pill else 0
+    success_percent = min(base_success + growth_bonus + pill_bonus, 95)
     pity_ready = failures + 1 >= int(rule["pity_after"])
     return {
         **rule,
@@ -1821,10 +1935,14 @@ def _breakthrough_state(
         "success_percent": 100 if pity_ready else success_percent,
         "base_success_percent": base_success,
         "pity_ready": pity_ready,
-        "remaining_attempts_to_pity": max(int(rule["pity_after"]) - failures, 1),
+        "remaining_attempts_to_pity": max(int(rule["pity_after"]) - failures, 0),
         "available": not reasons,
         "disabled_reason": reasons[0] if reasons else "",
         "disabled_reasons": reasons,
+        # 加成丹状态（P1）：仅供前端展示与结果播报，实际消耗在突破结算分支处理。
+        "pill_bonus": pill_bonus,
+        "has_emperor_pill": has_emperor_pill,
+        "has_stabilizing_pill": has_stabilizing_pill,
     }
 
 
@@ -1893,6 +2011,20 @@ def _check_action_requirement(
         item_costs: dict[str, int] = {}
         for cost_key, cost_quantity in _normalize_item_costs(reward.get("item_costs")):
             item_costs[cost_key] = item_costs.get(cost_key, 0) + cost_quantity
+        # 校验全部掉落引用（含非 100% 概率），避免炸事务/产出死物品
+        all_drops = reward.get("item_drops")
+        if isinstance(all_drops, list):
+            for drop in all_drops:
+                if not isinstance(drop, dict):
+                    continue
+                drop_key = str(drop.get("item_key") or drop.get("key") or "").strip()
+                if not drop_key:
+                    continue
+                drop_catalog = _catalog_item(drop_key)
+                if not bool(drop_catalog.get("defined")):
+                    return False, f"掉落物品未定义：{drop_key}"
+                if not bool(drop_catalog.get("enabled", True)):
+                    return False, f"掉落物品 {drop_catalog['name']} 已停用"
         for item_key, quantity in _guaranteed_item_outputs(reward).items():
             catalog = _catalog_item(item_key)
             if not bool(catalog.get("defined")):
@@ -1911,13 +2043,24 @@ def _check_action_requirement(
     return True, ""
 
 
+def _set_action_cooldown(profile: DoupoProfile, action_key: str, now: datetime) -> None:
+    """按 action_key 写入逐行动冷却时间戳（JSON 列需整体赋值才能被 SQLAlchemy 捕获变更）。"""
+    cooldown_map = dict(profile.cooldown_map or {})
+    cooldown_map[str(action_key)] = now.isoformat()
+    profile.cooldown_map = cooldown_map
+
+
 def _check_action_cooldown(profile: DoupoProfile, action: DoupoAction) -> tuple[bool, int]:
     cooldown = max(int(action.cooldown_seconds or 0), 0)
     if cooldown <= 0:
         return True, 0
     now = utcnow()
-    base_time: datetime | None = profile.last_breakthrough_at if str(action.action_type or "") == "breakthrough" else profile.last_train_at
-    if base_time is None:
+    stored = (profile.cooldown_map or {}).get(str(action.action_key))
+    if not stored:
+        return True, 0
+    try:
+        base_time = datetime.fromisoformat(str(stored))
+    except (TypeError, ValueError):
         return True, 0
     remain = int((base_time + timedelta(seconds=cooldown) - now).total_seconds())
     return remain <= 0, max(remain, 0)
@@ -1925,7 +2068,7 @@ def _check_action_cooldown(profile: DoupoProfile, action: DoupoAction) -> tuple[
 
 def _apply_resource_delta(profile: DoupoProfile, field: str, delta: int) -> int:
     current = int(getattr(profile, field) or 0)
-    updated = max(current + int(delta or 0), 0)
+    updated = min(max(current + int(delta or 0), 0), _INT32_MAX)
     setattr(profile, field, updated)
     return updated - current
 
@@ -1963,6 +2106,7 @@ def _apply_douqi_delta_with_balance(
         balanced_amount = min(balanced_amount, max(hard_cap - earned, 0))
 
     bottleneck_reduced = 0
+    perfected_discarded = 0
     thresholds = settings.get("realm_thresholds") or []
     if thresholds:
         stage_idx = realm_rank(str(profile.realm_stage or "斗之气"), thresholds)
@@ -1972,20 +2116,28 @@ def _apply_douqi_delta_with_balance(
         current_star = min(max(int(profile.realm_stars or 1), 1), star_cap)
         current_douqi = max(int(profile.douqi or 0), 0)
         has_next_stage = stage_idx + 1 < len(thresholds)
-        final_bar_capacity = per_star if has_next_stage else max(per_star - 1, 0)
+        final_bar_capacity = per_star  # 允许终境修满到 per_star（斗帝圆满），消除 11999 死资源
         useful_capacity = max((star_cap - current_star) * per_star + final_bar_capacity - current_douqi, 0)
         before_bottleneck = balanced_amount
         balanced_amount = min(balanced_amount, useful_capacity)
         bottleneck_reduced = max(before_bottleneck - balanced_amount, 0)
+        if result is not None and not has_next_stage:
+            will_reach = current_douqi + balanced_amount >= per_star
+            result["realm_perfected"] = will_reach
+            if will_reach:
+                # 斗帝圆满：满 12000 后多余斗气直接丢弃并播报「帝位圆满」，不再计入「境界瓶颈未吸收」。
+                perfected_discarded = bottleneck_reduced
+                bottleneck_reduced = 0
 
     actual = _apply_resource_delta(profile, "douqi", balanced_amount)
     if actual > 0:
         counter.used_count = earned + actual
         counter.updated_at = utcnow()
     if result is not None:
-        reduced = max(amount - max(actual, 0) - bottleneck_reduced, 0)
+        reduced = max(amount - max(actual, 0) - bottleneck_reduced - perfected_discarded, 0)
         result["douqi_capped_delta"] = int(result.get("douqi_capped_delta") or 0) + reduced
         result["douqi_bottleneck_delta"] = int(result.get("douqi_bottleneck_delta") or 0) + bottleneck_reduced
+        result["realm_perfected_discarded"] = int(result.get("realm_perfected_discarded") or 0) + perfected_discarded
         result["douqi_soft_capped"] = bool(soft_cap > 0 and earned + max(actual, 0) >= soft_cap)
         result["douqi_hard_capped"] = bool(hard_cap > 0 and earned + max(actual, 0) >= hard_cap)
         result["daily_douqi_income"] = earned + max(actual, 0)
@@ -2107,15 +2259,32 @@ def _apply_feature_side_effects(profile: DoupoProfile, action_type: str, result:
     if action_type == "technique" and int(profile.technique_level or 0) > 0 and not profile.technique_key:
         profile.technique_key = "octane_burst"
     if action_type == "fire":
-        payload = _heavenly_fire_payload(int(profile.fire_progress or 0), profile.fire_name)
-        if payload.get("name") and not profile.fire_name:
-            profile.fire_name = str(payload["name"])
-            result["captured_fire"] = profile.fire_name
+        # 按 HEAVENLY_FIRES 进度阈值取当前可达的最高火种，已达更高火种即升级收服（不再只收第一次）。
+        progress = int(profile.fire_progress or 0)
+        target = None
+        for row in HEAVENLY_FIRES:
+            if progress >= int(row.get("progress") or 0):
+                target = row
+        target_name = str((target or {}).get("name") or "").strip()
+        current_name = str(profile.fire_name or "").strip()
+        if target_name and target_name != current_name:
+            profile.fire_name = target_name
+            result["captured_fire"] = target_name
             result["fire_delta"] += _apply_resource_delta(profile, "fire_seed", 20)
     if action_type == "tower":
-        profile.tower_floor = min(max(int(profile.tower_floor or 0), 0), 99)
+        raw_floor = int(profile.tower_floor or 0)
+        capped_floor = min(max(raw_floor, 0), 99)
+        if capped_floor != raw_floor:
+            profile.tower_floor = capped_floor
+            lost = max(raw_floor - capped_floor, 0)
+            if lost:
+                # 封顶损失量单独记录供展示「塔层已至 99」，并修正 tower_delta 为真实进账。
+                result["tower_capped_delta"] = lost
+                prior_delta = max(int(result.get("tower_delta", 0) or 0), 0)
+                result["tower_delta"] = max(prior_delta - lost, 0)
     if int(getattr(profile, "method_level", 0) or 0) > 0 and not profile.technique_key:
-        profile.technique_key = "burning_method"
+        # 焚诀进阶但未学任何斗技时，补目录内斗技（TECHNIQUES[0]），不再写入目录外 key。
+        profile.technique_key = str(TECHNIQUES[0]["key"])
 
 
 def _roll_item_drop_quantity(drop: dict[str, Any]) -> int:
@@ -2149,6 +2318,10 @@ def _apply_configured_item_drops(session, profile: DoupoProfile, reward: dict[st
         item_key = str(drop.get("item_key") or drop.get("key") or "").strip()
         if not item_key:
             continue
+        catalog = _catalog_item(item_key)
+        # 防御式：未定义/已停用的物品直接跳过，避免中途炸整个行动事务。
+        if not bool(catalog.get("defined")) or not bool(catalog.get("enabled", True)):
+            continue
         chance = min(max(_coerce_int(drop.get("chance"), 100), 0), 100)
         if chance < 100 and random.randint(1, 100) > chance:
             continue
@@ -2173,39 +2346,44 @@ def _refund_consumed_items_session(session, profile: DoupoProfile, result: dict[
 
 
 def _apply_legacy_inventory_mirrors(session, profile: DoupoProfile, result: dict[str, Any]) -> None:
-    mirrors = [
-        ("core_delta", "monster_core_low", 1),
-        ("pill_delta", "qi_gathering_powder", 1),
-    ]
-    for result_key, item_key, ratio in mirrors:
-        value = int(result.get(result_key) or 0)
-        if value <= 0:
-            continue
-        quantity = max(value // max(ratio, 1), 1)
+    """旧版双轨物品镜像（降级保留，不重构）。
+
+    canonical 源：物品已有独立掉落/合成/装备路径（monster_core_low、qi_gathering_powder、
+    qinglian_fire_map、baji_beng_scroll、flame_divide_scroll、各火种）。
+    这里仅在玩家背包尚无对应物品时补发一份种子，避免与 canonical 掉落叠加导致无限膨胀。
+    """
+
+    def _seed_if_absent(item_key: str, quantity: int) -> None:
+        if quantity <= 0 or not item_key:
+            return
+        if _inventory_item_quantity_session(session, int(profile.tg), item_key) > 0:
+            return
         granted = _grant_inventory_item_session(session, int(profile.tg), item_key, quantity)
         if granted:
             result["items_delta"].append(granted)
 
+    for result_key, item_key, ratio in [
+        ("core_delta", "monster_core_low", 1),
+        ("pill_delta", "qi_gathering_powder", 1),
+    ]:
+        value = int(result.get(result_key) or 0)
+        if value <= 0:
+            continue
+        _seed_if_absent(item_key, max(value // max(ratio, 1), 1))
+
     fire_progress = int(result.get("fire_progress_delta") or 0)
     if fire_progress > 0:
-        quantity = max(fire_progress // 30, 1)
-        granted = _grant_inventory_item_session(session, int(profile.tg), "qinglian_fire_map", quantity)
-        if granted:
-            result["items_delta"].append(granted)
+        _seed_if_absent("qinglian_fire_map", max(fire_progress // 30, 1))
 
     technique_delta = int(result.get("technique_delta") or 0)
     if technique_delta > 0:
         item_key = "baji_beng_scroll" if int(profile.technique_level or 0) <= 2 else "flame_divide_scroll"
-        granted = _grant_inventory_item_session(session, int(profile.tg), item_key, max(technique_delta, 1))
-        if granted:
-            result["items_delta"].append(granted)
+        _seed_if_absent(item_key, max(technique_delta, 1))
 
     captured_fire = str(result.get("captured_fire") or "").strip()
     fire_item_key = _FIRE_ITEM_BY_NAME.get(captured_fire)
     if fire_item_key:
-        granted = _grant_inventory_item_session(session, int(profile.tg), fire_item_key, 1)
-        if granted:
-            result["items_delta"].append(granted)
+        _seed_if_absent(fire_item_key, 1)
 
 
 def _mark_rare_item_events(result: dict[str, Any]) -> None:
@@ -2252,10 +2430,16 @@ def _apply_action_rewards(
             result["douqi_delta"] -= consumed_douqi
             profile.realm_stage = str(state["next_stage"])
             profile.realm_stars = 1
-            profile.breakthrough_failures = 0
+            _settle_realm_change(profile, str(state["stage"]))
             result["breakthrough_success"] = True
             result["breakthrough_stage_to"] = str(state["next_stage"])
             result["breakthrough_failures"] = 0
+            # 帝流丹仅在突破成功时消耗（一次性加成已计入 success_percent）。
+            if state["has_emperor_pill"]:
+                consumed = _consume_inventory_item_session(session, int(profile.tg), "emperor_flow_pill", 1)
+                if consumed:
+                    result["items_delta"].append(consumed)
+                    result["bonus_pill_used"] = "帝流丹"
         else:
             failure_loss_percent = min(
                 max(_coerce_int(settings.get("breakthrough_failure_douqi_loss_percent"), 10), 0),
@@ -2264,7 +2448,15 @@ def _apply_action_rewards(
             loss = int(state["douqi_required"]) * failure_loss_percent // 100
             if failure_loss_percent > 0:
                 loss = max(loss, 1)
+            # 定境丹：突破失败时斗气损失减半（一次性），消耗在本次失败结算。
+            if state["has_stabilizing_pill"]:
+                loss = max(loss // 2, 0)
+                consumed = _consume_inventory_item_session(session, int(profile.tg), "realm_stabilizing_pill", 1)
+                if consumed:
+                    result["items_delta"].append(consumed)
+                    result["stabilizing_pill_used"] = True
             result["douqi_delta"] += _apply_resource_delta(profile, "douqi", -loss)
+            result["breakthrough_failure_douqi_loss"] = loss
             profile.breakthrough_failures = int(state["failures"]) + 1
             result["breakthrough_failures"] = int(profile.breakthrough_failures)
         return
@@ -2299,6 +2491,14 @@ def _apply_action_rewards(
             _mark_rare_item_events(result)
             return
         result["alchemy_success"] = True
+        # 炼药成功稳定产出丹药库存：全库唯一消耗 pill_stock 的口是塔修/Boss，此为其稳定来源。
+        # 若自定义炼药行动自带了 pill_min/max，则交给下方通用分支发放，避免重复。
+        if "pill_max" not in reward:
+            result["pill_delta"] += _apply_resource_delta(
+                profile,
+                "pill_stock",
+                max(_roll_optional_range(reward, "pill_min", "pill_max") // 2, 1),
+            )
 
     if not costs_spent:
         _spend_action_costs(session, profile, reward, result, ledger, settings)
@@ -2344,36 +2544,76 @@ def _apply_action_rewards(
     _apply_configured_item_drops(session, profile, reward, result)
     _apply_legacy_inventory_mirrors(session, profile, result)
     _mark_rare_item_events(result)
+    backlash = _apply_action_backlash(session, profile, reward, result, ledger, settings)
+    if backlash:
+        result["backlash_detail"] = backlash
+
+
+def _apply_action_backlash(
+    session,
+    profile: DoupoProfile,
+    reward: dict[str, Any],
+    result: dict[str, Any],
+    ledger: DoupoEconomyLedger | None,
+    settings: dict[str, Any],
+) -> str | None:
+    """高风险行动反噬：命中 risk_percent 时按 backlash_* 键施加负向资源，返回可读详情。
+
+    此前的 risk_percent/backlash_* 是死配置（全库无读取），这里首次消费。
+    """
+    risk_percent = min(max(_coerce_int(reward.get("risk_percent"), 0), 0), 100)
+    if risk_percent <= 0 or random.randint(1, 100) > risk_percent:
+        return None
+    detail: list[str] = []
+    douqi_loss = max(_coerce_int(reward.get("backlash_douqi_loss"), 0), 0)
+    if douqi_loss:
+        applied = _apply_douqi_delta_with_balance(session, profile, -douqi_loss, settings, result)
+        if applied:
+            result["douqi_delta"] += applied
+            detail.append(f"斗气 {applied:+d}")
+    gold_loss = max(_coerce_int(reward.get("backlash_gold_loss"), 0), 0)
+    if gold_loss:
+        applied = _apply_gold_delta_with_economy(profile, -gold_loss, ledger, settings, result)
+        if applied:
+            result["gold_delta"] += applied
+            detail.append(f"金币 {applied:+d}")
+    fire_loss = max(_coerce_int(reward.get("backlash_fire_loss"), 0), 0)
+    if fire_loss:
+        applied = _apply_resource_delta(profile, "fire_progress", -fire_loss)
+        if applied:
+            result["fire_progress_delta"] += applied
+            detail.append(f"火候 {applied:+d}")
+    return "，".join(detail) if detail else None
 
 
 def _action_detail(result: dict[str, Any]) -> str:
     parts = [
-        f"斗气 {int(result.get('douqi_delta') or 0):+d}",
-        f"金币 {int(result.get('gold_delta') or 0):+d}",
+        f"🌀 斗气 {int(result.get('douqi_delta') or 0):+d}",
+        f"🪙 金币 {int(result.get('gold_delta') or 0):+d}",
     ]
     for key, label in (
-        ("core_delta", "魔核"),
-        ("alchemy_delta", "炼药"),
-        ("fire_delta", "火候"),
-        ("fire_progress_delta", "异火线索"),
-        ("sect_delta", "贡献"),
-        ("pill_delta", "丹药"),
-        ("technique_delta", "斗技"),
-        ("method_delta", "焚诀"),
-        ("fire_rank_delta", "异火掌控"),
-        ("fire_energy_delta", "火能"),
-        ("faction_delta", "阵营声望"),
-        ("infamy_delta", "黑角域恶名"),
-        ("pet_delta", "伙伴"),
-        ("boss_delta", "Boss战绩"),
-        ("tower_delta", "塔层"),
-        ("auction_delta", "拍卖声望"),
+        ("core_delta", "💎 魔核"),
+        ("alchemy_delta", "⚗️ 炼药"),
+        ("fire_delta", "🔥 火候"),
+        ("fire_progress_delta", "🔥 异火线索"),
+        ("sect_delta", "🏅 贡献"),
+        ("pill_delta", "💊 丹药"),
+        ("technique_delta", "📜 斗技"),
+        ("method_delta", "📖 焚诀"),
+        ("fire_rank_delta", "🔥 异火掌控"),
+        ("fire_energy_delta", "🔥 火能"),
+        ("faction_delta", "🛡️ 阵营声望"),
+        ("infamy_delta", "💀 黑角域恶名"),
+        ("pet_delta", "🐾 伙伴"),
+        ("boss_delta", "👹 Boss战绩"),
+        ("tower_delta", "🏯 塔层"),
+        ("auction_delta", "🏛️ 拍卖声望"),
     ):
         value = int(result.get(key) or 0)
         if value:
             parts.append(f"{label} {value:+d}")
     if result.get("captured_fire"):
-        parts.append(f"收服 {result['captured_fire']}")
+        parts.append(f"🔥 收服 {result['captured_fire']}")
     item_parts = []
     for item in result.get("items_delta") or []:
         quantity = int(item.get("quantity") or 0)
@@ -2381,31 +2621,36 @@ def _action_detail(result: dict[str, Any]) -> str:
             continue
         item_parts.append(f"{item.get('name') or item.get('item_key')} {quantity:+d}")
     if item_parts:
-        parts.append("纳戒 " + "、".join(item_parts[:6]))
+        parts.append("💍 纳戒 " + "、".join(item_parts[:6]))
     capped = int(result.get("gold_capped_delta") or 0)
     if capped > 0:
-        parts.append(f"今日金币上限截断 {capped}")
+        parts.append(f"🪙 今日金币上限截断 {capped}")
     douqi_capped = int(result.get("douqi_capped_delta") or 0)
     if douqi_capped > 0:
-        parts.append(f"今日斗气衰减 {douqi_capped}")
+        parts.append(f"🌀 今日斗气衰减 {douqi_capped}")
     bottleneck_reduced = int(result.get("douqi_bottleneck_delta") or 0)
     if bottleneck_reduced > 0:
-        parts.append(f"境界瓶颈未吸收斗气 {bottleneck_reduced}")
+        parts.append(f"🌀 境界瓶颈未吸收斗气 {bottleneck_reduced}")
+    perfected_discarded = int(result.get("realm_perfected_discarded") or 0)
+    if perfected_discarded > 0:
+        parts.append(f"👑 帝位圆满，多余斗气已消散 {perfected_discarded}")
+    elif result.get("realm_perfected"):
+        parts.append("👑 帝位圆满")
     if result.get("breakthrough_success"):
-        pity_text = "（保底）" if result.get("breakthrough_pity") else ""
+        pity_text = "（🎯 保底）" if result.get("breakthrough_pity") else ""
         parts.append(
-            f"突破成功{pity_text}：{result.get('breakthrough_stage_from') or ''} → "
+            f"⚡ 突破成功{pity_text}：{result.get('breakthrough_stage_from') or ''} → "
             f"{result.get('breakthrough_stage_to') or ''}"
         )
     elif result.get("action_type") == "breakthrough":
         failures = int(result.get("breakthrough_failures") or 0)
         pity_after = int(result.get("breakthrough_pity_after") or 0)
-        parts.append(f"突破未成，保底进度 {failures}/{pity_after}")
+        parts.append(f"💥 突破未成，保底进度 {failures}/{pity_after}")
     if result.get("action_type") == "alchemy":
         if result.get("alchemy_success") is False:
-            parts.append(f"炼药失败（成功率 {int(result.get('alchemy_success_percent') or 0)}%）")
+            parts.append(f"⚗️ 炼药失败（成功率 {int(result.get('alchemy_success_percent') or 0)}%）")
         elif result.get("alchemy_success") is True:
-            parts.append(f"炼药成功（成功率 {int(result.get('alchemy_success_percent') or 0)}%）")
+            parts.append(f"⚗️ 炼药成功（成功率 {int(result.get('alchemy_success_percent') or 0)}%）")
     return "，".join(parts)
 
 
@@ -2417,28 +2662,28 @@ def _build_broadcast_event(profile: DoupoProfile, result: dict[str, Any], settin
     if result.get("breakthrough_success"):
         return {
             "kind": "breakthrough",
-            "title": "斗破突破播报",
-            "text": f"{display_name} 冲破瓶颈，当前境界：{realm_text}。",
+            "title": "⚡ 斗破突破播报",
+            "text": f"⚡ {display_name} 冲破瓶颈，当前境界：{realm_text}。",
         }
     if result.get("captured_fire"):
         return {
             "kind": "fire",
-            "title": "异火收服播报",
-            "text": f"{display_name} 成功收服 {result['captured_fire']}，火候大涨。",
+            "title": "🔥 异火收服播报",
+            "text": f"🔥 {display_name} 成功收服 {result['captured_fire']}，火候大涨。",
         }
     rare_items = result.get("rare_items") or []
     if rare_items:
         names = "、".join(str(item.get("name") or item.get("item_key")) for item in rare_items[:3])
         return {
             "kind": "rare_item",
-            "title": "纳戒稀有掉落",
-            "text": f"{display_name} 在 {result.get('action_name') or '行动'} 中获得稀有物品：{names}。",
+            "title": "💎 纳戒稀有掉落",
+            "text": f"💎 {display_name} 在 {result.get('action_name') or '行动'} 中获得稀有物品：{names}。",
         }
     if str(result.get("action_type") or "") == "boss" and int(result.get("boss_delta") or 0) >= 60:
         return {
             "kind": "boss",
-            "title": "魔兽讨伐播报",
-            "text": f"{display_name} 完成高战绩讨伐，Boss 战绩 +{int(result.get('boss_delta') or 0)}。",
+            "title": "👹 魔兽讨伐播报",
+            "text": f"👹 {display_name} 完成高战绩讨伐，Boss 战绩 +{int(result.get('boss_delta') or 0)}。",
         }
     return None
 
@@ -2524,6 +2769,7 @@ def run_action(tg: int, action_key: str) -> dict[str, Any]:
         _consume_daily_action_points(point_counter, point_cost)
         profile.last_breakthrough_at = now if action_type == "breakthrough" else profile.last_breakthrough_at
         profile.last_train_at = now if action_type != "breakthrough" else profile.last_train_at
+        _set_action_cooldown(profile, action.action_key, now)
         profile.updated_at = now
         detail = _action_detail(result)
         session.add(
@@ -2589,12 +2835,18 @@ def exchange_currency(tg: int, direction: str, amount: int) -> dict[str, Any]:
             raise ValueError("Emby 账号不存在")
 
         if direction == "coin_to_gold":
+            rate = max(_coerce_int(settings.get("exchange_rate"), 100), 1)
+            room = max(_INT32_MAX - int(profile.gold or 0), 0)
+            max_coin = room // rate
+            if amount > max_coin:
+                raise ValueError(f"金币已接近上限，最多还能兑换 {max_coin} 碎片")
             if int(account.iv or 0) < amount:
                 raise ValueError("Emby 碎片不足")
+            received = int(amount) * rate
             account.iv = int(account.iv or 0) - amount
-            profile.gold = int(profile.gold or 0) + int(preview["received_gold"])
+            profile.gold = int(profile.gold or 0) + received
             title = "碎片兑换金币"
-            detail = f"消耗碎片 {amount}，获得金币 {preview['received_gold']}"
+            detail = f"🪙 消耗碎片 {amount}，获得金币 {received}"
         elif direction == "gold_to_coin":
             minimum = max(_coerce_int(settings.get("min_gold_to_exchange"), 100), 1)
             if amount < minimum:
@@ -2608,7 +2860,7 @@ def exchange_currency(tg: int, direction: str, amount: int) -> dict[str, Any]:
             profile.gold = int(profile.gold or 0) - spent_gold
             account.iv = int(account.iv or 0) + received_coin
             title = "金币兑换碎片"
-            detail = f"消耗金币 {spent_gold}，获得碎片 {received_coin}"
+            detail = f"🪙 消耗金币 {spent_gold}，获得碎片 {received_coin}"
         else:
             raise ValueError("Unsupported exchange direction")
 
@@ -2641,6 +2893,7 @@ def build_growth_snapshot(profile: dict[str, Any], settings: dict[str, Any] | No
     star_cap = max(_coerce_int((row or {}).get("star_cap"), 9), 1)
     at_stage_cap = star >= star_cap
     bar_full = douqi >= per_star
+    realm_perfected = bool(next_row is None and bar_full)
     breakthrough_rule = dict(BREAKTHROUGH_RULES.get(stage) or {})
     failures = max(int(profile.get("breakthrough_failures") or 0), 0)
     pity_after = max(_coerce_int(breakthrough_rule.get("pity_after"), 4), 1)
@@ -2655,12 +2908,13 @@ def build_growth_snapshot(profile: dict[str, Any], settings: dict[str, Any] | No
         "douqi_per_star": per_star,
         "at_stage_cap": at_stage_cap,
         "bar_full": bar_full,
+        "realm_perfected": realm_perfected,
         "requires_breakthrough": bool(next_row is not None and at_stage_cap),
         "breakthrough_ready": bool(next_row is not None and at_stage_cap and bar_full),
         "breakthrough": {
             "failures": failures,
             "pity_after": pity_after,
-            "remaining_attempts_to_pity": max(pity_after - failures, 1),
+            "remaining_attempts_to_pity": max(pity_after - failures, 0),
             "gold_cost": max(_coerce_int(breakthrough_rule.get("gold_cost"), 0), 0),
             "item_costs": dict(breakthrough_rule.get("item_costs") or {}),
         },
@@ -2749,7 +3003,25 @@ def build_doupo_leaderboard(kind: str = "power", limit: int = 10) -> dict[str, A
     settings = get_settings()
     with Session() as session:
         rows = session.query(DoupoProfile).all()
-        profiles = [serialize_profile(row, settings) for row in rows]
+        # 批量取全部玩家的已装备物品，内存组装 equipment_summary，避免逐玩家查询 N+1。
+        tg_list = [int(row.tg) for row in rows]
+        equipment_map: dict[int, dict[str, Any]] = {}
+        if tg_list:
+            equipped_rows = (
+                session.query(DoupoInventoryItem)
+                .filter(
+                    DoupoInventoryItem.tg.in_(tg_list),
+                    DoupoInventoryItem.equipped_slot.isnot(None),
+                )
+                .order_by(DoupoInventoryItem.equipped_slot.asc())
+                .all()
+            )
+            by_tg: dict[int, list[DoupoInventoryItem]] = {}
+            for equip_row in equipped_rows:
+                by_tg.setdefault(int(equip_row.tg), []).append(equip_row)
+            for tg_value, item_rows in by_tg.items():
+                equipment_map[tg_value] = _equipment_summary_from_rows(item_rows)
+        profiles = [serialize_profile(row, settings, equipment_map.get(int(row.tg))) for row in rows]
     if resolved_kind == "realm":
         profiles.sort(
             key=lambda item: (
@@ -2879,6 +3151,8 @@ def _duel_log_lines(challenger: dict[str, Any], defender: dict[str, Any], winner
 def resolve_doupo_duel(challenger_tg: int, defender_tg: int, stake: int = 0) -> dict[str, Any]:
     challenger_tg = int(challenger_tg)
     defender_tg = int(defender_tg)
+    if challenger_tg == defender_tg:
+        raise ValueError("不能挑战自己")
     settings = get_settings()
     minimum, maximum = _duel_stake_bounds(settings)
     stake = max(int(stake or 0), 0)
@@ -2926,8 +3200,8 @@ def resolve_doupo_duel(challenger_tg: int, defender_tg: int, stake: int = 0) -> 
             battle_log=battle_log,
         )
         session.add(row)
-        session.add(DoupoJournal(tg=challenger_tg, action_type="duel", title="斗战结算", detail=f"对战 {defender_payload['display_name']}，{'胜' if challenger_wins else '负'}，赌注 {stake}"))
-        session.add(DoupoJournal(tg=defender_tg, action_type="duel", title="斗战结算", detail=f"对战 {challenger_payload['display_name']}，{'负' if challenger_wins else '胜'}，赌注 {stake}"))
+        session.add(DoupoJournal(tg=challenger_tg, action_type="duel", title="斗战结算", detail=f"⚔️ 对战 {defender_payload['display_name']}，{'🏆 胜' if challenger_wins else '💔 负'}，🪙 赌注 {stake}"))
+        session.add(DoupoJournal(tg=defender_tg, action_type="duel", title="斗战结算", detail=f"⚔️ 对战 {challenger_payload['display_name']}，{'🏆 胜' if not challenger_wins else '💔 负'}，🪙 赌注 {stake}"))
         session.commit()
         session.refresh(row)
     return {
@@ -2942,6 +3216,84 @@ def resolve_doupo_duel(challenger_tg: int, defender_tg: int, stake: int = 0) -> 
         "roll": roll,
         "battle_log": battle_log,
     }
+
+
+def list_duel_history(tg: int, limit: int = 20) -> list[dict[str, Any]]:
+    """读取某玩家的决斗历史（DoupoDuelHistory 此前只写不读）。"""
+    actor_tg = int(tg)
+    limit = max(min(int(limit or 20), 50), 1)
+    with Session() as session:
+        rows = (
+            session.query(DoupoDuelHistory)
+            .filter((DoupoDuelHistory.challenger_tg == actor_tg) | (DoupoDuelHistory.defender_tg == actor_tg))
+            .order_by(DoupoDuelHistory.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        involved = {actor_tg}
+        for row in rows:
+            involved.add(int(row.challenger_tg))
+            involved.add(int(row.defender_tg))
+        names = {
+            int(profile.tg): (profile.display_name or profile.username or str(profile.tg))
+            for profile in session.query(DoupoProfile).filter(DoupoProfile.tg.in_(list(involved))).all()
+        }
+        items = []
+        for row in rows:
+            challenger_tg = int(row.challenger_tg)
+            defender_tg = int(row.defender_tg)
+            winner_tg = int(row.winner_tg)
+            items.append(
+                {
+                    "id": int(row.id),
+                    "challenger_tg": challenger_tg,
+                    "challenger_name": names.get(challenger_tg, str(challenger_tg)),
+                    "defender_tg": defender_tg,
+                    "defender_name": names.get(defender_tg, str(defender_tg)),
+                    "winner_tg": winner_tg,
+                    "loser_tg": int(row.loser_tg),
+                    "winner_name": names.get(winner_tg, str(winner_tg)),
+                    "stake_gold": int(row.stake_gold or 0),
+                    "challenger_win_rate": int(row.challenger_win_rate or 0),
+                    "roll": int(row.roll or 0),
+                    "player_won": winner_tg == actor_tg,
+                    "battle_log": list(row.battle_log or []),
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                }
+            )
+        return items
+
+
+def build_duel_standings(tg: int) -> dict[str, Any]:
+    """聚合玩家决斗胜负与赌注收支。"""
+    actor_tg = int(tg)
+    with Session() as session:
+        history = (
+            session.query(DoupoDuelHistory)
+            .filter((DoupoDuelHistory.challenger_tg == actor_tg) | (DoupoDuelHistory.defender_tg == actor_tg))
+            .all()
+        )
+        wins = 0
+        losses = 0
+        stake_won = 0
+        stake_lost = 0
+        for row in history:
+            if int(row.winner_tg) == actor_tg:
+                wins += 1
+                stake_won += int(row.stake_gold or 0)
+            else:
+                losses += 1
+                stake_lost += int(row.stake_gold or 0)
+        total = wins + losses
+        return {
+            "wins": wins,
+            "losses": losses,
+            "total": total,
+            "win_rate_percent": round(wins * 100 / total, 1) if total else 0,
+            "stake_won": stake_won,
+            "stake_lost": stake_lost,
+            "net_stake": stake_won - stake_lost,
+        }
 
 
 def _admin_content_catalog(actions: list[dict[str, Any]]) -> dict[str, Any]:
@@ -3128,9 +3480,7 @@ def admin_get_player_bundle(tg: int) -> dict[str, Any]:
 
 def admin_grant_resource(tg: int, resource: str, amount: int) -> dict[str, Any]:
     actor_tg = int(tg)
-    delta = int(amount or 0)
-    if delta == 0:
-        raise ValueError("数量不能为 0")
+    raw_amount = int(amount or 0)
     resource_fields = {
         "gold": "gold",
         "douqi": "douqi",
@@ -3140,10 +3490,19 @@ def admin_grant_resource(tg: int, resource: str, amount: int) -> dict[str, Any]:
         "sect_contribution": "sect_contribution",
         "pill_stock": "pill_stock",
         "technique_level": "technique_level",
+        "method_level": "method_level",
+        "fire_rank": "fire_rank",
+        "pet_level": "pet_level",
+        "academy_fire_energy": "academy_fire_energy",
+        "faction_reputation": "faction_reputation",
+        "black_corner_infamy": "black_corner_infamy",
         "fire_progress": "fire_progress",
         "boss_score": "boss_score",
         "tower_floor": "tower_floor",
         "auction_credit": "auction_credit",
+        "realm_stage": "realm_stage",
+        "realm_stars": "realm_stars",
+        "fire_name": "fire_name",
     }
     field = resource_fields.get(str(resource or ""))
     if field is None:
@@ -3154,7 +3513,28 @@ def admin_grant_resource(tg: int, resource: str, amount: int) -> dict[str, Any]:
             profile = _new_profile(actor_tg)
             session.add(profile)
             session.flush()
-        _apply_resource_delta(profile, field, delta)
+        if field == "realm_stage":
+            # amount 作为境界阈值下标（0 = 斗之气），设置后统一收口失败数。
+            thresholds = get_settings().get("realm_thresholds") or []
+            if raw_amount < 0 or raw_amount >= len(thresholds):
+                raise ValueError("境界序号越界")
+            old_stage = str(profile.realm_stage or "斗之气")
+            profile.realm_stage = str(thresholds[raw_amount].get("stage") or "")
+            profile.realm_stars = max(int(profile.realm_stars or 1), 1)
+            _settle_realm_change(profile, old_stage)
+        elif field == "realm_stars":
+            if raw_amount < 1:
+                raise ValueError("星级至少为 1")
+            profile.realm_stars = raw_amount
+        elif field == "fire_name":
+            # amount 作为 HEAVENLY_FIRES 下标（0 = 青莲地心火）。
+            if raw_amount < 0 or raw_amount >= len(HEAVENLY_FIRES):
+                raise ValueError("异火序号越界")
+            profile.fire_name = str(HEAVENLY_FIRES[raw_amount].get("name") or "")
+        else:
+            if raw_amount == 0:
+                raise ValueError("数量不能为 0")
+            _apply_resource_delta(profile, field, raw_amount)
         if field == "douqi":
             _apply_realm_progress(profile, get_settings())
         profile.updated_at = utcnow()

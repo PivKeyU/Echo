@@ -237,7 +237,7 @@ class Embyservice(metaclass=Singleton):
         
         return EmbyApiResult(False, error="达到最大重试次数")
 
-    async def emby_create(self, name: str, days: int) -> Union[Tuple[str, str, datetime], bool]:
+    async def emby_create(self, name: str, days: int, tg_id: int = 0, telegram_username: str = "") -> Union[Tuple[str, str, datetime], bool]:
         """
         创建 Emby 账户
         :param name: 用户名
@@ -249,7 +249,11 @@ class Embyservice(metaclass=Singleton):
             
             # 1. 创建用户
             LOGGER.info(f"开始创建用户: {name}")
-            result = await self._request('POST', '/emby/Users/New', json={"Name": name})
+            create_payload = {"Name": name}
+            if int(tg_id or 0) > 0:
+                create_payload["TelegramUserId"] = int(tg_id)
+                create_payload["TelegramUsername"] = str(telegram_username or "").lstrip("@")
+            result = await self._request('POST', '/emby/Users/New', json=create_payload)
             if not result.success:
                 LOGGER.error(f"创建用户失败: {result.error}")
                 return False
@@ -698,6 +702,8 @@ class Embyservice(metaclass=Singleton):
             if result.success and result.data:
                 emby_id = result.data.get("User", {}).get("Id")
                 if emby_id:
+                    if int(tg_id or 0) > 0:
+                        await self.bind_telegram_identity(emby_id, tg_id)
                     LOGGER.info(f"账户验证成功: {username} -> {emby_id}")
                     return True, emby_id
                 else:
@@ -709,6 +715,29 @@ class Embyservice(metaclass=Singleton):
         except Exception as e:
             LOGGER.error(f"账户验证异常: {username} - {str(e)}")
             return False, 0
+
+    async def bind_telegram_identity(self, emby_id: str, tg_id: int, telegram_username: str = "") -> bool:
+        if not emby_id or int(tg_id or 0) <= 0:
+            return False
+        result = await self._request(
+            'POST',
+            f'/admin/users/{emby_id}/telegram',
+            json={
+                "telegram_user_id": int(tg_id),
+                "telegram_username": str(telegram_username or "").lstrip("@"),
+            },
+        )
+        if not result.success:
+            LOGGER.warning(f"Emotion Telegram identity bind failed: emby_id={emby_id}, tg={tg_id}, error={result.error}")
+        return bool(result.success)
+
+    async def emotion_security_summary(self, hours: int = 24) -> EmbyApiResult:
+        hours = max(1, min(int(hours or 24), 24 * 30))
+        return await self._request('GET', f'/admin/security/summary?hours={hours}')
+
+    async def emotion_security_events(self, hours: int = 24) -> EmbyApiResult:
+        hours = max(1, min(int(hours or 24), 24 * 30))
+        return await self._request('GET', f'/admin/security/events?hours={hours}')
 
     async def emby_cust_commit(self, emby_id: str = None, days: int = 7, method: str = None) -> Optional[List[Dict]]:
         """

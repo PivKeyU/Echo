@@ -69,7 +69,13 @@ def _user_already_redeemed(session, code_value: str, user_id: int) -> bool:
 
 
 def _apply_code_redeem(session, record: Code, user_id: int):
-    if _user_already_redeemed(session, record.code, user_id):
+    """Stage a code redemption in the caller's transaction.
+
+    The caller owns the final commit so consuming the code and granting the
+    corresponding account entitlement remain atomic.
+    """
+    code_value = str(record.code)
+    if _user_already_redeemed(session, code_value, user_id):
         return record, "duplicate_user"
 
     if _code_remaining(record) <= 0:
@@ -82,7 +88,7 @@ def _apply_code_redeem(session, record: Code, user_id: int):
     record.usedtime = consumed_at
     session.add(
         CodeRedeem(
-            code=record.code,
+            code=code_value,
             user_id=user_id,
             owner_tg=record.tg,
             code_days=record.us,
@@ -92,13 +98,12 @@ def _apply_code_redeem(session, record: Code, user_id: int):
     )
 
     try:
-        session.commit()
+        session.flush()
     except IntegrityError:
         session.rollback()
-        refreshed = session.query(Code).filter(Code.code == record.code).first()
+        refreshed = session.query(Code).filter(Code.code == code_value).first()
         return refreshed or record, "duplicate_user"
 
-    session.refresh(record)
     return record, "ok"
 
 
@@ -179,7 +184,9 @@ async def rgs_code(_, msg, register_code):
                 current_ex = user_row.ex if user_row.ex and isinstance(user_row.ex, datetime) else now
                 if now > current_ex:
                     new_ex = now + timedelta(days=record.us)
-                    await emby.emby_change_policy(emby_id=user_row.embyid, disable=False)
+                    policy_changed = await emby.emby_change_policy(emby_id=user_row.embyid, disable=False)
+                    if not policy_changed:
+                        raise RuntimeError("Emby 用户策略恢复失败，已取消本次续期兑换")
                     user_row.ex = new_ex
                     if user_row.lv == "c":
                         user_row.lv = "b"
@@ -238,11 +245,11 @@ async def rgs_code(_, msg, register_code):
             if status == "exhausted":
                 return await _reply_code_unavailable(msg, record, "注册码")
 
-            creator = await _creator_mention(record)
             new_credits = int(user_row.us or 0) + int(record.us or 0)
             user_row.us = new_credits
             session.commit()
             sql_invalidate_emby_cache(msg.from_user.id)
+            creator = await _creator_mention(record)
 
             await sendPhoto(
                 msg,

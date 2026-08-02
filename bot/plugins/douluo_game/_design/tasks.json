@@ -1,0 +1,114 @@
+{
+  "tasks": [
+    {
+      "key": "meditation_training",
+      "name": "晨修吐纳",
+      "description": "于武魂殿顶楼或蓝银草环绕处凝神吐纳，以玄天功引导魂力运行周天，稳固魂力根基。每日完成一次修炼，感悟天地灵气。",
+      "metric": "train",
+      "target": 1,
+      "rewards": {
+        "coin": 100,
+        "soul_power": 200
+      }
+    },
+    {
+      "key": "spirit_attunement",
+      "name": "魂环冥想",
+      "description": "以魂环为引深入冥想，与自身武魂共鸣沟通，提升魂技契合度。累积完成三次冥想，方能向更高魂环品质迈进。",
+      "metric": "train",
+      "target": 3,
+      "rewards": {
+        "coin": 150,
+        "soul_power": 350
+      }
+    },
+    {
+      "key": "daily_hunt",
+      "name": "星斗大森林猎兽",
+      "description": "进入星斗大森林猎杀十年、百年魂兽，获取魂环与魂兽材料，锻炼实战根基。完成五次猎杀以积攒修行资粮。",
+      "metric": "hunt",
+      "target": 5,
+      "rewards": {
+        "coin": 200,
+        "soul_power": 400
+      }
+    },
+    {
+      "key": "night_hunt",
+      "name": "落日森林夜猎",
+      "description": "趁夜潜入落日森林猎杀千年魂兽，淬炼胆魄与战斗直觉。落日森林魂兽凶悍，需完成三次猎杀方可凯旋。",
+      "metric": "hunt",
+      "target": 3,
+      "rewards": {
+        "coin": 250,
+        "soul_power": 450
+      }
+    },
+    {
+      "key": "arena_duel",
+      "name": "斗魂场切磋",
+      "description": "于斗魂场发起切磋，与史莱克学院同门或天斗皇家学院学子一较高下，磨砺魂技实战运用。完成三次胜局或平局。",
+      "metric": "duel",
+      "target": 3,
+      "rewards": {
+        "coin": 300,
+        "soul_power": 500
+      }
+    },
+    {
+      "key": "soul_bone_exchange",
+      "name": "魂骨置换",
+      "description": "前往七宝琉璃宗秘市，以旧魂骨或暗器残件置换所需魂骨材料，完善头骨、躯干骨等六部位魂骨套装。完成一次成功兑换。",
+      "metric": "exchange",
+      "target": 1,
+      "rewards": {
+        "coin": 400,
+        "soul_power": 300
+      }
+    },
+    {
+      "key": "sect_guard_duty",
+      "name": "宗门轮值",
+      "description": "履行昊天宗/蓝电霸王龙宗值守职责，巡逻宗门驻地、抵御魂兽侵扰，为宗门尽忠职守。完成一次轮值任务。",
+      "metric": "sect_duty",
+      "target": 1,
+      "rewards": {
+        "coin": 300,
+        "soul_power": 400
+      }
+    },
+    {
+      "key": "auction_attend",
+      "name": "拍卖会竞拍",
+      "description": "赴武魂殿拍卖会参与竞拍，寻觅万年魂骨与唐门暗器珍品，以金石换取战力提升。完成一次拍卖会之行。",
+      "metric": "auction",
+      "target": 1,
+      "rewards": {
+        "coin": 500,
+        "soul_power": 600
+      }
+    },
+    {
+      "key": "slay_tyrant_ape",
+      "name": "讨伐泰坦巨猿",
+      "description": "率小队深入星斗大森林核心区，讨伐森林之王泰坦巨猿。此獠力可撼山，唯封号级战力方有把握全身而退。完成一次击杀。",
+      "metric": "boss",
+      "target": 1,
+      "rewards": {
+        "coin": 800,
+        "soul_power": 1200
+      }
+    },
+    {
+      "key": "slay_deep_sea_mojing",
+      "name": "讨伐深海魔鲸王",
+      "description": "远征海洋，讨伐已臻百万年道行的深海魔鲸王。此战凶险万分，暗魔邪神虎亦避其锋芒，唯神级战力可敌。完成一次击杀。",
+      "metric": "boss",
+      "target": 1,
+      "rewards": {
+        "coin": 1000,
+        "soul_power": 1500
+      }
+    }
+  ]
+}
