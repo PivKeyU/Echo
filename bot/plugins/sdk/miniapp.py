@@ -9,9 +9,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from bot import api as api_config, config, owner
-from bot.plugins import list_miniapp_plugins
 from bot.plugins.sdk.memory_cache import get_memory_cache
-from bot.web.api.miniapp import is_admin_user_id, verify_init_data
 
 _BOTTOM_NAV_TTL = max(int(os.getenv("PIVKEYU_BOTTOM_NAV_CACHE_TTL", "45") or 45), 15)
 _BOTTOM_NAV_MEMORY_CACHE = get_memory_cache()
@@ -32,6 +30,8 @@ def build_plugin_url(path: str) -> str | None:
 
 
 def _bottom_nav_fingerprint() -> str:
+    from bot.plugins import list_miniapp_plugins
+
     plugin_nav = getattr(config, "plugin_nav", {}) or {}
     parts = ["home:/miniapp"]
     for plugin in list_miniapp_plugins():
@@ -51,6 +51,8 @@ def _bottom_nav_fingerprint() -> str:
 
 
 def build_bottom_nav() -> list[dict[str, str]]:
+    from bot.plugins import list_miniapp_plugins
+
     cache_key = f"bottom_nav:{_bottom_nav_fingerprint()}"
     cached = _BOTTOM_NAV_MEMORY_CACHE.get(cache_key)
     if cached is not None:
@@ -126,6 +128,8 @@ def verify_telegram_user(
     *,
     on_verified: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
+    from bot.web.api.miniapp import verify_init_data
+
     local_test_user = _local_test_telegram_user(init_data)
     if local_test_user is not None:
         if on_verified is not None:
@@ -140,6 +144,8 @@ def verify_telegram_user(
 
 
 def verify_admin_credential(token: str | None, init_data: str | None) -> dict[str, Any]:
+    from bot.web.api.miniapp import is_admin_user_id
+
     expected_token = api_config.admin_token or ""
     if token and expected_token and compare_digest(str(token), str(expected_token)):
         return {"id": owner, "auth": "token"}

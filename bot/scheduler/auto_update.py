@@ -18,6 +18,7 @@ from bot.func_helper.scheduler import scheduler
 
 
 AUTO_UPDATE_JOB_ID = "auto_update_job"
+_update_lock = asyncio.Lock()
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SHANGHAI_TZ = timezone(timedelta(hours=8))
 GITHUB_REMOTE_RE = re.compile(
@@ -74,14 +75,14 @@ def _repo_from_origin() -> str | None:
 
 def _normalize_git_repo() -> str:
     detected = _parse_github_repo(auto_update.git_repo)
-    if detected and detected != "owner/pivkeyu_emby":
+    if detected and detected != "owner/echo":
         return detected
-    return _repo_from_origin() or "PivKeyU/Pivkeyu_emby"
+    return _repo_from_origin() or "PivKeyU/Echo"
 
 
 def _normalize_docker_image() -> str:
     image = str(auto_update.docker_image or "").strip()
-    return image or "pivkeyu/pivkeyu_emby:latest"
+    return image or "echo/echo:latest"
 
 
 def _normalize_container_name() -> str:
@@ -89,7 +90,7 @@ def _normalize_container_name() -> str:
     if container_name:
         return container_name
     service = str(getattr(auto_update, "compose_service", "") or "").strip()
-    return service or "pivkeyu_emby"
+    return service or "echo"
 
 
 def _normalize_compose_service() -> str:
@@ -203,7 +204,7 @@ async def _fetch_latest_commit(repo: str) -> dict[str, Any]:
 def _split_image_ref(image: str) -> tuple[str, str]:
     raw = str(image or "").strip()
     if not raw:
-        return "pivkeyu/pivkeyu_emby", "latest"
+        return "echo/echo", "latest"
     name = raw
     tag = "latest"
     last_segment = raw.rsplit("/", 1)[-1]
@@ -377,6 +378,19 @@ async def _scheduled_auto_update_job() -> None:
 
 
 async def run_auto_update(manual: bool = False, reply_message: Message | None = None, force: bool = False) -> dict[str, Any]:
+    # 定时任务与手动 /update_bot 可能同时触发，加锁避免并发拉取/更新/重启
+    if _update_lock.locked():
+        if manual and reply_message is not None:
+            try:
+                await reply_message.edit("⏳ 已有自动更新任务正在运行，本次跳过。")
+            except Exception:
+                pass
+        return {"updated": False, "skipped": True, "reason": "busy"}
+    async with _update_lock:
+        return await _run_auto_update_impl(manual=manual, reply_message=reply_message, force=force)
+
+
+async def _run_auto_update_impl(manual: bool = False, reply_message: Message | None = None, force: bool = False) -> dict[str, Any]:
     try:
         _persist_normalized_auto_update()
         if not auto_update.status and not manual:

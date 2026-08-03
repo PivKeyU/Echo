@@ -512,7 +512,7 @@ def choose_expedition_event(tg: int, choice_key: str, focus_score: int = 50) -> 
                 title=f"讨伐 {boss_defeated}",
                 detail=f"👹 在「{region.get('name')}」讨伐区域首领 {boss_defeated} 成功，获得首领积分 +{boss_score_gained}。",
             )
-            db.add(journal)
+            session.add(journal)
             summary += f"，👹 讨伐首领 {boss_defeated} 成功（首领积分 +{boss_score_gained}）"
         if dropped:
             summary += "，获得 💍 " + "、".join(f"{item['name']} x{item['quantity']}" for item in dropped)

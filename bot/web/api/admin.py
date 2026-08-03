@@ -103,10 +103,12 @@ async def _read_upload_limited(file: UploadFile, limit: int) -> bytes:
 
 
 class AdminUserPatch(BaseModel):
+    model_config = {"extra": "forbid"}
+
     embyid: str | None = None
     name: str | None = None
-    pwd: str | None = None
-    pwd2: str | None = None
+    # Credentials are intentionally not editable through the general user
+    # patch endpoint.  Password reset/change flows use Emby-specific actions.
     lv: str | None = Field(default=None, pattern="^[abcd]$")
     cr: datetime | None = None
     ex: datetime | None = None
@@ -1364,7 +1366,10 @@ async def toggle_emby_service(request: Request):
                 LOGGER.warning(f"emby service toggle failed for {emby_id}: {exc}")
                 return False
 
-    results = await asyncio.gather(*[_toggle_one(eid) for eid in emby_ids]) if emby_ids else []
+    try:
+        results = await asyncio.gather(*[_toggle_one(eid) for eid in emby_ids]) if emby_ids else []
+    finally:
+        await emby.close()
     success_count = sum(1 for r in results if r)
     fail_count = len(results) - success_count
 
@@ -1998,8 +2003,11 @@ async def revoke_invite_record_api(record_id: int, request: Request):
 
 @router.get("/plugins")
 async def plugins():
+    # Discovery includes filesystem and migration-summary reads; keep it out
+    # of the FastAPI event loop just like plugin mutations below.
+    discovered = await run_in_threadpool(list_plugins)
     items = []
-    for plugin in list_plugins():
+    for plugin in discovered:
         visible = bool(config.plugin_nav.get(plugin["id"], plugin.get("bottom_nav_default", False)))
         items.append(
             {
@@ -2012,7 +2020,8 @@ async def plugins():
 
 @router.patch("/plugins/{plugin_id}")
 async def patch_plugin(plugin_id: str, payload: AdminPluginPatch, request: Request):
-    plugins = {plugin["id"]: plugin for plugin in list_plugins()}
+    discovered = await run_in_threadpool(list_plugins)
+    plugins = {plugin["id"]: plugin for plugin in discovered}
     if plugin_id not in plugins:
         raise HTTPException(status_code=404, detail="哼，本女仆找不到这个插件啦~")
     if payload.enabled is None and payload.bottom_nav_visible is None:
@@ -2031,13 +2040,14 @@ async def patch_plugin(plugin_id: str, payload: AdminPluginPatch, request: Reque
         config.plugin_nav[plugin_id] = payload.bottom_nav_visible
 
     save_config()
-    runtime_plugin = sync_plugin_runtime_state(plugin_id, request.app)
+    runtime_plugin = await run_in_threadpool(sync_plugin_runtime_state, plugin_id, request.app)
     visible = bool(config.plugin_nav.get(plugin_id, runtime_plugin.get("bottom_nav_default", False)))
     return {
-        "code": 200,
+        "code": 409 if runtime_plugin.get("runtime_action") == "failed" else 200,
         "data": {
             **runtime_plugin,
             "bottom_nav_visible": visible,
+            "status": runtime_plugin.get("runtime_action", "updated"),
         },
     }
 
@@ -2063,6 +2073,8 @@ async def import_plugin(
         await file.close()
 
     plugin_id = imported["plugin_id"]
+    if imported.get("permission_review_required") or imported.get("unknown_permissions"):
+        enabled = False
     if enabled == imported.get("manifest_enabled", True):
         config.plugin_enabled.pop(plugin_id, None)
     else:
@@ -2071,10 +2083,10 @@ async def import_plugin(
         config.plugin_nav[plugin_id] = False
 
     save_config()
-    runtime_plugin = sync_plugin_runtime_state(plugin_id, request.app)
+    runtime_plugin = await run_in_threadpool(sync_plugin_runtime_state, plugin_id, request.app)
     visible = bool(config.plugin_nav.get(plugin_id, runtime_plugin.get("bottom_nav_default", False)))
     return {
-        "code": 200,
+        "code": 409 if runtime_plugin.get("runtime_action") == "failed" else 200,
         "data": {
             **runtime_plugin,
             "bottom_nav_visible": visible,
@@ -2083,5 +2095,6 @@ async def import_plugin(
             "backup_path": imported["backup_path"],
             "directory": imported["directory"],
             "source_filename": imported["source_filename"],
+            "status": runtime_plugin.get("runtime_action", "imported"),
         },
     }

@@ -602,7 +602,7 @@ function applyMiniAppBootstrapData(data, userId, { fromCache = false } = {}) {
   const levelMeta = getLevelMeta(account?.lv || (account ? "" : "d"));
   const displayName = resolveDisplayName(telegram_user);
   const accountTone = account?.lv_tone || levelMeta.tone;
-  const appTitle = meta.brand || "片刻面板";
+  const appTitle = meta.brand || "Echo 面板";
 
   document.title = appTitle;
   setText("#app-title", appTitle);

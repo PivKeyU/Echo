@@ -36,6 +36,7 @@ from bot.sql_helper.sql_douluo.service import (
     _action_point_cost,
     create_journal,
     get_settings,
+    _rings_payload_session,
 )
 
 

@@ -123,7 +123,7 @@ async def sync_emby_unbound(_, msg):
                         e1 = sql_get_emby2(name=embyid)
                         if e1 is None:
                             a += 1
-                            if confirm_delete:
+                            if confirm_delete == 'true':
                                 await emby.emby_del(emby_id=embyid)
                                 text += f"🎯 #{v['Name']} 未绑定本女仆，删除\n"
                             else:
@@ -138,7 +138,7 @@ async def sync_emby_unbound(_, msg):
     end = time.perf_counter()
     times = end - start
     if a != 0:
-        if confirm_delete:
+        if confirm_delete == 'true':
             await sendMessage(msg, text=f"⚡扫描未绑定本女仆任务完成\n  共检索出 {b} 个账户，{a} 个未绑定，耗时：{times:.3f}s，已删除")
         else:
             await sendMessage(msg, text=f"⚡扫描未绑定本女仆任务完成\n  共检索出 {b} 个账户，{a} 个未绑定，耗时：{times:.3f}s，如需删除请输入 `/syncunbound true`")
@@ -296,7 +296,7 @@ async def restore_from_db(_, msg):
                         success_count += 1
                         LOGGER.info(f"恢复 #id{embyuser.tg} - [{embyuser.name}](tg://user?id={embyuser.tg}) 成功")
                         try:
-                            user_notification = f'🤖 #恢复成功：id：{embyuser.tg} \n\n🧬您的账号`{embyuser.name}`已恢复成功 ！\n🪅密码为：`{pwd}`\n🔮安全码为：`{embyuser.pwd2}`\n'
+                            user_notification = f'🤖 #恢复成功：id：{embyuser.tg} \n\n🧬您的账号`{embyuser.name}`已恢复成功！\n🔐登录凭据已安全保存，请通过 Emby 客户端或管理员重置。\n'
                             await bot.send_message(tg, user_notification)
                         except FloodWait as f:
                             LOGGER.warning(str(f))

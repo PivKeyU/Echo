@@ -5652,7 +5652,7 @@ DEFAULT_BOSS_SYNC_VERSION = "2026-05-09-editable-default-bosses-v1"
 SEED_DATA_READY = False
 SEED_DATA_LOCK = threading.RLock()
 SEED_DATA_DB_LOCK_KEY = 2026041701
-SEED_DATA_DB_LOCK_NAME = "pivkeyu_xiuxian_seed_data"
+SEED_DATA_DB_LOCK_NAME = "echo_xiuxian_seed_data"
 DEFAULT_OFFICIAL_SHOP_ITEMS = (
     {"item_kind": "artifact", "item_name": "凡铁剑", "quantity": 4},
     {"item_kind": "artifact", "item_name": "青罡剑", "quantity": 3},

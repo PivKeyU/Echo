@@ -619,19 +619,32 @@ async def mp_config_panel(_, call):
 async def set_mp_status(_, call):
     """设置点播功能开关"""
     try:
-        moviepilot.status = not moviepilot.status
-        if moviepilot.status:
+        target_status = not moviepilot.status
+        if target_status:
+            # 与 bot/scheduler/sync_mp_download.py 模块级注册保持相同的任务参数
+            # （sync_download_tasks 内部自带 _SYNC_DOWNLOAD_LOCK 防重入锁，手动/定时入口共用）。
+            # replace_existing=True：重复开启时直接替换已有任务，避免重复注册。
+            ok = scheduler.add_job(sync_download_tasks, 'interval', seconds=60,
+                                   id='sync_download_tasks', max_instances=1,
+                                   coalesce=True, replace_existing=True)
             message = '👮🏻‍♂️ 您已开启 MoviePilot 点播功能'
-            scheduler.add_job(sync_download_tasks, 'interval', seconds=60, id='sync_download_tasks')
         else:
+            ok = scheduler.remove_job(job_id='sync_download_tasks')
             message = '👮🏻‍♂️ 您已关闭 MoviePilot 点播功能'
-            scheduler.remove_job(job_id='sync_download_tasks')
-        
+
+        if not ok:
+            LOGGER.error("设置点播状态失败：切换 MoviePilot 同步任务失败")
+            await callAnswer(call, '❌ 点播功能切换失败，请查看日志', True)
+            return
+
+        # 仅任务切换成功后才更新状态并保存配置，避免配置与调度器不一致
+        moviepilot.status = target_status
         await callAnswer(call, message, True)
         save_config()
         await mp_config_panel(_, call)
     except Exception as e:
         LOGGER.error(f"设置点播状态时出错: {str(e)}")
+
 
 @bot.on_callback_query(filters.regex('^set_mp_price$') & admins_on_filter)
 async def set_mp_price(_, call):

@@ -1,4 +1,4 @@
-const storageKey = "pivkeyu-admin-token";
+const storageKey = "echo-admin-token";
 const DEFAULT_BACK_PATH = "/miniapp";
 
 const LEVEL_META = {
@@ -594,7 +594,7 @@ async function importPluginArchive(file, options = {}) {
   });
 }
 
-function resolveDownloadFilename(contentDisposition, fallback = "pivkeyu-migration.zip") {
+function resolveDownloadFilename(contentDisposition, fallback = "echo-migration.zip") {
   if (!contentDisposition) {
     return fallback;
   }
@@ -625,7 +625,7 @@ async function downloadMigrationBundle() {
   const blob = await response.blob();
   const filename = resolveDownloadFilename(
     response.headers.get("content-disposition"),
-    `pivkeyu-migration-${Date.now()}.zip`
+    `echo-migration-${Date.now()}.zip`
   );
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -1506,8 +1506,6 @@ function fillEditor(item) {
   document.querySelector("#field-embyid").value = item.embyid ?? "";
   document.querySelector("#field-iv").value = item.iv ?? 0;
   document.querySelector("#field-us").value = item.us ?? 0;
-  document.querySelector("#field-pwd").value = item.pwd ?? "";
-  document.querySelector("#field-pwd2").value = item.pwd2 ?? "";
   document.querySelector("#field-cr").value = toLocalValue(item.cr);
   document.querySelector("#field-ex").value = toLocalValue(item.ex);
   document.querySelector("#field-ch").value = toLocalValue(item.ch);
@@ -2015,8 +2013,6 @@ async function saveUser(event) {
     embyid: document.querySelector("#field-embyid").value || null,
     iv: Number(document.querySelector("#field-iv").value || 0),
     us: Number(document.querySelector("#field-us").value || 0),
-    pwd: document.querySelector("#field-pwd").value || null,
-    pwd2: document.querySelector("#field-pwd2").value || null,
     cr: fromLocalValue(document.querySelector("#field-cr").value),
     ex: fromLocalValue(document.querySelector("#field-ex").value),
     ch: fromLocalValue(document.querySelector("#field-ch").value)
@@ -3428,7 +3424,7 @@ refs.pluginImportForm?.addEventListener("submit", async (event) => {
 
     if (pendingRebuild) {
       tone = "warning";
-      message = `插件 ${plugin.id || file.name} 已导入，但需要重建 Docker 容器后才能完全启用。建议切换到本地构建模式后执行：docker compose up -d --build pivkeyu_emby`;
+      message = `插件 ${plugin.id || file.name} 已导入，但需要重建 Docker 容器后才能完全启用。建议切换到本地构建模式后执行：docker compose up -d --build echo`;
     } else if (hasError) {
       tone = "warning";
       message = `插件 ${plugin.id || file.name} 已导入，但加载时报错：${plugin.error}`;

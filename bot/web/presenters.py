@@ -53,8 +53,6 @@ def serialize_emby_user(user: Emby) -> dict:
         "tg": user.tg,
         "embyid": user.embyid,
         "name": user.name,
-        "pwd": user.pwd,
-        "pwd2": user.pwd2,
         "lv": user.lv,
         "lv_text": level_meta["text"],
         "lv_short_text": level_meta["short_text"],

@@ -53,7 +53,7 @@ def _validate_db_config():
             "数据库配置缺失: "
             + ", ".join(missing)
             + "。请在 config.json 中设置 db_host/db_user/db_pwd/db_name，例如 "
-            + "db_host=127.0.0.1, db_user=pivkeyu, db_pwd=pivkeyu, db_name=pivkeyu"
+            + "db_host=127.0.0.1, db_user=echo, db_pwd=echo, db_name=echo"
         )
 
     normalized_backend = _normalize_db_backend(db_backend)
@@ -329,6 +329,14 @@ def run_migrations():
         LOGGER.info(f"数据库迁移完成，当前已升级到最新版本，耗时 {elapsed_ms}ms")
     except Exception as e:
         LOGGER.error(f"数据库自动迁移失败: {e}")
+        fallback = os.getenv("PIVKEYU_DB_MIGRATE_FALLBACK", "").strip().lower()
+        if fallback in {"1", "true", "yes", "on", "create_all", "create-all"}:
+            # 可控降级：迁移脚本异常时允许以 Base.metadata.create_all 兜底建表
+            # （仅补齐缺失表/列，不修改已有结构），保证服务可启动。
+            # 生产环境应保持默认 fail-fast，迁移失败时人工介入修复。
+            LOGGER.warning("检测到 PIVKEYU_DB_MIGRATE_FALLBACK，降级为 create_all 兜底建表")
+            _legacy_create_all_tables()
+            return
         raise
     finally:
         os.environ.pop(_MIGRATION_GUARD_ENV, None)

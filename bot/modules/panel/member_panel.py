@@ -31,6 +31,7 @@ from bot.sql_helper.sql_emby import sql_get_emby, sql_update_emby, Emby
 from bot.sql_helper.sql_emby2 import sql_get_emby2, sql_delete_emby2
 
 _SECURITY_CODE_PATTERN = re.compile(r"^\d{4,6}$")
+_REGISTRATION_CAPACITY_LOCK = asyncio.Lock()
 
 
 def _is_valid_security_code(value: str) -> bool:
@@ -103,10 +104,10 @@ async def create_user(_, call, us, stats):
     try:
         emby_name, emby_pwd2 = msg.text.split()
     except (IndexError, ValueError):
-        await msg.reply(f'⚠️ 格式错了啦！才不是本女仆的问题...\n\n`{msg.text}`\n **真是的，会话结束！**')
+        await msg.reply(f'⚠️ 格式错了啦！才不是本女仆的问题...\n\n输入内容\n **真是的，会话结束！**')
     else:
         send = await msg.reply(
-            f'🆗 会话结束，收到设置\n\n用户名：**{emby_name}**  安全码：**{emby_pwd2}** \n\n__正在接入注册队列__......'
+            f'🆗 会话结束，收到设置\n\n用户名：**{emby_name}** 安全码已接收\n\n__正在接入注册队列__......'
         )
 
         async def _run_create_job():
@@ -125,7 +126,7 @@ async def create_user(_, call, us, stats):
                 send,
                 f'⏳ 你已经在注册队列中啦。\n\n'
                 f'· 用户名 | `{emby_name}`\n'
-                f'· 安全码 | `{emby_pwd2}`\n'
+                f'· 安全码 | 已接收\n'
                 f'· 前方任务 | `{enqueue_result.ahead}` 个\n\n'
                 f'轮到你后会自动继续。',
                 re_create_ikb,
@@ -148,7 +149,7 @@ async def create_user(_, call, us, stats):
                 send,
                 f'⏳ 当前注册请求较多，你已进入排队队列。\n\n'
                 f'· 用户名 | `{emby_name}`\n'
-                f'· 安全码 | `{emby_pwd2}`\n'
+                f'· 安全码 | 已接收\n'
                 f'· 前方任务 | `{enqueue_result.ahead}` 个\n\n'
                 f'轮到你后会自动继续创建账号，请不要重复点击。',
             )
@@ -158,12 +159,22 @@ async def create_user(_, call, us, stats):
             send,
             f'🪄 已接收注册请求。\n\n'
             f'· 用户名 | `{emby_name}`\n'
-            f'· 安全码 | `{emby_pwd2}`\n\n'
+            f'· 安全码 | 已接收\n\n'
             f'__正在为您初始化账户，更新用户策略__......'
         )
 
 
 async def _perform_create_user(status_message, user_id: int, username: str, security_code: str, days: int, open_register: bool):
+    # Registration capacity, remote creation, and local binding are one
+    # serialized critical section.  This avoids two queue workers observing
+    # the same free slot and creating more accounts than configured.
+    async with _REGISTRATION_CAPACITY_LOCK:
+        return await _perform_create_user_locked(
+            status_message, user_id, username, security_code, days, open_register
+        )
+
+
+async def _perform_create_user_locked(status_message, user_id: int, username: str, security_code: str, days: int, open_register: bool):
     current_user = sql_get_emby(tg=user_id)
     if not current_user:
         await editMessage(status_message, '⚠️ 数据库里找不到你呢...才、才不是本女仆把你弄丢的！请重新 /start 录入啦。', re_create_ikb)
@@ -190,7 +201,7 @@ async def _perform_create_user(status_message, user_id: int, username: str, secu
         status_message,
         f'🪄 已轮到你，开始创建账号。\n\n'
         f'· 用户名 | `{username}`\n'
-        f'· 安全码 | `{security_code}`\n\n'
+        f'· 安全码 | 已接收\n\n'
         f'__正在为您初始化账户，更新用户策略__......'
     )
 
@@ -208,29 +219,29 @@ async def _perform_create_user(status_message, user_id: int, username: str, secu
     emby_id = data[0]
     expires_at = data[2]
 
-    if open_register:
-        sql_update_emby(
-            Emby.tg == user_id,
-            embyid=emby_id,
-            name=username,
-            pwd=password,
-            pwd2=security_code,
-            lv='b',
-            cr=datetime.now(),
-            ex=expires_at,
+    binding_changes = {
+        "embyid": emby_id,
+        "name": username,
+        "pwd": password,
+        "pwd2": security_code,
+        "lv": "b",
+        "cr": datetime.now(),
+        "ex": expires_at,
+    }
+    if not open_register:
+        binding_changes["us"] = 0
+    if not sql_update_emby(Emby.tg == user_id, **binding_changes):
+        LOGGER.error(f"【创建账户】远端账号已创建但本地绑定失败 user={user_id} emby_id={emby_id}")
+        try:
+            await emby.emby_del(emby_id)
+        except Exception as cleanup_error:
+            LOGGER.error(f"【创建账户】清理孤儿 Emby 账号失败 user={user_id}: {cleanup_error}")
+        await editMessage(
+            status_message,
+            '⚠️ 远端账号创建成功，但本地绑定失败。系统已尝试回滚，请联系管理员确认状态。',
+            re_create_ikb,
         )
-    else:
-        sql_update_emby(
-            Emby.tg == user_id,
-            embyid=emby_id,
-            name=username,
-            pwd=password,
-            pwd2=security_code,
-            lv='b',
-            cr=datetime.now(),
-            ex=expires_at,
-            us=0,
-        )
+        return
 
     tem_adduser()
 
@@ -245,8 +256,8 @@ async def _perform_create_user(status_message, user_id: int, username: str, secu
         status_message,
         f'**▎哼，才不是特别为你创建的呢...其实是成功啦！🎉**\n\n'
         f'· 用户名称 | `{username}`\n'
-        f'· 用户密码 | `{password}`\n'
-        f'· 安全密码 | `{security_code}`（仅发送一次）\n'
+        f'· 用户密码 | 已安全保存，请通过 Emby 客户端或管理员重置\n'
+        f'· 安全密码 | 已接收（仅发送一次）\n'
         f'· 到期时间 | `{expires_text}`\n'
         f'· 当前线路：\n'
         f'{emby_line}\n\n'
@@ -351,8 +362,8 @@ async def change_tg(_, call):
             expires_text = _emby_expiry_display(e.lv, e.ex)
             text = f'⭕ 请接收您的信息！\n\n' \
                    f'· 用户名称 | `{e.name}`\n' \
-                   f'· 用户密码 | `{e.pwd}`\n' \
-                   f'· 安全密码 | `{e.pwd2}`（仅发送一次）\n' \
+                   f'· 用户密码 | 已安全保存，请通过 Emby 客户端或管理员重置\n' \
+                   f'· 安全密码 | 已更新\n' \
                    f'· 到期时间 | `{expires_text}`\n\n' \
                    f'· 当前线路：\n{emby_line}\n\n' \
                    f'**·在【服务器】按钮 - 查看线路和密码**'
@@ -394,9 +405,8 @@ async def change_tg(_, call):
             await m.delete()
             emby_name, emby_pwd = m.text.split()
         except (IndexError, ValueError):
-            return await editMessage(call, f'⚠️ 输入格式错误\n【`{m.text}`】\n **会话已结束！**', re_changetg_ikb)
+            return await editMessage(call, f'⚠️ 输入格式错误\n【输入内容】\n **会话已结束！**', re_changetg_ikb)
 
-        pwd = '空（直接回车）', 5210 if emby_pwd == 'None' else emby_pwd, emby_pwd
         e = sql_get_emby(tg=emby_name)
         if e is None:
             # 在emby2中，验证安全码 或者密码
@@ -408,7 +418,7 @@ async def change_tg(_, call):
                 success, embyid = await emby.authority_account(tg_id=call.from_user.id, username=emby_name, password=emby_pwd)
                 if not success:
                     return await editMessage(call,
-                                             f'💢 安全码or密码验证错误，请检查输入\n{emby_name} {emby_pwd} 是否正确。',
+                                             f'💢 安全码or密码验证错误，请检查输入\n请输入正确凭据后重试。',
                                              buttons=re_changetg_ikb)
                 sql_update_emby(Emby.tg == call.from_user.id, embyid=embyid, name=e2.name, pwd=emby_pwd,
                                 pwd2=e2.pwd2, lv=e2.lv, cr=e2.cr, ex=e2.ex)
@@ -416,8 +426,8 @@ async def change_tg(_, call):
                 expires_text = _emby_expiry_display(e2.lv, e2.ex)
                 text = f'⭕ 账户 {emby_name} 的密码验证成功！\n\n' \
                        f'· 用户名称 | `{emby_name}`\n' \
-                       f'· 用户密码 | `{pwd[0]}`\n' \
-                       f'· 安全密码 | `{e2.pwd2}`（仅发送一次）\n' \
+                       f'· 用户密码 | 已安全保存，请通过 Emby 客户端或管理员重置\n' \
+                       f'· 安全密码 | 已验证\n' \
                        f'· 到期时间 | `{expires_text}`\n\n' \
                        f'· 当前线路：\n{emby_line}\n\n' \
                        f'**·在【服务器】按钮 - 查看线路和密码**'
@@ -432,8 +442,8 @@ async def change_tg(_, call):
                 expires_text = _emby_expiry_display(e2.lv, e2.ex)
                 text = f'⭕ 账户 {emby_name} 的安全码验证成功！\n\n' \
                        f'· 用户名称 | `{emby_name}`\n' \
-                       f'· 用户密码 | `{e2.pwd}`\n' \
-                       f'· 安全密码 | `{pwd[1]}`（仅发送一次）\n' \
+                       f'· 用户密码 | 已安全保存，请通过 Emby 客户端或管理员重置\n' \
+                       f'· 安全密码 | 已更新\n' \
                        f'· 到期时间 | `{expires_text}`\n\n' \
                        f'· 当前线路：\n{emby_line}\n\n' \
                        f'**·在【服务器】按钮 - 查看线路和密码**'
@@ -453,11 +463,11 @@ async def change_tg(_, call):
                 success, embyid = await emby.authority_account(tg_id=call.from_user.id, username=emby_name, password=emby_pwd)
                 if not success:
                     return await editMessage(call,
-                                             f'💢 安全码or密码验证错误，请检查输入\n{emby_name} {emby_pwd} 是否正确。',
+                                             f'💢 安全码or密码验证错误，请检查输入\n请输入正确凭据后重试。',
                                              buttons=re_changetg_ikb)
             await  asyncio.gather(editMessage(call,
                                               f'✔️ 会话结束，验证成功\n\n'
-                                              f'🔰 用户名：**{emby_name}** 输入码：**{emby_pwd}**......\n\n'
+                                              f'🔰 用户名：**{emby_name}** 安全码/密码已验证......\n\n'
                                               f'🎯 已向授权群发送申请，请联系并等待主人确认......'),
                                   sendMessage(call,
                                               f'⭕#TG改绑\n'
@@ -497,9 +507,9 @@ async def bind_tg(_, call):
             await m.delete()
             emby_name, emby_pwd = m.text.split()
         except (IndexError, ValueError):
-            return await editMessage(call, f'⚠️ 输入格式错误\n【`{m.text}`】\n **会话已结束！**', re_bindtg_ikb)
+            return await editMessage(call, f'⚠️ 输入格式错误\n【输入内容】\n **会话已结束！**', re_bindtg_ikb)
         await editMessage(call,
-                          f'✔️ 会话结束，收到设置\n\n用户名：**{emby_name}** 正在检查密码 **{emby_pwd}**......')
+                          f'✔️ 会话结束，收到设置\n\n用户名：**{emby_name}** 正在验证密码......')
         e = sql_get_emby(tg=emby_name)
         if e is None:
             e2 = sql_get_emby2(name=emby_name)
@@ -507,7 +517,7 @@ async def bind_tg(_, call):
                 success, embyid = await emby.authority_account(tg_id=call.from_user.id, username=emby_name, password=emby_pwd)
                 if not success:
                     return await editMessage(call,
-                                             f'🍥 很遗憾绑定失败，您输入的账户密码不符（{emby_name} - {emby_pwd}），请仔细确认后再次尝试',
+                                             '🍥 很遗憾绑定失败，账户密码验证不通过，请仔细确认后再次尝试',
                                              buttons=re_bindtg_ikb)
                 else:
                     security_pwd = await pwd_create(4)
@@ -515,8 +525,8 @@ async def bind_tg(_, call):
                     ex = (datetime.now() + timedelta(days=30))
                     text = f'✅ 账户 {emby_name} 成功绑定\n\n' \
                            f'· 用户名称 | `{emby_name}`\n' \
-                           f'· 用户密码 | `{pwd[0]}`\n' \
-                           f'· 安全密码 | `{pwd[1]}`（仅发送一次）\n' \
+                           f'· 用户密码 | 已安全保存，请通过 Emby 客户端或管理员重置\n' \
+                           f'· 安全密码 | 已更新\n' \
                            f'· 到期时间 | `{ex}`\n\n' \
                            f'· 当前线路：\n{emby_line}\n\n' \
                            f'· **在【服务器】按钮 - 查看线路和密码**'
@@ -612,7 +622,7 @@ async def reset(_, call):
         else:
             if m.text != e.pwd2:
                 await m.delete()
-                await editMessage(call, f'**💢 验证不通过，{m.text} 安全码错误。**', buttons=re_reset_ikb)
+                await editMessage(call, f'**💢 验证不通过，安全码错误。**', buttons=re_reset_ikb)
             else:
                 await m.delete()
                 await editMessage(call, '🎯 请在 120s内 输入你要更新的密码,不限制中英文，emoji。特殊字符部分支持，其他概不负责。\n\n'
@@ -635,9 +645,9 @@ async def reset(_, call):
                     await mima.delete()
                     await editMessage(call, '**🎯 收到，正在重置ing。。。**')
                     if await emby.emby_reset(emby_id=e.embyid, new_password=mima.text) is True:
-                        await editMessage(call, f'🕶️ 操作完成！已为您重置密码为 `{mima.text}`。',
+                        await editMessage(call, f'🕶️ 操作完成！已为您重置密码已更新，请通过 Emby 客户端或管理员重置。',
                                           buttons=back_members_ikb)
-                        LOGGER.info(f"【重置密码】：{call.from_user.id} 成功重置了密码为 {mima.text} ！")
+                        LOGGER.info(f"【重置密码】：{call.from_user.id} 成功重置了密码更新成功！")
                     else:
                         await editMessage(call, '🫥 操作失败！请联系主人。', buttons=back_members_ikb)
                         LOGGER.error(f"【重置密码】：{call.from_user.id} 重置密码失败 ！")
@@ -682,7 +692,7 @@ async def change_pwd2(_, call):
 
     if old_code_message.text != e.pwd2:
         await old_code_message.delete()
-        await editMessage(call, f'**💢 验证不通过，{old_code_message.text} 安全码错误。**', buttons=re_change_pwd2_ikb)
+        await editMessage(call, f'**💢 验证不通过，安全码错误。**', buttons=re_change_pwd2_ikb)
         return
 
     await old_code_message.delete()
@@ -711,7 +721,7 @@ async def change_pwd2(_, call):
         await editMessage(
             call,
             f'**💢 新安全码格式错误。**\n\n'
-            f'您输入的是 `{new_code}`\n'
+            f'您输入的安全码格式不正确。\n'
             f'请使用 **4 到 6 位数字**。',
             buttons=re_change_pwd2_ikb
         )
@@ -738,7 +748,7 @@ async def change_pwd2(_, call):
     if sql_update_emby(Emby.tg == call.from_user.id, pwd2=new_code, iv=remaining_iv, ch=datetime.now()):
         await editMessage(
             call,
-            f'🕶️ 操作完成！已为您更新安全码为 `{new_code}`。\n'
+            f'🕶️ 操作完成！安全码已更新。\n'
             f'本次扣除 `{change_cost}` {sakura_b}，剩余 `{remaining_iv}` {sakura_b}。',
             buttons=back_members_ikb
         )

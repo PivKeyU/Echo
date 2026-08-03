@@ -4,7 +4,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## Project overview
 
-pivkeyu_emby is a Telegram bot management system for Emby media servers. It bundles a Telegram Bot (Pyrogram), FastAPI web server (admin panel + Telegram Mini App), and a runtime plugin system, all orchestrated with Docker Compose.
+Echo is a Telegram bot management system for Emby media servers. It bundles a Telegram Bot (Pyrogram), FastAPI web server (admin panel + Telegram Mini App), and a runtime plugin system, all orchestrated with Docker Compose.
 
 **Core stack**: Python 3.10, Pyrogram (TG client), FastAPI (web), SQLAlchemy + Alembic (DB), PostgreSQL, Redis, Docker Compose.
 
@@ -27,10 +27,10 @@ docker compose pull && docker compose up -d
 docker compose up -d --build
 
 # Rebuild a single service
-docker compose up -d --build pivkeyu_emby
+docker compose up -d --build echo
 
 # View logs
-docker compose logs -f pivkeyu_emby
+docker compose logs -f echo
 
 # Health check
 curl http://127.0.0.1:8838/health
@@ -63,7 +63,7 @@ bot/
     manager.py                   # Plugin loader: discovery, ZIP import, migration, enable/disable
     xiuxian_game/                # Built-in cultivation game plugin (large)
     emby_shop/                   # Built-in Emby shop plugin
-    pivkeyu_template/            # Minimal example plugin for reference
+    echo_template/                 # Minimal example plugin for reference
   sql_helper/
     __init__.py                  # SQLAlchemy engine/session factory, DB startup/validation
     alembic/                     # Core Alembic migration scripts

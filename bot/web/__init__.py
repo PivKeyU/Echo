@@ -18,7 +18,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 
 from bot import LOGGER, api as config_api
+from bot.func_helper.emby import emby
+from bot.func_helper.moviepilot import close_moviepilot_session
 from bot.func_helper.redis_cache import get_status as get_redis_status
+from bot.func_helper.runtime import get_or_create_event_loop
 from bot.func_helper.telegram_webapp import configure_chat_menu_button
 from bot.plugins import has_loaded_plugins, load_plugins, register_web_plugins
 
@@ -37,9 +40,14 @@ def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
 
 class Web:
     def __init__(self):
-        self.app: FastAPI = FastAPI(title="pivkeyu_emby Web API")
+        self.app: FastAPI = FastAPI(title="Echo Web API")
         self.web_api = None
         self.start_api = None
+        self._serve_finished: asyncio.Event | None = None
+        self._start_task: asyncio.Task | None = None
+        self._api_initialized = False
+        self._shutdown_registered = False
+        self._stop_requested = False
 
     async def _configure_runtime_limits(self) -> None:
         tokens = _env_int("PIVKEYU_WEB_THREADPOOL_TOKENS", 96, minimum=24, maximum=512)
@@ -54,6 +62,9 @@ class Web:
             LOGGER.warning(f"【API服务】Web线程池并发调整失败: {exc}")
 
     def init_api(self):
+        if self._api_initialized:
+            return
+        self._api_initialized = True
         slow_request_ms = _env_int("PIVKEYU_WEB_SLOW_REQUEST_MS", 2000, minimum=200, maximum=120000)
 
         @self.app.middleware("http")
@@ -128,11 +139,22 @@ class Web:
             allow_headers=["*"],
         )
 
+        if not self._shutdown_registered:
+            self._shutdown_registered = True
+
+            @self.app.on_event("shutdown")
+            async def close_external_clients():
+                await emby.shutdown()
+                await close_moviepilot_session()
+
     async def start(self):
         if not config_api.status:
             LOGGER.info("【API服务】未配置，跳过")
             return
         LOGGER.info("【API服务】检测到配置，开始启动")
+        if self._stop_requested:
+            LOGGER.info("【API服务】在启动前收到停止请求，跳过启动")
+            return
         import uvicorn
 
         await self._configure_runtime_limits()
@@ -148,46 +170,98 @@ class Web:
             LOGGER.warning("【API服务】未检测到已加载插件，补执行 load_plugins()")
             load_plugins()
         register_web_plugins(self.app)
+        if self._stop_requested:
+            LOGGER.info("【API服务】注册路由后收到停止请求，跳过启动")
+            return
         self.web_api = uvicorn.Server(
             config=uvicorn.Config(
                 self.app,
                 host=config_api.http_url,
                 port=config_api.http_port,
                 access_log=False,
+                # Bound the graceful drain: without a timeout, a stuck
+                # connection blocks Server.shutdown() (and therefore stop())
+                # forever instead of letting lifespan shutdown proceed.
+                timeout_graceful_shutdown=30,
             )
         )
-        server_config = self.web_api.config
-        if not server_config.loaded:
-            server_config.load()
-        self.web_api.lifespan = server_config.lifespan_class(server_config)
+        self._serve_finished = asyncio.Event()
+        LOGGER.info("【API服务】启动成功，进入持续服务状态")
         try:
-            await self.web_api.startup()
+            # Server.serve() owns the complete lifespan: startup, request loop,
+            # and shutdown.  This is intentionally awaited by the task created
+            # below, rather than during module import.
+            await self.web_api.serve()
         except OSError as exc:
             if exc.errno == errno.EADDRINUSE:
                 LOGGER.error(f"【API服务】端口 {config_api.http_port} 已被占用，请修改配置文件")
-            LOGGER.error("【API服务】启动失败，退出")
-            raise SystemExit from None
-        if self.web_api.should_exit:
-            LOGGER.error("【API服务】启动失败，退出")
-            raise SystemExit from None
+            LOGGER.error("【API服务】启动失败")
+            raise
+        finally:
+            if self._serve_finished is not None:
+                self._serve_finished.set()
+            LOGGER.info("API 服务已停止")
 
-        LOGGER.info("【API服务】启动成功")
-
-    def stop(self):
-        if self.web_api is not None:
-            LOGGER.info("正在停止 API 服务...")
+    async def stop(self):
+        """Request and await uvicorn's graceful shutdown."""
+        self._stop_requested = True
+        task = self._start_task
+        if self.web_api is None:
+            if task is not None and not task.done():
+                # start() checks _stop_requested before binding the socket, so
+                # waiting here cannot accidentally start a new server.  Consume
+                # startup failures (e.g. EADDRINUSE) so they do not escape into
+                # the caller and abort later shutdown cleanup.
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:
+                    LOGGER.error(f"【API服务】后台任务结束时发生异常: {exc}")
+            elif task is not None:
+                try:
+                    task.result()
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:
+                    LOGGER.error(f"【API服务】后台任务结束时发生异常: {exc}")
+            return
+        LOGGER.info("正在停止 API 服务...")
+        self.web_api.should_exit = True
+        if self._serve_finished is not None:
+            await self._serve_finished.wait()
+        if task is not None and not task.done():
             try:
-                self.web_api.should_exit = True
-                self.web_api.handle_exit(sig=None, frame=None)
-            except Exception:
+                await task
+            except asyncio.CancelledError:
                 pass
-            finally:
-                LOGGER.info("API 服务已停止")
+            except Exception as exc:
+                LOGGER.error(f"【API服务】后台任务结束时发生异常: {exc}")
+        elif task is not None:
+            try:
+                task.result()
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                LOGGER.error(f"【API服务】后台任务结束时发生异常: {exc}")
+
 
 
 check = Web()
 
-loop = asyncio.get_event_loop()
-loop.create_task(check.start())
+loop = get_or_create_event_loop()
+check._start_task = loop.create_task(check.start(), name="web-api-start")
+
+
+def _report_web_task(task: asyncio.Task) -> None:
+    if task.cancelled():
+        return
+    try:
+        task.result()
+    except Exception as exc:
+        LOGGER.error(f"【API服务】后台服务任务异常退出: {exc}")
+
+
+check._start_task.add_done_callback(_report_web_task)
 if str(os.getenv("PIVKEYU_WEB_ONLY", "")).strip().lower() not in {"1", "true", "yes", "on"}:
     loop.create_task(configure_chat_menu_button())

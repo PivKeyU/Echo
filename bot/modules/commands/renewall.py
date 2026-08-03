@@ -11,11 +11,34 @@ from sqlalchemy import or_
 from bot import bot, prefixes, bot_photo, LOGGER, sakura_b
 from bot.func_helper.msg_utils import sendMessage, deleteMessage, ask_return
 from bot.func_helper.filters import admins_on_filter
-from bot.sql_helper.sql_emby import get_all_emby, Emby, sql_update_embys, sql_clear_emby_iv
+from bot.sql_helper.sql_emby import get_all_emby, Emby, sql_update_embys, sql_clear_emby_iv, sql_adjust_emby_iv
+
+
+_batch_lock = asyncio.Lock()
+
+
+async def _acquire_batch_lock(msg) -> bool:
+    """批量任务互斥：同一时间只允许一个批量命令执行。"""
+    if _batch_lock.locked():
+        await sendMessage(msg, '⏳ 已有批量任务正在运行，请等待完成后再试', timer=60)
+        return False
+    await _batch_lock.acquire()
+    return True
+
+
 
 
 @bot.on_message(filters.command('renewall', prefixes) & admins_on_filter)
 async def renew_all(_, msg):
+    if not await _acquire_batch_lock(msg):
+        return
+    try:
+        await _renew_all_impl(_, msg)
+    finally:
+        _batch_lock.release()
+
+
+async def _renew_all_impl(_, msg):
     await deleteMessage(msg)
     # send_chat
     try:
@@ -59,6 +82,15 @@ async def renew_all(_, msg):
 # coinsall 全部人加片刻碎片
 @bot.on_message(filters.command('coinsall', prefixes) & admins_on_filter)
 async def coins_all(_, msg):
+    if not await _acquire_batch_lock(msg):
+        return
+    try:
+        await _coins_all_impl(_, msg)
+    finally:
+        _batch_lock.release()
+
+
+async def _coins_all_impl(_, msg):
     await deleteMessage(msg)
     try:
         coin = int(msg.command[1])
@@ -80,47 +112,58 @@ async def coins_all(_, msg):
         return await send.edit("⚡【派送任务】\n\n结束，没有一个有号的")
 
     b = 0
+    skipped = 0
     ls = []
     start = time.perf_counter()
+    sign_name = f'{msg.sender_chat.title}' if msg.sender_chat else f'{msg.from_user.first_name}'
     for i in rst:
+        # 逐用户原子调整：避免批量读改写覆盖并发消费，且扣减不会使余额为负
+        new_iv = sql_adjust_emby_iv(i.tg, coin)
+        if new_iv is None:
+            skipped += 1
+            continue
         b += 1
-        iv_new = i.iv + coin
-        ls.append([i.tg, iv_new])
-    if sql_update_embys(some_list=ls, method='iv'):
-        end = time.perf_counter()
-        times = end - start
-        sign_name = f'{msg.sender_chat.title}' if msg.sender_chat else f'{msg.from_user.first_name}'
-        if send_msg:
-            await send.edit(
-                f"⚡【{sakura_b}任务】\n\n  批量派出 {coin} {sakura_b} * {b} ，耗时：{times:.3f}s\n 已到账，正在向每个拥有emby的用户私发消息，短时间内请不要重复使用")
-        else:
-            await send.edit(
-                f"⚡【{sakura_b}任务】\n\n  批量派出 {coin} {sakura_b} * {b} ，耗时：{times:.3f}s\n 已到账")
+        ls.append([i.tg, new_iv])
+    end = time.perf_counter()
+    times = end - start
+    summary = f"⚡【{sakura_b}任务】\n\n  批量派出 {coin} {sakura_b} * {b} ，耗时：{times:.3f}s\n 已到账"
+    if send_msg:
+        summary += "\n 正在向每个拥有emby的用户私发消息，短时间内请不要重复使用"
+    if skipped:
+        summary += f"\n ⚠️ {skipped} 个用户余额不足或不存在，未变更"
+    await send.edit(summary)
+    LOGGER.info(
+        f"【派送{sakura_b}任务】 - {sign_name}({msg.from_user.id}) 派出 {coin} * {b}（跳过 {skipped}）更改用时{times:.3f} s")
+
+    # 根据参数决定是否发送私信
+    if send_msg:
+        for l in ls:
+            try:
+                await bot.send_message(l[0], f"🎯 主人 {sign_name} 调节了您的账户{sakura_b} {coin}"
+                                         f'\n📅 实时数量：{l[1]}')
+            except FloodWait as f:
+                LOGGER.warning(str(f))
+                await asyncio.sleep(f.value * 1.2)
+                await bot.send_message(l[0], f"🎯 主人 {sign_name} 调节了您的账户{sakura_b} {coin}"
+                                         f'\n📅 实时数量：{l[1]}')
+            except Exception as e:
+                LOGGER.error(f"派送{sakura_b}任务失败：{l[0]} {e}")
+                continue
         LOGGER.info(
-            f"【派送{sakura_b}任务】 - {sign_name}({msg.from_user.id}) 派出 {coin} * {b} 更改用时{times:.3f} s")
-        
-        # 根据参数决定是否发送私信
-        if send_msg:
-            for l in ls:
-                try:
-                    await bot.send_message(l[0], f"🎯 主人 {sign_name} 调节了您的账户{sakura_b} {coin}"
-                                             f'\n📅 实时数量：{l[1]}')
-                except FloodWait as f:
-                    LOGGER.warning(str(f))
-                    await asyncio.sleep(f.value * 1.2)
-                    await bot.send_message(l[0], f"🎯 主人 {sign_name} 调节了您的账户{sakura_b} {coin}"
-                                             f'\n📅 实时数量：{l[1]}')
-                except Exception as e:
-                    LOGGER.error(f"派送{sakura_b}任务失败：{l[0]} {e}")
-                    continue
-            LOGGER.info(
-                f"【派送{sakura_b}任务】 - {sign_name}({msg.from_user.id}) 派出 {coin} {sakura_b} * {b}，消息私发完成")
-    else:
-        await msg.reply("❌ 数据库操作出错，请检查重试")
+            f"【派送{sakura_b}任务】 - {sign_name}({msg.from_user.id}) 派出 {coin} {sakura_b} * {b}，消息私发完成")
 
 # coinsclear 清除用户片刻碎片
 @bot.on_message(filters.command('coinsclear', prefixes) & admins_on_filter)
 async def coinsclear(_, msg):
+    if not await _acquire_batch_lock(msg):
+        return
+    try:
+        await _coinsclear_impl(_, msg)
+    finally:
+        _batch_lock.release()
+
+
+async def _coinsclear_impl(_, msg):
     await deleteMessage(msg)
     try:
         level_param = msg.command[1].lower()
@@ -176,6 +219,15 @@ async def coinsclear(_, msg):
                                  f"🔔 **使用格式：**\n\n`/coinsclear [等级/all] true`\n\n⚠️ 等级参数必须是：`all`、`a`、`b`、`c` 或 `d`\n\n等级说明:\na- 白名单账户\nb - 正常账户\nc- 已封禁账户\nd- 无账号用户\n\n示例：\n`/coinsclear all true` - 清除所有用户{sakura_b}\n`/coinsclear b true` - 清除b级用户{sakura_b}", timer=60)
 @bot.on_message(filters.command('callall', prefixes) & admins_on_filter & filters.private)
 async def call_all(_, msg):
+    if not await _acquire_batch_lock(msg):
+        return
+    try:
+        await _call_all_impl(_, msg)
+    finally:
+        _batch_lock.release()
+
+
+async def _call_all_impl(_, msg):
     await msg.delete()
     # 可以做分级 所有 b类 非群组类 ：太麻烦，随便搞搞就行
     m = await ask_return(msg,

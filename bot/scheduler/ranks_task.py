@@ -4,12 +4,17 @@
 from pyrogram import enums
 from datetime import date
 
+import asyncio
+
 from bot.func_helper.utils import convert_s
 from bot.func_helper.emby import emby
 from bot.ranks_helper import ranks_draw
 from bot import bot, group, ranks, LOGGER, schedall, save_config
 from bot.func_helper.utils import split_long_message
 
+
+_day_ranks_lock = asyncio.Lock()
+_week_ranks_lock = asyncio.Lock()
 
 
 
@@ -61,6 +66,15 @@ async def send_multi_message(chat_id, photo_path, caption, parse_mode, pin_first
 
 
 async def day_ranks(pin_mode=True):
+    # 定时任务与手动 /days_ranks 可能同时触发，加锁避免并发重复推送
+    if _day_ranks_lock.locked():
+        LOGGER.info('【ranks_task】已有日榜任务在运行，本次跳过')
+        return
+    async with _day_ranks_lock:
+        await _run_day_ranks(pin_mode=pin_mode)
+
+
+async def _run_day_ranks(pin_mode=True):
     draw = ranks_draw.RanksDraw(ranks.logo, backdrop=ranks.backdrop)
     LOGGER.info("【ranks_task】定时任务 正在推送日榜")
     success, movies = await emby.get_emby_report(types='Movie', days=1)
@@ -115,6 +129,15 @@ async def day_ranks(pin_mode=True):
 
 
 async def week_ranks(pin_mode=True):
+    # 定时任务与手动 /week_ranks 可能同时触发，加锁避免并发重复推送
+    if _week_ranks_lock.locked():
+        LOGGER.info('【ranks_task】已有周榜任务在运行，本次跳过')
+        return
+    async with _week_ranks_lock:
+        await _run_week_ranks(pin_mode=pin_mode)
+
+
+async def _run_week_ranks(pin_mode=True):
     draw = ranks_draw.RanksDraw(ranks.logo, weekly=True, backdrop=ranks.backdrop)
     LOGGER.info("【ranks_task】定时任务 正在推送周榜")
     success, movies = await emby.get_emby_report(types='Movie', days=7)

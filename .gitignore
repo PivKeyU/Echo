@@ -36,3 +36,5 @@ data/
 db/
 caddy/config/
 caddy/data/
+.pi/
+.workflow/

@@ -23,6 +23,7 @@ from pyrogram.enums import ChatMemberStatus
 from pyrogram.types import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot import LOGGER, admin_p, api as api_config, bot, config, group, owner, owner_p, prefixes, user_p
+from bot.func_helper.runtime import get_or_create_event_loop
 from bot.func_helper.moderation import (
     ModerationServiceError,
     get_chat_member_details,
@@ -529,8 +530,16 @@ def _ensure_xiuxian_bot_commands() -> None:
 
 def _schedule_command_refresh(bot_instance) -> None:
     try:
-        loop = asyncio.get_event_loop()
-        loop.call_later(5, lambda: loop.create_task(BotCommands.set_commands(client=bot_instance)))
+        loop = get_or_create_event_loop()
+        def _refresh_safe() -> None:
+            # call_later 回调运行在事件循环线程；bot 若在 5s 内开始关停，
+            # create_task 可能抛 RuntimeError，此处吞掉避免未捕获异常告警。
+            try:
+                loop.create_task(BotCommands.set_commands(client=bot_instance))
+            except Exception as exc:
+                LOGGER.debug(f"xiuxian command refresh skipped: {exc}")
+
+        loop.call_later(5, _refresh_safe)
     except Exception as exc:
         LOGGER.debug(f"xiuxian command refresh skipped: {exc}")
 
@@ -2382,7 +2391,7 @@ def _queue_event_summary_refresh(
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        loop = asyncio.get_event_loop()
+        loop = get_or_create_event_loop()
     EVENT_SUMMARY_REFRESH_TASK = loop.create_task(runner())
 
 
@@ -3026,7 +3035,7 @@ def _queue_auction_finalize_task(auction: dict[str, Any] | None) -> None:
     if end_at is None:
         return
 
-    loop = asyncio.get_event_loop()
+    loop = get_or_create_event_loop()
 
     async def runner() -> None:
         try:
@@ -3282,7 +3291,7 @@ def _queue_arena_finalize_task(arena: dict[str, Any] | None) -> None:
     if end_at is None:
         return
 
-    loop = asyncio.get_event_loop()
+    loop = get_or_create_event_loop()
 
     async def runner() -> None:
         try:
@@ -4269,7 +4278,7 @@ def register_bot(bot_instance) -> None:
         except Exception as exc:
             LOGGER.warning(f"xiuxian delayed startup tasks failed: {exc}")
 
-    loop = asyncio.get_event_loop()
+    loop = get_or_create_event_loop()
     loop.create_task(_delayed_startup_tasks())
 
     if EVENT_SUMMARY_LOOP_TASK is None or EVENT_SUMMARY_LOOP_TASK.done():
@@ -4293,7 +4302,7 @@ def register_bot(bot_instance) -> None:
     if ENCOUNTER_AUTO_DISPATCH_LOCK is None:
         ENCOUNTER_AUTO_DISPATCH_LOCK = asyncio.Lock()
     if ENCOUNTER_AUTO_DISPATCH_LOOP_TASK is None or ENCOUNTER_AUTO_DISPATCH_LOOP_TASK.done():
-        loop = asyncio.get_event_loop()
+        loop = get_or_create_event_loop()
 
         async def encounter_auto_dispatch_loop() -> None:
             await asyncio.sleep(30)
@@ -4317,7 +4326,7 @@ def register_bot(bot_instance) -> None:
     # 世界 Boss 定时器
     _WORLD_BOSS_LOOP_TASK = globals().get("_WORLD_BOSS_LOOP_TASK")
     if _WORLD_BOSS_LOOP_TASK is None or _WORLD_BOSS_LOOP_TASK.done():
-        loop = asyncio.get_event_loop()
+        loop = get_or_create_event_loop()
 
         async def world_boss_loop() -> None:
             # 启动后稍等片刻再首次生成，确保 bot 已完全就绪

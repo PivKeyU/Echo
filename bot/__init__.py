@@ -42,6 +42,7 @@ pivkeyu = config.money
 money = pivkeyu
 sakura_b = pivkeyu
 ranks = config.ranks
+emotion_cfg = config.emotion
 prefixes = ['/', '!', '.', '，', '。']
 schedall = config.schedall
 

@@ -10,12 +10,13 @@ from bot.func_helper.filters import admins_on_filter, user_in_group_on_filter
 from bot.func_helper.fix_bottons import sched_buttons, plays_list_button
 from bot.func_helper.msg_utils import callAnswer, editMessage, deleteMessage
 from bot.func_helper.scheduler import scheduler
+from bot.func_helper.runtime import get_or_create_event_loop
 from bot.scheduler import *
 from bot.scheduler.auto_update import ensure_auto_update_schedule, run_auto_update
 
 
 # 初始化命令 开机检查重启
-loop = asyncio.get_event_loop()
+loop = get_or_create_event_loop()
 loop.call_later(5, lambda: loop.create_task(BotCommands.set_commands(client=bot)))
 loop.call_later(5, lambda: loop.create_task(check_restart()))
 
@@ -83,9 +84,15 @@ async def sched_change_policy(_, call):
         action = action_dict[method]
         args = args_dict[method]
         if getattr(schedall, method):
-            scheduler.remove_job(job_id=args['id'], jobstore='default')
+            ok = scheduler.remove_job(job_id=args['id'], jobstore='default')
         else:
-            scheduler.add_job(action, 'cron', **args)
+            # replace_existing=True：重复添加时直接替换，避免 ConflictingIdError
+            ok = scheduler.add_job(action, 'cron', **args, replace_existing=True)
+        if not ok:
+            LOGGER.error(f"定时任务 {method} 切换失败：add/remove 返回失败")
+            await callAnswer(call, f'❌ {method} 更改失败，请查看日志', True)
+            return
+        # 仅任务切换成功后才更新状态并保存配置，避免配置与调度器不一致
         setattr(schedall, method, not getattr(schedall, method))
         save_config()
         await asyncio.gather(callAnswer(call, f'⭕️ {method} 更改成功'), sched_panel(_, call.message))

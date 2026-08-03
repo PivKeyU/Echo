@@ -11,6 +11,7 @@ from pyrogram.enums import ParseMode
 from pyrogram.types import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot import LOGGER, admin_p, group, owner_p, prefixes, user_p
+from bot.func_helper.runtime import get_or_create_event_loop
 from bot.plugins.sdk import build_plugin_url
 from bot.scheduler.bot_commands import BotCommands
 from bot.sql_helper.sql_doupo import (
@@ -90,8 +91,16 @@ def _ensure_doupo_bot_commands() -> None:
 
 def _schedule_command_refresh(bot_instance) -> None:
     try:
-        loop = asyncio.get_event_loop()
-        loop.call_later(5, lambda: loop.create_task(BotCommands.set_commands(client=bot_instance)))
+        loop = get_or_create_event_loop()
+        def _refresh_safe() -> None:
+            # call_later 回调运行在事件循环线程；bot 若在 5s 内开始关停，
+            # create_task 可能抛 RuntimeError，此处吞掉避免未捕获异常告警。
+            try:
+                loop.create_task(BotCommands.set_commands(client=bot_instance))
+            except Exception as exc:
+                LOGGER.debug(f"xiuxian command refresh skipped: {exc}")
+
+        loop.call_later(5, _refresh_safe)
     except Exception as exc:
         LOGGER.debug(f"doupo command refresh skipped: {exc}")
 

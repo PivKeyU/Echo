@@ -3,7 +3,7 @@ from bot import bot, moviepilot, bot_photo, LOGGER, sakura_b
 from bot.func_helper.msg_utils import callAnswer, editMessage, sendMessage, sendPhoto, callListen
 from bot.func_helper.filters import user_in_group_on_filter
 from bot.func_helper.fix_bottons import re_download_center_ikb, back_members_ikb, continue_search_ikb, request_record_page_ikb,mp_search_page_ikb
-from bot.sql_helper.sql_emby import sql_get_emby, sql_update_emby, Emby
+from bot.sql_helper.sql_emby import sql_adjust_emby_iv, sql_get_emby
 from bot.sql_helper.sql_request_record import sql_add_request_record, sql_get_request_record_by_tg
 from bot.func_helper.moviepilot import search, add_download_task 
 from bot.func_helper.emby import emby
@@ -203,13 +203,18 @@ async def handle_resource_selection(call, result):
             try:
                 await editMessage(msg, '🔍 正在处理，请稍后')
                 index = int(txt.text)
-                size = result[index-1]['size'] / (1024 * 1024 * 1024)
+                # size 可能为字符串（搜索接口缺省 "0"），统一转为整数字节数再计算费用
+                size = int(result[index-1]['size'] or 0) / (1024 * 1024 * 1024)
                 need_cost = math.ceil(size) * moviepilot.price
                 if need_cost > emby_user.iv:
                     await editMessage(msg, f"❌ 您的{sakura_b}不足，此资源需要 {need_cost}{sakura_b}\n请选择其他资源编号", buttons=re_download_center_ikb)
                     continue
                 torrent_info = result[index-1]['torrent_info']
-                # 兼容mp v2的api，加入了torrent_in
+                # 先原子扣费，只有成功扣费才允许创建远端任务。
+                remaining_balance = sql_adjust_emby_iv(call.from_user.id, -need_cost)
+                if remaining_balance is None:
+                    await editMessage(msg, f"❌ 您的{sakura_b}不足或账户状态已变化，请重新选择资源", buttons=re_download_center_ikb)
+                    continue
                 param = {**torrent_info, 'torrent_in': torrent_info}
                 success, download_id = await add_download_task(param)
                 user_search_data.pop(call.from_user.id, None)
@@ -217,10 +222,13 @@ async def handle_resource_selection(call, result):
                     log = f"【下载任务】：#{call.from_user.id} [{call.from_user.first_name}](tg://user?id={call.from_user.id}) 已成功添加到下载队列，此次消耗 {need_cost}{sakura_b}\n下载ID：{download_id}"
                     download_log = f"{log}\n详情：{result[index-1]['tg_log']}"
                     LOGGER.info(log)
-                    sql_update_emby(Emby.tg == call.from_user.id,
-                                    iv=emby_user.iv - need_cost)
-                    sql_add_request_record(
-                        call.from_user.id, download_id, result[index-1]['title'], download_log, need_cost)
+                    if not sql_add_request_record(
+                        call.from_user.id, download_id, result[index-1]['title'], download_log, need_cost
+                    ):
+                        LOGGER.error(f"[MoviePilot] 任务已创建但记录写入失败 download_id={download_id}")
+                        sql_adjust_emby_iv(call.from_user.id, need_cost)
+                        await editMessage(msg, '⚠️ 任务已提交但记录保存失败，费用已退回，请联系管理员。', buttons=re_download_center_ikb)
+                        return
                     if moviepilot.download_log_chatid:
                         try:
                             await sendMessage(call, download_log, send=True, chat_id=moviepilot.download_log_chatid)
@@ -229,8 +237,10 @@ async def handle_resource_selection(call, result):
                     await editMessage(msg, f"🎉 已成功添加到下载队列，此次消耗 {need_cost}{sakura_b}\n🔖下载ID：`{download_id}`", buttons=re_download_center_ikb, parse_mode=enums.ParseMode.MARKDOWN)
                     return
                 else:
-                    LOGGER.error(f"【下载任务】：{call.from_user.id} 添加下载任务失败!")
-                    await editMessage(msg, f"❌ 添加下载任务失败!", buttons=re_download_center_ikb)
+                    # 已扣费但远端任务创建失败：退回本次扣费
+                    sql_adjust_emby_iv(call.from_user.id, need_cost)
+                    LOGGER.error(f"【下载任务】：{call.from_user.id} 添加下载任务失败，已退回 {need_cost}{sakura_b}")
+                    await editMessage(msg, f"❌ 添加下载任务失败，已退回 {need_cost}{sakura_b}。", buttons=re_download_center_ikb)
                     return
             except IndexError:
                 await editMessage(msg, '❌ 输入错误，请重新输入，退出点 /cancel', buttons=re_download_center_ikb)

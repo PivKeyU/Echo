@@ -21,7 +21,7 @@ from bot.sql_helper import Session, engine, sync_postgresql_sequences
 
 
 BUNDLE_SCHEMA_VERSION = 1
-TYPE_MARKER = "__pivkeyu_type__"
+TYPE_MARKER = "__echo_type__"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
 DATABASE_DIRNAME = "database"
@@ -66,7 +66,7 @@ def _utc_now() -> datetime:
 
 
 def _bundle_name() -> str:
-    return f"pivkeyu-migration-{_utc_now().strftime('%Y%m%d-%H%M%S')}"
+    return f"echo-migration-{_utc_now().strftime('%Y%m%d-%H%M%S')}"
 
 
 def _clean_data_name(name: str) -> bool:
@@ -237,7 +237,7 @@ def _zip_dir(source_dir: Path, target_file: Path) -> None:
 
 
 def create_migration_bundle() -> dict[str, Any]:
-    temp_root = Path(tempfile.mkdtemp(prefix="pivkeyu-migration-export-"))
+    temp_root = Path(tempfile.mkdtemp(prefix="echo-migration-export-"))
     bundle_name = _bundle_name()
     bundle_root = temp_root / bundle_name
     database_root = bundle_root / DATABASE_DIRNAME
@@ -350,7 +350,7 @@ def _write_archive_to_temp(archive_source: bytes | BinaryIO, target: Path) -> No
 
 
 def _extract_bundle(archive_source: bytes | BinaryIO) -> tuple[Path, dict[str, Any], Path]:
-    temp_root = Path(tempfile.mkdtemp(prefix="pivkeyu-migration-import-"))
+    temp_root = Path(tempfile.mkdtemp(prefix="echo-migration-import-"))
     extract_root = temp_root / "bundle"
     archive_path = temp_root / "upload.zip"
 

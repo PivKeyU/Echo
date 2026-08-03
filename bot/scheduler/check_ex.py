@@ -5,7 +5,7 @@ from datetime import timedelta, datetime
 
 from pyrogram.errors import FloodWait
 from sqlalchemy import and_
-from asyncio import sleep
+from asyncio import sleep, Lock
 from bot import bot, group, LOGGER, _open, config
 from bot.func_helper.emby import emby
 from bot.func_helper.utils import tem_deluser
@@ -13,7 +13,18 @@ from bot.sql_helper.sql_emby import Emby, get_all_emby, sql_update_emby
 from bot.sql_helper.sql_emby2 import get_all_emby2, Emby2, sql_update_emby2
 
 
+_check_lock = Lock()
+
+
 async def check_expired():
+    # 定时任务与手动 /check_ex 可能同时触发，加锁避免并发执行重复处理
+    if _check_lock.locked():
+        return LOGGER.info('【到期检测】- 已有任务正在运行，本次跳过')
+    async with _check_lock:
+        await _run_check_expired()
+
+
+async def _run_check_expired():
     # 询问 到期时间的用户，判断有无积分，有则续期，无就禁用
     rst = get_all_emby(and_(Emby.ex < datetime.now(), Emby.lv == 'b'))
     if rst is None:

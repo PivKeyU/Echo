@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 
 from bot.func_helper import redis_cache
 from bot.sql_helper import Base, Session
+from bot.sql_helper.credential_crypto import CredentialType, decrypt_credential, encrypt_credential
 from sqlalchemy import Column, BigInteger, String, DateTime, Integer, case
 from sqlalchemy import func
 from sqlalchemy import or_
@@ -26,8 +27,8 @@ class Emby(Base):
     tg = Column(BigInteger, primary_key=True, autoincrement=False)
     embyid = Column(String(255), nullable=True)
     name = Column(String(255), nullable=True)
-    pwd = Column(String(255), nullable=True)
-    pwd2 = Column(String(255), nullable=True)
+    pwd = Column(CredentialType(), nullable=True)
+    pwd2 = Column(CredentialType(), nullable=True)
     lv = Column(String(1), default='d')
     cr = Column(DateTime, nullable=True)
     ex = Column(DateTime, nullable=True)
@@ -55,8 +56,8 @@ def _serialize_emby_row(emby: Emby) -> dict:
         "tg": int(emby.tg),
         "embyid": emby.embyid,
         "name": emby.name,
-        "pwd": emby.pwd,
-        "pwd2": emby.pwd2,
+        "pwd": encrypt_credential(emby.pwd),
+        "pwd2": encrypt_credential(emby.pwd2),
         "lv": emby.lv,
         "cr": emby.cr.isoformat() if emby.cr else None,
         "ex": emby.ex.isoformat() if emby.ex else None,
@@ -81,6 +82,8 @@ def _deserialize_emby_row(payload: dict) -> Emby:
     normalized = dict(payload or {})
     for field in ("cr", "ex", "ch"):
         normalized[field] = _restore_datetime(normalized.get(field))
+    for field in ("pwd", "pwd2"):
+        normalized[field] = decrypt_credential(normalized.get(field))
     if normalized.get("tg") is not None:
         normalized["tg"] = int(normalized["tg"])
     for field in ("us", "iv"):
@@ -207,7 +210,18 @@ def _get_cached_emby(query):
         redis_cache.delete_keys(lookup_key, record_key)
         return _CACHE_ABSENT
 
-    return _deserialize_emby_row(record_payload)
+    try:
+        restored = _deserialize_emby_row(record_payload)
+        # Rewrite legacy plaintext cache entries (and entries encrypted with an
+        # older envelope) before returning the object.  Redis should never keep
+        # a credential-bearing payload in the legacy format beyond one read.
+        _cache_emby_payload(_serialize_emby_row(restored), query=query)
+        return restored
+    except (TypeError, ValueError, UnicodeError):
+        # A cache written with a different key or malformed encoding must not
+        # prevent the database path from serving the user.
+        redis_cache.delete_keys(lookup_key, record_key)
+        return _CACHE_ABSENT
 
 def sql_add_emby(tg: int):
     """
@@ -422,6 +436,46 @@ def get_all_emby(condition):
             embies = session.query(Emby).filter(condition).all()
             return embies
         except:
+            return None
+
+
+def sql_adjust_emby_iv(tg: int | str, delta: int) -> int | None:
+    """Atomically adjust a user's balance and return the resulting balance.
+
+    A conditional SQL update prevents concurrent callers from overwriting one
+    another or allowing a debit to make the balance negative.
+    """
+    try:
+        numeric_tg = int(tg)
+        amount = int(delta)
+    except (TypeError, ValueError):
+        return None
+
+    with Session() as session:
+        try:
+            updated = (
+                session.query(Emby)
+                .filter(Emby.tg == numeric_tg)
+                .filter(func.coalesce(Emby.iv, 0) + amount >= 0)
+                .update(
+                    {Emby.iv: func.coalesce(Emby.iv, 0) + amount},
+                    synchronize_session=False,
+                )
+            )
+            if updated != 1:
+                session.rollback()
+                return None
+            session.commit()
+            latest = session.query(Emby).filter(Emby.tg == numeric_tg).first()
+            if latest is None:
+                return None
+            balance = int(latest.iv or 0)
+            _invalidate_emby_payload({"tg": numeric_tg})
+            _invalidate_emby_payload(_serialize_emby_row(latest))
+            return balance
+        except Exception as exc:
+            session.rollback()
+            LOGGER.error(f"原子调整 Emby 积分失败: tg={numeric_tg}, delta={amount}, error={exc}")
             return None
 
 

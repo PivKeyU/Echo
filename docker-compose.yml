@@ -1,4 +1,4 @@
-name: pivkeyu_emby
+name: echo
 
 services:
   postgres:
@@ -11,9 +11,9 @@ services:
         soft: 131072
         hard: 131072
     environment:
-      POSTGRES_USER: pivkeyu
-      POSTGRES_DB: pivkeyu
-      POSTGRES_PASSWORD: pivkeyu
+      POSTGRES_USER: echo
+      POSTGRES_DB: echo
+      POSTGRES_PASSWORD: echo
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - ./db:/var/lib/postgresql/data
@@ -37,11 +37,11 @@ services:
       retries: 20
       start_period: 10s
 
-  pivkeyu_emby:
+  echo:
     build:
       context: .
-    image: ${PIVKEYU_APP_IMAGE:-pivkeyu/pivkeyu_emby:latest}
-    container_name: pivkeyu_emby
+    image: ${PIVKEYU_APP_IMAGE:-echo/echo:latest}
+    container_name: echo
     restart: always
     network_mode: host
     depends_on:
@@ -59,8 +59,8 @@ services:
       API_ID: ${API_ID:-}
       API_HASH: ${API_HASH:-}
       PIVKEYU_NOFILE_SOFT: 131072
-      PIVKEYU_DB_STARTUP_MAX_RETRIES: ${PIVKEYU_DB_STARTUP_MAX_RETRIES:-8}
-      PIVKEYU_DB_STARTUP_RETRY_DELAY: ${PIVKEYU_DB_STARTUP_RETRY_DELAY:-2}
+      PIVKEYU_DB_STARTUP_MAX_RETRIES: ${PIVKEYU_DB_STARTUP_MAX_RETRIES:-30}
+      PIVKEYU_DB_STARTUP_RETRY_DELAY: ${PIVKEYU_DB_STARTUP_RETRY_DELAY:-3}
       PIVKEYU_DB_CONNECT_TIMEOUT: 5
       PIVKEYU_DB_POOL_SIZE: ${PIVKEYU_DB_POOL_SIZE:-32}
       PIVKEYU_DB_MAX_OVERFLOW: ${PIVKEYU_DB_MAX_OVERFLOW:-16}
@@ -98,13 +98,17 @@ services:
       PIVKEYU_REDIS_HOST: 127.0.0.1
       PIVKEYU_REDIS_PORT: 6379
       PIVKEYU_REDIS_DB: 0
-      PIVKEYU_REDIS_PREFIX: pivkeyu_emby
+      PIVKEYU_REDIS_PREFIX: echo
       PIVKEYU_REDIS_EMBY_TTL: 300
       PIVKEYU_REDIS_EMBY_MISS_TTL: 60
       PIVKEYU_REDIS_XIUXIAN_SETTINGS_TTL: 300
       PIVKEYU_REDIS_XIUXIAN_CATALOG_TTL: 300
       PIVKEYU_REGISTER_QUEUE_WORKERS: 2
       PIVKEYU_REGISTER_QUEUE_MAXSIZE: 64
+      # 凭据加密密钥（可选）：不配置时从 bot secret 派生；配置后便于轮换
+      PIVKEYU_CREDENTIAL_KEY: ${PIVKEYU_CREDENTIAL_KEY:-}
+      # Webhook 签名密钥与其它安全参数（与 config.json 中的 webhook_secret 二选一）
+      PIVKEYU_WEBHOOK_SECRET: ${PIVKEYU_WEBHOOK_SECRET:-}
     ulimits:
       nofile:
         soft: 131072
@@ -114,13 +118,13 @@ services:
       - ./log:/app/log
       - /var/run/docker.sock:/var/run/docker.sock
 
-  pivkeyu-caddy:
+  echo-caddy:
     image: ${PIVKEYU_CADDY_IMAGE:-caddy:2-alpine}
-    container_name: pivkeyu-caddy
+    container_name: echo-caddy
     restart: always
     network_mode: host
     depends_on:
-      - pivkeyu_emby
+      - echo
     environment:
       PIVKEYU_PUBLIC_DOMAIN: ${PIVKEYU_PUBLIC_DOMAIN:-localhost}
       PIVKEYU_UPSTREAM: ${PIVKEYU_UPSTREAM:-127.0.0.1:8838}

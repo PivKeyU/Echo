@@ -44,3 +44,26 @@ def configure_runtime_limits(desired_nofile: int | None = None) -> None:
         logger.info("已将 RLIMIT_NOFILE 从 %s 提升到 %s", soft_limit, target_soft)
     except Exception as exc:
         logger.warning("提升 RLIMIT_NOFILE 失败：%s", exc)
+
+
+def get_or_create_event_loop():
+    """获取当前事件循环；不存在时创建并注册，兼容 Python 3.10~3.13。
+
+    Python 3.12+ 中 ``asyncio.get_event_loop()`` 在无运行中循环且未设置
+    事件循环策略时会抛 RuntimeError（3.10/3.11 则自动创建）。本项目在模块
+    导入期（bot.run() 之前）多次调用 get_event_loop() 创建任务（web 服务、
+    watchdog、调度器），需要统一入口保证跨版本行为一致。
+    """
+    import asyncio
+
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+
+    try:
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop

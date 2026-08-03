@@ -117,5 +117,7 @@ def schedule_bot_watchdog(client: Any, bot_token: str) -> asyncio.Task | None:
         LOGGER.info("Bot 自愈看门狗未启用")
         return None
 
-    loop = asyncio.get_event_loop()
+    from bot.func_helper.runtime import get_or_create_event_loop
+
+    loop = get_or_create_event_loop()
     return loop.create_task(run_bot_watchdog(client, bot_token), name="bot-watchdog")

@@ -1,5 +1,5 @@
 {
-  "id": "pivkeyu-template",
+  "id": "echo-template",
   "name": "内置模板插件",
   "version": "0.1.0",
   "description": "内置样例插件，用于验证本女仆侧和 Web 侧插件加载是否正常。",

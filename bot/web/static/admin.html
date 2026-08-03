@@ -239,11 +239,11 @@
             </label>
             <label>
               Compose 服务名
-              <input id="auto-update-compose-service" type="text" placeholder="pivkeyu_emby">
+              <input id="auto-update-compose-service" type="text" placeholder="echo">
             </label>
             <label>
               容器名
-              <input id="auto-update-container-name" type="text" placeholder="pivkeyu_emby">
+              <input id="auto-update-container-name" type="text" placeholder="echo">
             </label>
             <label>
               检查间隔（分钟）
@@ -749,14 +749,7 @@
               注册/续期天数
               <input id="field-us" type="number">
             </label>
-            <label>
-              登录密码
-              <input id="field-pwd" type="text">
-            </label>
-            <label>
-              安全码
-              <input id="field-pwd2" type="text">
-            </label>
+            <p class="muted">登录密码和安全码不在后台用户资料接口中展示或修改，请通过 Emby 客户端或专用重置流程处理。</p>
             <label>
               创建时间
               <input id="field-cr" type="datetime-local">
@@ -953,7 +946,7 @@
               <h3>上传插件 ZIP</h3>
             </div>
             <p class="plugin-meta">压缩包根目录，或唯一一级目录内需要包含 <code>plugin.json</code> 和入口模块文件。</p>
-            <p class="plugin-meta">如果导入结果提示需要重建容器，说明插件声明了额外 Python 依赖。建议切换到本地构建模式后执行 <code>docker compose up -d --build pivkeyu_emby</code>，或自行构建一个自定义镜像。</p>
+            <p class="plugin-meta">如果导入结果提示需要重建容器，说明插件声明了额外 Python 依赖。建议切换到本地构建模式后执行 <code>docker compose up -d --build echo</code>，或自行构建一个自定义镜像。</p>
             <form id="plugin-import-form" class="mini-form plugin-import-form">
               <label>
                 插件压缩包

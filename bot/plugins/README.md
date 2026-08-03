@@ -1,4 +1,4 @@
-# pivkeyu_emby Plugin Guide
+# Echo Plugin Guide
 
 插件目录结构：
 
@@ -82,7 +82,7 @@ def register_web(app, context=None) -> None:
 - 修改已执行过的迁移文件内容是不允许的；请新增新的迁移文件
 - 插件声明了额外 Python 依赖时，需要在本地构建模式下重建容器，构建阶段会自动安装这些依赖
 - `plugin_type=core` 仅适合随仓库和镜像一起发布，不支持后台 ZIP 运行时导入
-- 仓库内置了 `pivkeyu_template` 样例插件，可用于快速验活
+- 仓库内置了 `echo_template` 样例插件，可用于快速验活
 
 Docker 环境下推荐分成两种流程：
 
@@ -110,18 +110,18 @@ Docker 环境下推荐分成两种流程：
 
 ```yaml
 services:
-  pivkeyu_emby:
+  echo:
     build:
       context: .
       dockerfile: Dockerfile
-    image: pivkeyu_emby:local
+    image: echo:local
     pull_policy: never
 ```
 
 然后执行：
 
 ```bash
-docker compose up -d --build pivkeyu_emby
+docker compose up -d --build echo
 ```
 
 容器启动后，系统会自动执行插件依赖安装、数据库迁移与插件加载。

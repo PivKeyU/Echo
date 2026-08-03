@@ -1,3 +1,4 @@
+import asyncio
 import math
 import cn2an
 from datetime import datetime, timezone, timedelta
@@ -6,8 +7,12 @@ from bot import bot, bot_photo, group, sakura_b, LOGGER, ranks, _open
 from bot.func_helper.emby import emby
 from bot.func_helper.utils import convert_to_beijing_time, convert_s, cache, get_users, tem_deluser, async_memoize
 from bot.sql_helper import Session
-from bot.sql_helper.sql_emby import sql_get_emby, sql_update_embys, Emby, sql_update_emby
+from bot.sql_helper.sql_emby import sql_get_emby, Emby, sql_update_emby, sql_adjust_emby_iv
 from bot.func_helper.fix_bottons import plays_list_button
+
+
+_plays_lock = asyncio.Lock()
+
 
 
 class Uplaysinfo:
@@ -20,17 +25,16 @@ class Uplaysinfo:
             play_list = await emby.emby_cust_commit(emby_id=None, days=days, method='sp')
         except Exception as e:
             print(f"Error fetching playback list: {e}")
-            return None, 1, 1
+            return None, 1, []
 
         if play_list is None:
-            return None, 1, 1
+            return None, 1, []
 
         with Session() as session:
             # 更高效地查询 Emby 表的数据
             result = session.query(Emby).filter(Emby.name.isnot(None)).all()
-
             if not result:
-                return None, 1
+                return None, 1, []
 
             total_pages = math.ceil(len(play_list) / 10)
             members = await get_users()
@@ -69,7 +73,7 @@ class Uplaysinfo:
                         # 计算积分
                         points = rank_points[rank - 1] + (int(play_record[1]) // 60) if rank <= 10 else (
                                     int(play_record[1]) // 60)
-                        new_iv = member_info["iv"] + points
+                        new_iv = int(member_info["iv"] or 0) + points
                         leaderboard_data.append([member_info["tg"], new_iv, f'{medal}{emby_name}', points])
 
                     formatted_time = await convert_s(int(play_record[1]))
@@ -83,6 +87,15 @@ class Uplaysinfo:
 
     @staticmethod
     async def user_plays_rank(days=7, uplays=True):
+        # 定时任务与手动 /uranks 可能同时触发，加锁避免并发重复推送与重复结算
+        if _plays_lock.locked():
+            LOGGER.info('【userplayrank】已有观影榜任务在运行，本次跳过')
+            return
+        async with _plays_lock:
+            await Uplaysinfo._run_user_plays_rank(days=days, uplays=uplays)
+
+    @staticmethod
+    async def _run_user_plays_rank(days=7, uplays=True):
         a, n, ls = await Uplaysinfo.users_playback_list(days)
         if not a:
             return await bot.send_photo(chat_id=group[0], photo=bot_photo,
@@ -90,16 +103,26 @@ class Uplaysinfo:
         play_button = await plays_list_button(n, 1, days)
         send = await bot.send_photo(chat_id=group[0], photo=bot_photo, caption=a[0], reply_markup=play_button)
         if uplays and _open.uplays:
-            if sql_update_embys(some_list=ls, method='iv'):
+            # 逐个原子入账，避免基于快照的批量写覆盖并发期间的余额变化
+            granted = []
+            for entry in ls:
+                tg_id, _old_iv, label, points = entry
+                new_iv = sql_adjust_emby_iv(tg_id, points)
+                if new_iv is not None:
+                    granted.append([tg_id, new_iv, label, points])
+            if granted:
                 text = f'**自动将观看时长转换为{sakura_b}**\n\n'
-                for i in ls:
+                for i in granted:
                     text += f'[{i[2]}](tg://user?id={i[0]}) 获得了 {i[3]} {sakura_b}奖励\n'
                 n = 4096
                 chunks = [text[i:i + n] for i in range(0, len(text), n)]
                 for c in chunks:
                     await bot.send_message(chat_id=group[0],
                                            text=c + f'\n⏱️ 当前时间 - {datetime.now().strftime("%Y-%m-%d")}')
-                LOGGER.info(f'【userplayrank】： ->成功 数据库执行批量操作{ls}')
+                LOGGER.info(f'【userplayrank】： ->成功 数据库执行批量操作{granted}')
+                # 结算成功后失效播放榜缓存：锁只防并发，不防 120s 内
+                # 定时任务与手动 /uranks 的先后两次运行，不失效会重复结算。
+                Uplaysinfo.users_playback_list.invalidate(days)
             else:
                 await send.reply(f'**🎂！！！为用户增加{sakura_b}出错啦** @工程师看看吧~ ')
                 LOGGER.error(f'【userplayrank】：-？失败 数据库执行批量操作{ls}')

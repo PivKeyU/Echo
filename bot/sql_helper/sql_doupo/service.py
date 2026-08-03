@@ -3594,7 +3594,7 @@ def admin_grant_resource(tg: int, resource: str, amount: int) -> dict[str, Any]:
                 tg=actor_tg,
                 action_type="admin",
                 title="后台资源调整",
-                detail=f"{resource} {delta:+d}",
+                detail=f"{resource} {raw_amount:+d}",
             )
         )
         session.commit()

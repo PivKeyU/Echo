@@ -61,7 +61,10 @@ async def renew_user(_, msg):
     # 无脑 允许播放
     if ex_new > Now:
         lv = 'a' if e.lv == 'a' else 'b'
-        await emby.emby_change_policy(emby_id=e.embyid, disable=False)
+        if e.embyid and not await emby.emby_change_policy(emby_id=e.embyid, disable=False):
+            await reply.edit("❌ Emby 策略修改失败（允许播放），数据库未变更，请检查 Emby 服务后重试")
+            LOGGER.error(f"【admin】[renew]：{gm_name} 对 emby账户 {name} 允许播放策略修改失败")
+            return
 
     # 没有白名单就寄
     elif ex_new < Now:
@@ -69,14 +72,25 @@ async def renew_user(_, msg):
             pass
         else:
             lv = 'c'
-            await emby.emby_change_policy(emby_id=e.embyid, disable=True)
-
+            if e.embyid and not await emby.emby_change_policy(emby_id=e.embyid, disable=True):
+                await reply.edit("❌ Emby 策略修改失败（禁用播放），数据库未变更，请检查 Emby 服务后重试")
+                LOGGER.error(f"【admin】[renew]：{gm_name} 对 emby账户 {name} 禁用播放策略修改失败")
+                return
     if stats == 1:
         expired = 1 if lv == 'c' else 0
-        sql_update_emby2(Emby2.embyid == e.embyid, ex=ex_new, expired=expired)
+        updated = sql_update_emby2(Emby2.embyid == e.embyid, ex=ex_new, expired=expired)
     else:
-        sql_update_emby(Emby.tg == e.tg, ex=ex_new, lv=lv)
+        updated = sql_update_emby(Emby.tg == e.tg, ex=ex_new, lv=lv)
 
+    if not updated:
+        # DB 写入失败：回滚 Emby 策略（若刚改过），避免 Emby 与数据库不一致。
+        LOGGER.error(f"【admin】[renew]：{gm_name} 对 emby账户 {name} 数据库写入失败，尝试回滚 Emby 策略")
+        try:
+            if e.embyid:
+                await emby.emby_change_policy(emby_id=e.embyid, disable=(lv == 'c'))
+        except Exception as exc:
+            LOGGER.error(f"【admin】[renew]：{name} Emby 策略回滚失败: {exc}")
+        return await reply.edit("❌ 数据库写入失败，Emby 策略已回滚，请稍后重试")
     i = await reply.edit(
         f'🍒 __ {gm_name} 已调整 emby 用户 {name} 到期时间 {days} 天 (以当前时间计)__'
         f'\n📅 实时到期：{ex_new.strftime("%Y-%m-%d %H:%M:%S")}')

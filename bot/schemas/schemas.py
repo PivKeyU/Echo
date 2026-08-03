@@ -13,9 +13,9 @@ MAX_INT_VALUE = 2147483647  # 2^31 - 1
 MIN_INT_VALUE = -2147483648  # -2^31
 
 DEFAULT_DB_HOST = "127.0.0.1"
-DEFAULT_DB_USER = "pivkeyu"
-DEFAULT_DB_PASSWORD = "pivkeyu"
-DEFAULT_DB_NAME = "pivkeyu"
+DEFAULT_DB_USER = "echo"
+DEFAULT_DB_PASSWORD = "echo"
+DEFAULT_DB_NAME = "echo"
 DEFAULT_DB_BACKEND = "postgresql"
 DEFAULT_DB_PORTS = {
     "postgresql": 5432,
@@ -174,7 +174,7 @@ class Open(BaseModel):
 
 
 class Ranks(BaseModel):
-    logo: str = "pivkeyu_emby"
+    logo: str = "Echo"
     backdrop: bool = False
 
 
@@ -222,10 +222,10 @@ class MP(BaseModel):
 
 class AutoUpdate(BaseModel):
     status: bool = True
-    git_repo: Optional[str] = "PivKeyU/Pivkeyu_emby"  # github仓库名/魔改的请填自己的仓库
-    docker_image: Optional[str] = "pivkeyu/pivkeyu_emby:latest"
-    container_name: Optional[str] = "pivkeyu_emby"
-    compose_service: Optional[str] = "pivkeyu_emby"
+    git_repo: Optional[str] = "PivKeyU/Echo"  # github仓库名/魔改的请填自己的仓库
+    docker_image: Optional[str] = "echo/echo:latest"
+    container_name: Optional[str] = "echo"
+    compose_service: Optional[str] = "echo"
     check_interval_minutes: int = 30
     commit_sha: Optional[str] = None  # 最近一次commit
     image_digest: Optional[str] = None  # 最近一次已应用的镜像摘要
@@ -245,6 +245,9 @@ class API(BaseModel):
     miniapp_title: Optional[str] = "片刻面板"
     access_token: Optional[str] = ""
     admin_token: Optional[str] = ""
+    # Webhook authentication is deliberately separate from both API tokens.
+    webhook_secret: Optional[str] = ""
+    webhook_replay_window: int = Field(default=300, ge=1, le=86400)
     webapp_auth_max_age: int = 86400
     allow_origins: Optional[List[Union[str, int]]] = None
 
@@ -259,6 +262,20 @@ class RedEnvelope(BaseModel):
     status: bool = True  # 是否开启红包
     allow_private: bool = True # 是否允许专属红包
 
+
+class Emotion(BaseModel):
+    # 服务端 Emotion 集成适配器。凭据（integration credential）只由本服务持有，
+    # 通过 HTTPS/私网 + Bearer 调用 Emotion /integration/v1 控制面，
+    # 绝不返回给浏览器、Mini App 或普通 Telegram 请求。
+    status: bool = False  # 是否启用 Emotion 联动
+    url: Optional[str] = ""  # Emotion 服务地址，如 https://emotion.example.com
+    credential: Optional[str] = ""  # Emotion 面板创建的 integration credential 明文（仅此配置持有）
+    timeout: int = Field(default=10, ge=1, le=120)  # 请求超时（秒）
+    max_retries: int = Field(default=1, ge=0, le=5)  # 失败后的额外重试次数
+    # 追更事件轮询：领取/确认/释放订阅新集事件
+    event_poll_interval: int = Field(default=60, ge=10, le=3600)  # 轮询间隔（秒）
+    event_claim_limit: int = Field(default=50, ge=1, le=100)  # 单次领取上限
+    notify_on_new_episode: bool = True  # 新集事件是否推送 TG 通知
 class Config(BaseModel):
     bot_name: str
     bot_token: str
@@ -323,6 +340,7 @@ class Config(BaseModel):
     auto_update: AutoUpdate = Field(default_factory=AutoUpdate)
     red_envelope: RedEnvelope = Field(default_factory=RedEnvelope)
     api: API = Field(default_factory=API)
+    emotion: Emotion = Field(default_factory=Emotion)
     plugin_nav: Dict[str, bool] = Field(default_factory=dict)
     plugin_enabled: Dict[str, bool] = Field(default_factory=dict)
     # 全局 Emby 服务暂停开关：开启后所有用户的 Emby 账号将被禁用

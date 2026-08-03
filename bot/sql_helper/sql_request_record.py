@@ -1,9 +1,7 @@
 from sqlalchemy import Column, String, DateTime, BigInteger, Text, Float
 import datetime
+from bot import LOGGER
 from bot.sql_helper import Base, Session
-from cacheout import Cache
-
-cache = Cache()
 
 
 class RequestRecord(Base):
@@ -63,22 +61,25 @@ def sql_get_request_record_by_transfer_state(transfer_state: str = None):
 
 
 def sql_update_request_status(download_id: str, download_state: str, transfer_state: str = None, progress: float = None, left_time: str = None):
-    """更新下载状态"""
+    """更新下载状态；记录不存在时返回 False 并告警"""
     with Session() as session:
         try:
             record = session.query(RequestRecord).filter(
                 RequestRecord.download_id == download_id).first()
-            if record:
-                if download_state is not None:
-                    record.download_state = download_state
-                if transfer_state is not None:
-                    record.transfer_state = transfer_state
-                if progress is not None:
-                    record.progress = progress
-                if left_time is not None:
-                    record.left_time = left_time
-                session.commit()
-                return True
+            if record is None:
+                LOGGER.warning(f"请求记录不存在，无法更新状态: download_id={download_id}")
+                return False
+            if download_state is not None:
+                record.download_state = download_state
+            if transfer_state is not None:
+                record.transfer_state = transfer_state
+            if progress is not None:
+                record.progress = progress
+            if left_time is not None:
+                record.left_time = left_time
+            session.commit()
+            return True
         except Exception as e:
             session.rollback()
+            LOGGER.error(f"更新请求记录状态失败: download_id={download_id}: {e}")
             return False

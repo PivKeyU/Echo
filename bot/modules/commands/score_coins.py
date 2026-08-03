@@ -12,7 +12,7 @@ from pyrogram.errors import BadRequest
 from bot import bot, prefixes, LOGGER, sakura_b
 from bot.func_helper.filters import admins_on_filter
 from bot.func_helper.msg_utils import sendMessage, deleteMessage
-from bot.sql_helper.sql_emby import sql_get_emby, sql_update_emby, Emby
+from bot.sql_helper.sql_emby import sql_get_emby, sql_update_emby, Emby, sql_adjust_emby_iv
 from bot.func_helper.fix_bottons import group_f
 
 
@@ -81,14 +81,16 @@ async def coins_user(_, msg):
     # 检查计算结果是否超出安全范围
     if us > MAX_INT_VALUE or us < MIN_INT_VALUE:
         return await sendMessage(msg, f"❌ 操作失败！计算结果超出安全范围（{MIN_INT_VALUE} 到 {MAX_INT_VALUE}）。", timer=60)
-    
-    if sql_update_emby(Emby.tg == uid, iv=us):
-        await asyncio.gather(sendMessage(msg,
-                                         f"· 🎯 {gm_name} 调节了 [{first.first_name}](tg://user?id={uid}) {sakura_b}： {b}"
-                                         f"\n· 🎟️ 实时{sakura_b}: **{us}**"),
-                             msg.delete())
-        LOGGER.info(
-            f"【admin】[{sakura_b}]- {gm_name} 对 {first.first_name}-{uid}  {b}{sakura_b}")
-    else:
+
+    # 原子读改写余额，避免并发覆盖
+    us = sql_adjust_emby_iv(uid, b)
+    if us is None:
         await sendMessage(msg, '⚠️ 数据库操作失败，请检查')
         LOGGER.info(f"【admin】[{sakura_b}]：{gm_name} 对 {first.first_name}-{uid} 数据操作失败")
+        return
+    await asyncio.gather(sendMessage(msg,
+                                     f"· 🎯 {gm_name} 调节了 [{first.first_name}](tg://user?id={uid}) {sakura_b}： {b}"
+                                     f"\n· 🎟️ 实时{sakura_b}: **{us}**"),
+                         msg.delete())
+    LOGGER.info(
+        f"【admin】[{sakura_b}]- {gm_name} 对 {first.first_name}-{uid}  {b}{sakura_b}")

@@ -14,7 +14,6 @@ from .admin import router as admin_router
 from .ban_playlist import route as ban_playlist_route
 from .login import router as login_router
 from .miniapp import is_admin_user_id, router as miniapp_router, verify_init_data
-from .user_info import route as user_info_route
 from .webhook.client_filter import router as client_filter_router
 
 emby_api_route = APIRouter(prefix="/emby", tags=["对接 Emby 的接口"])
@@ -73,14 +72,19 @@ async def verify_admin_token(request: Request):
         return True
 
     if init_data:
-        verified = verify_init_data(init_data)
-        telegram_user = verified["user"]
-        if is_admin_user_id(telegram_user["id"]):
+        try:
+            verified = verify_init_data(init_data)
+            telegram_user = verified["user"]
+            telegram_user_id = int(telegram_user["id"])
+        except (KeyError, TypeError, ValueError, HTTPException) as exc:
+            LOGGER.warning(f"Invalid Telegram admin init data: {exc}")
+            raise HTTPException(status_code=401, detail="后台 Telegram 登录信息无效") from None
+        if is_admin_user_id(telegram_user_id):
             request.state.admin_auth = "telegram"
             request.state.admin_user = telegram_user
             return True
 
-        LOGGER.warning(f"Telegram user {telegram_user['id']} tried to access admin API without admin rights")
+        LOGGER.warning(f"Telegram user {telegram_user_id} tried to access admin API without admin rights")
         raise HTTPException(status_code=403, detail="哼，你这个账号没有后台权限啦！")
 
     if token:
@@ -90,18 +94,23 @@ async def verify_admin_token(request: Request):
     raise HTTPException(status_code=401, detail="本女仆没收到后台认证信息哦~")
 
 
+# Imported after the dependency definitions to avoid a circular import while
+# allowing mutating /user endpoints to explicitly depend on verify_admin_token.
+from .user_info import route as user_info_route
+
+
+# Playlist banning changes Emby and local account state, so it is an
+# administrator-only operation.  The client-filter webhook has two layers of
+# authentication: the normal API token and its dedicated HMAC signature.
 emby_api_route.include_router(
     ban_playlist_route,
-    dependencies=[Depends(verify_token)],
+    dependencies=[Depends(verify_admin_token)],
 )
 emby_api_route.include_router(
     client_filter_router,
-    dependencies=[Depends(verify_token)]
+    dependencies=[Depends(verify_token)],
 )
-user_api_route.include_router(
-    user_info_route,
-    dependencies=[Depends(verify_token)]
-)
+user_api_route.include_router(user_info_route)
 auth_api_route.include_router(
     login_router,
     dependencies=[Depends(verify_token)]

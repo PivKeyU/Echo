@@ -23,12 +23,7 @@ def async_memoize(ttl=120):
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            raw = ":".join([
-                func.__qualname__,
-                hashlib.md5(json.dumps(args, sort_keys=True, default=str).encode()).hexdigest(),
-                hashlib.md5(json.dumps(kwargs, sort_keys=True, default=str).encode()).hexdigest(),
-            ])
-            key = f"async_memoize:{raw}"
+            key = _memo_key(func, args, kwargs)
             result = cache.get(key)
             if result is not None:
                 return result
@@ -37,6 +32,27 @@ def async_memoize(ttl=120):
                 cache.set(key, result, ttl=ttl)
             return result
 
+        def _memo_key(fn, args, kwargs):
+            raw = ":".join([
+                fn.__qualname__,
+                hashlib.md5(json.dumps(args, sort_keys=True, default=str).encode()).hexdigest(),
+                hashlib.md5(json.dumps(kwargs, sort_keys=True, default=str).encode()).hexdigest(),
+            ])
+            return f"async_memoize:{raw}"
+
+        def invalidate(*args, **kwargs):
+            """按相同函数名删除该函数全部缓存条目（结算类逻辑防重复）。
+
+            类方法（classmethod + memoize）经绑定后参数含 cls，调用方难以
+            复现完全一致的 key，因此按函数限定名前缀删除更稳妥。
+            """
+            prefix = f"async_memoize:{func.__qualname__}:"
+            stale = [key for key in cache.keys() if str(key).startswith(prefix)]
+            if stale:
+                cache.delete_many(*stale)
+
+
+        wrapper.invalidate = invalidate
         return wrapper
 
     return decorator
