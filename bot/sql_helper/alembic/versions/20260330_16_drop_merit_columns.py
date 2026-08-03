@@ -80,4 +80,4 @@ def downgrade() -> None:
     _add_if_missing("xiuxian_scene_drops", sa.Column("merit_reward", sa.Integer(), nullable=False, server_default="0"))
     _add_if_missing("xiuxian_explorations", sa.Column("merit_reward", sa.Integer(), nullable=False, server_default="0"))
     _add_if_missing("xiuxian_tasks", sa.Column("reward_merit", sa.Integer(), nullable=False, server_default="0"))
-    _add_if_missing("xiuxian_red_envelopes", sa.Column("merit_rewarded", sa.Boolean(), nullable=False, server_default="0"))
+    _add_if_missing("xiuxian_red_envelopes", sa.Column("merit_rewarded", sa.Boolean(), nullable=False, server_default=sa.false()))

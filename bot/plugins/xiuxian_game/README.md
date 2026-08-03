@@ -26,6 +26,20 @@ bot/plugins/xiuxian_game/
 - Mini App 用户页
 - Mini App 管理页
 
+### 1.1 2026-04 更新摘要
+
+以下内容为当前版本的增量更新，若与旧版描述冲突，以本节和当前代码实现为准：
+
+- Mini App 用户拍卖行已接入，可发起个人拍卖并查看群内拍卖盘。
+- 新增多档打工/委托玩法，收益按门槛和风险分层，高投入对应更高回报。
+- 修炼、打工、秘境、斗法胜出都可概率触发小幅属性成长，且概率、单次涨幅、抽取属性数可在后台配置。
+- 奇遇中的心志/魅力/因果奖励已从用户侧玩法中剔除，避免出现无效配置。
+- 宗门默认门槛新增战力要求，基础加成和职位薪资已按当前战力体系重调。
+- 炼制配方会直接标注材料来源，支持显示秘境、事件、官坊与其他炼制链路。
+- `/rob` 的偷取灵石不再是固定值，而是与攻击、身法、机缘、神识和双方战力差挂钩。
+- `/gift` 支持回复目标后直接使用 `/gift <灵石数量>`，Mini App 内也支持搜索用户名后赠石或赠送背包物品。
+- Mini App 页面补充了群聊快捷命令提示，并对赠送、炼制、拍卖等区域做了更适合手机端的交互优化。
+
 ## 2. 用户侧入口
 
 ### 2.1 Telegram 私聊入口
@@ -65,13 +79,26 @@ bot/plugins/xiuxian_game/
 
 ### 2.3 群内命令
 
-- `/xiuxian_rank`
-- `/仙榜`
+- `/xiuxian_rank [stone|realm|artifact] [页码]`
+- `/train`
+- `/work [委托名]`
+- `/salary`
+- `/duel [赌注]`
+- `/deathduel [赌注]`
+- `/servitudeduel [赌注]`
+- `/seek`
+- `/rob`
+- `/gift <灵石数量>`（回复目标时使用）
+- `/gift <TGID> <灵石数量>`（兼容旧写法）
 
 说明：
 
-- 群内查看排行榜
-- 默认先打开灵石榜第一页
+- `/xiuxian_rank` 群内查看排行榜，默认打开灵石榜第一页
+- `/train` 群内直接完成一次吐纳修炼
+- `/work` 群内直接结算灵石委托；不填委托名时会按收益从高到低一键完成当前全部可承接的委托
+- `/salary` 群内直接领取宗门俸禄
+- `/gift` 支持 reply 目标后直接赠石，不再强制填写 TGID
+- `/rob` 会按双方当前属性和战力动态计算可偷取灵石
 
 ### 2.4 斗法命令
 
@@ -160,6 +187,10 @@ bot/plugins/xiuxian_game/
 7. 须弥
 8. 芥子
 9. 混元一体
+10. 炼虚
+11. 合体
+12. 渡劫
+13. 真仙
 
 ### 4.2 层数规则
 
@@ -277,7 +308,6 @@ Mini App 用户页和回调面板都可以执行：
 - `foundation`
 - `clear_poison`
 - `cultivation`
-- `stone`
 - `bone`
 - `comprehension`
 - `divine_sense`
@@ -300,7 +330,6 @@ Mini App 用户页和回调面板都可以执行：
 - `foundation`：突破辅助丹
 - `clear_poison`：清丹毒
 - `cultivation`：直接加修为
-- `stone`：直接加灵石
 - `bone`：直接加根骨
 - `comprehension`：直接加悟性
 - `divine_sense`：直接加神识
@@ -426,22 +455,16 @@ shop_broadcast_cost
 管理员可在修仙后台设置：
 
 - `coin_exchange_rate`
-- `exchange_fee_percent`
-- `min_coin_exchange`
 
 说明：
 
 - `coin_exchange_rate`
-  - 1 片刻碎片可兑换多少灵石
-- `exchange_fee_percent`
-  - 每次互兑的手续费百分比
-- `min_coin_exchange`
-  - 灵石兑换 Emby 货币时，最少要消耗多少灵石
+  - 1 片刻碎片可兑换多少灵石，反向也按同一比例整份兑换
 
 ### 8.3 当前实现规则
 
-- Emby 货币 -> 灵石：按比例扣手续费
-- 灵石 -> Emby 货币：按比例扣手续费，并校验最小兑换值
+- Emby 货币 -> 灵石：按比例直接兑换，不收手续费
+- 灵石 -> Emby 货币：按比例整份兑换，不收手续费；不足一份的灵石留在余额中
 
 相关封装在：
 
@@ -590,8 +613,6 @@ shop_broadcast_cost
 当前主要字段：
 
 - `coin_exchange_rate`
-- `exchange_fee_percent`
-- `min_coin_exchange`
 - `shop_broadcast_cost`
 - `official_shop_name`
 
@@ -706,9 +727,7 @@ shop_broadcast_cost
 
 在修仙管理页的“货币与商店设置”里修改：
 
-- 1 灵石可兑换多少片刻碎片
-- 手续费
-- 最低兑换额
+- 1 片刻碎片可兑换多少灵石
 
 ### 13.6 管理风月阁
 
@@ -727,12 +746,23 @@ shop_broadcast_cost
 - `POST /plugins/xiuxian/api/bootstrap`
 - `POST /plugins/xiuxian/api/enter`
 - `POST /plugins/xiuxian/api/train`
+- `POST /plugins/xiuxian/api/commission/claim`
 - `POST /plugins/xiuxian/api/breakthrough`
 - `POST /plugins/xiuxian/api/pill/use`
 - `POST /plugins/xiuxian/api/artifact/equip`
+- `POST /plugins/xiuxian/api/explore/start`
+- `POST /plugins/xiuxian/api/explore/claim`
+- `POST /plugins/xiuxian/api/recipe/craft`
 - `POST /plugins/xiuxian/api/exchange`
 - `POST /plugins/xiuxian/api/shop/personal`
+- `POST /plugins/xiuxian/api/auction/personal`
 - `POST /plugins/xiuxian/api/shop/purchase`
+- `POST /plugins/xiuxian/api/player/search`
+- `POST /plugins/xiuxian/api/gift`
+- `POST /plugins/xiuxian/api/gift/item`
+- `POST /plugins/xiuxian/api/sect/join`
+- `POST /plugins/xiuxian/api/sect/leave`
+- `POST /plugins/xiuxian/api/sect/salary`
 - `POST /plugins/xiuxian/api/leaderboard`
 - `GET /plugins/xiuxian/api/shop`
 
@@ -776,6 +806,12 @@ shop_broadcast_cost
 9. 给测试用户发放法宝和丹药
 10. 在风月阁上架商品
 11. 用户购买商品
-12. 群内回复他人发起一次 `/duel`
+12. 用户发起一场个人拍卖并在群里看到竞价消息
+13. 群内回复他人测试 `/gift 100`
+14. 群内执行一次 `/train`、`/work`、`/salary`
+15. 群内回复他人发起一次 `/duel`
+16. 群内回复他人测试一次 `/rob`
+17. Mini App 内搜索一个 `@username` 并完成一次物品赠送
+18. 后台修改一组“玩法属性小成长”参数后再次验证修炼/打工/秘境结算
 
 这套流程都通过后，修仙插件就可以对外开放使用了。

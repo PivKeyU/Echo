@@ -3,7 +3,6 @@
 支持 Nezha V0、V1 API 和 Komari API
 """
 import humanize as humanize
-import requests as r
 import aiohttp
 import asyncio
 import logging
@@ -63,12 +62,6 @@ class KomariAPI:
         data = await self.request('GET', f'/recent/{uuid}')
         return data
 
-    async def get_version(self):
-        """获取 Komari 服务端版本信息"""
-        data = await self.request('GET', '/version')
-        return data
-
-
 async def sever_info_komari_async(tz, tz_api, tz_id):
     """
     Komari API: 获取服务器信息
@@ -80,9 +73,7 @@ async def sever_info_komari_async(tz, tz_api, tz_id):
         return None
 
     api = KomariAPI(tz, tz_api if tz_api else None)
-    b = []
     try:
-        # 获取所有节点列表
         nodes_resp = await api.get_nodes()
         if not nodes_resp or nodes_resp.get('status') != 'success':
             logger.warning(f"Komari 获取节点列表失败: {nodes_resp}")
@@ -90,39 +81,53 @@ async def sever_info_komari_async(tz, tz_api, tz_id):
             return None
 
         nodes = nodes_resp.get('data', [])
-        
+
+        # 筛选目标节点
+        target_nodes = []
         for node in nodes:
             node_uuid = node.get('uuid')
-            node_name = node.get('name', '未知节点')
-            
-            # 如果指定了 tz_id，只显示指定的节点
             if tz_id:
-                # tz_id 可以是 UUID 字符串或者数字索引
                 if node_uuid not in tz_id and str(nodes.index(node) + 1) not in [str(x) for x in tz_id]:
                     continue
+            target_nodes.append(node)
 
-            # 获取节点最近状态
-            recent_resp = await api.get_node_recent(node_uuid)
-            
+        if not target_nodes:
+            await api.close()
+            return None
+
+        # 并行获取所有目标节点的最近状态
+        async def fetch_node_data(node):
+            node_uuid = node.get('uuid')
+            try:
+                recent_resp = await api.get_node_recent(node_uuid)
+                return node, node_uuid, recent_resp
+            except Exception as e:
+                logger.warning(f"Komari 获取节点 {node_uuid} 状态异常: {e}")
+                return node, node_uuid, None
+
+        results = await asyncio.gather(*[fetch_node_data(node) for node in target_nodes])
+
+        b = []
+        for node, node_uuid, recent_resp in results:
+            node_name = node.get('name', '未知节点')
+
             if recent_resp and recent_resp.get('status') == 'success' and recent_resp.get('data'):
-                # 获取最新的一条数据
                 latest_data = recent_resp['data'][-1] if recent_resp['data'] else None
-                
+
                 if latest_data:
-                    # 解析数据
                     uptime_sec = latest_data.get('uptime', 0)
                     uptime = f'{int(uptime_sec / 86400)} 天' if uptime_sec > 0 else '⚠️掉线辣'
-                    
+
                     cpu_data = latest_data.get('cpu', {})
                     CPU = f"{cpu_data.get('usage', 0):.2f}"
-                    
+
                     ram_data = latest_data.get('ram', {})
                     mem_total = ram_data.get('total', 0)
                     mem_used = ram_data.get('used', 0)
                     MemTotal = humanize.naturalsize(mem_total, gnu=True)
                     MemUsed = humanize.naturalsize(mem_used, gnu=True)
                     Mempercent = f"{(mem_used / mem_total) * 100:.2f}" if mem_total != 0 else "0"
-                    
+
                     network_data = latest_data.get('network', {})
                     NetInSpeed = humanize.naturalsize(network_data.get('down', 0), gnu=True)
                     NetOutSpeed = humanize.naturalsize(network_data.get('up', 0), gnu=True)
@@ -139,7 +144,6 @@ async def sever_info_komari_async(tz, tz_api, tz_id):
                     NetInSpeed = "0"
                     NetOutSpeed = "0"
             else:
-                # 没有状态数据，可能离线
                 uptime = '⚠️掉线辣'
                 CPU = "0.00"
                 MemTotal = humanize.naturalsize(node.get('mem_total', 0), gnu=True)
@@ -150,7 +154,6 @@ async def sever_info_komari_async(tz, tz_api, tz_id):
                 NetInSpeed = "0"
                 NetOutSpeed = "0"
 
-            # 使用节点的 region 信息
             region = node.get('region', '')
             display_name = f"{region} {node_name}".strip() if region else node_name
 
@@ -241,43 +244,41 @@ class NezhaV1API:
         data = await self.request('GET', '/server')
         return data
 
-    async def get_server_detail(self, server_id):
-        servers = await self.get_servers()
-        if servers and servers.get('success'):
-            for server in servers['data']:
-                if server['id'] == server_id:
-                    return server
-        return None
 
-
-def sever_info_v0(tz, tz_api, tz_id):
+async def sever_info_v0(tz, tz_api, tz_id):
     """V0 API: 使用 token 认证"""
-    if not tz or not tz_api or not tz_id: 
+    if not tz or not tz_api or not tz_id:
         return None
-    # 请求头
-    tz_headers = {
-        'Authorization': tz_api  # 后台右上角下拉菜单获取 API Token
-    }
-    b = []
+    tz_headers = {'Authorization': tz_api}
+    timeout = aiohttp.ClientTimeout(total=10, connect=5)
     try:
-        # 请求地址
-        for x in tz_id:
-            tz_url = f'{tz}/api/v1/server/details?id={x}'
-            # 发送GET请求，获取服务器流量信息
-            res = r.get(tz_url, headers=tz_headers).json()
+        async def fetch_server(session, server_id):
+            tz_url = f'{tz}/api/v1/server/details?id={server_id}'
+            try:
+                async with session.get(tz_url) as resp:
+                    if resp.status != 200:
+                        logger.warning(f"Nezha V0 API 请求失败: {resp.status} - {tz_url}")
+                        return None
+                    return await resp.json()
+            except Exception as e:
+                logger.warning(f"Nezha V0 API 请求异常: {e} - {tz_url}")
+                return None
+
+        async with aiohttp.ClientSession(headers=tz_headers, timeout=timeout) as session:
+            results = await asyncio.gather(*[fetch_server(session, x) for x in tz_id])
+
+        b = []
+        for res in results:
+            if res is None:
+                continue
             detail = res["result"][0]
-            """cpu"""
             uptime = f'{int(detail["status"]["Uptime"] / 86400)} 天' if detail["status"]["Uptime"] != 0 else '⚠️掉线辣'
             CPU = f"{detail['status']['CPU']:.2f}"
-            """内存"""
             MemTotal = humanize.naturalsize(detail['host']['MemTotal'], gnu=True)
             MemUsed = humanize.naturalsize(detail['status']['MemUsed'], gnu=True)
-            Mempercent = f"{(detail['status']['MemUsed'] / detail['host']['MemTotal']) * 100:.2f}" if detail['host'][
-                                                                                                          'MemTotal'] != 0 else "0"
-            """流量"""
+            Mempercent = f"{(detail['status']['MemUsed'] / detail['host']['MemTotal']) * 100:.2f}" if detail['host']['MemTotal'] != 0 else "0"
             NetInTransfer = humanize.naturalsize(detail['status']['NetInTransfer'], gnu=True)
             NetOutTransfer = humanize.naturalsize(detail['status']['NetOutTransfer'], gnu=True)
-            """网速"""
             NetInSpeed = humanize.naturalsize(detail['status']['NetInSpeed'], gnu=True)
             NetOutSpeed = humanize.naturalsize(detail['status']['NetOutSpeed'], gnu=True)
 
@@ -288,7 +289,8 @@ def sever_info_v0(tz, tz_api, tz_id):
                          f"· 🌊 流量 | ↓{NetInTransfer}  ↑{NetOutTransfer}\n"
             b.append(dict(name=f'{detail["name"]}', id=detail["id"], server=status_msg))
         return b
-    except:
+    except Exception:
+        logger.exception("Nezha V0 API 获取服务器信息异常")
         return None
 
 
@@ -377,5 +379,5 @@ async def sever_info(tz, tz_api, tz_id, tz_version="v0", tz_username=None, tz_pa
         # Komari 使用异步调用
         return await sever_info_komari_async(tz, tz_api, tz_id)
     else:
-        # 默认使用 V0 API (同步调用)
-        return sever_info_v0(tz, tz_api, tz_id)
+        # 默认使用 V0 API (异步调用)
+        return await sever_info_v0(tz, tz_api, tz_id)

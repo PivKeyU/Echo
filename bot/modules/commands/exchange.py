@@ -6,13 +6,13 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.exc import IntegrityError
 
-from bot import LOGGER, _open, bot, bot_photo, ranks
+from bot import LOGGER, _open, bot, bot_photo, ranks, group
 from bot.func_helper.emby import emby
 from bot.func_helper.fix_bottons import register_code_ikb
 from bot.func_helper.msg_utils import sendMessage, sendPhoto
 from bot.sql_helper import Session
 from bot.sql_helper.sql_code import Code, CodeRedeem
-from bot.sql_helper.sql_emby import Emby, sql_get_emby
+from bot.sql_helper.sql_emby import Emby, sql_get_emby, sql_invalidate_emby_cache
 
 
 def is_renew_code(input_string):
@@ -36,9 +36,10 @@ def _code_usage_text(record: Code) -> str:
 
 
 def _mask_code(code_value: str) -> str:
+    code_value = str(code_value or "")
     if len(code_value) <= 7:
-        return "******"
-    return f"{code_value[:-7]}{'*' * 7}"
+        return "░" * len(code_value)
+    return f"{code_value[:-7]}{'░' * 7}"
 
 
 def _code_prefix(code_value: str) -> str:
@@ -54,6 +55,10 @@ def _load_locked_code(session, code_value: str):
     return session.query(Code).filter(Code.code == code_value).with_for_update().first()
 
 
+def _load_locked_emby_user(session, user_id: int):
+    return session.query(Emby).filter(Emby.tg == user_id).with_for_update().first()
+
+
 def _user_already_redeemed(session, code_value: str, user_id: int) -> bool:
     return (
         session.query(CodeRedeem.id)
@@ -64,7 +69,13 @@ def _user_already_redeemed(session, code_value: str, user_id: int) -> bool:
 
 
 def _apply_code_redeem(session, record: Code, user_id: int):
-    if _user_already_redeemed(session, record.code, user_id):
+    """Stage a code redemption in the caller's transaction.
+
+    The caller owns the final commit so consuming the code and granting the
+    corresponding account entitlement remain atomic.
+    """
+    code_value = str(record.code)
+    if _user_already_redeemed(session, code_value, user_id):
         return record, "duplicate_user"
 
     if _code_remaining(record) <= 0:
@@ -77,7 +88,7 @@ def _apply_code_redeem(session, record: Code, user_id: int):
     record.usedtime = consumed_at
     session.add(
         CodeRedeem(
-            code=record.code,
+            code=code_value,
             user_id=user_id,
             owner_tg=record.tg,
             code_days=record.us,
@@ -87,13 +98,12 @@ def _apply_code_redeem(session, record: Code, user_id: int):
     )
 
     try:
-        session.commit()
+        session.flush()
     except IntegrityError:
         session.rollback()
-        refreshed = session.query(Code).filter(Code.code == record.code).first()
+        refreshed = session.query(Code).filter(Code.code == code_value).first()
         return refreshed or record, "duplicate_user"
 
-    session.refresh(record)
     return record, "ok"
 
 
@@ -150,16 +160,16 @@ async def rgs_code(_, msg, register_code):
     if not data:
         return await sendMessage(msg, "未找到你的账号记录，请先私聊发送 /start。")
 
-    embyid = data.embyid
-    ex = data.ex
-    lv = data.lv
-
     try:
-        if embyid:
+        if data.embyid:
             if not is_renew_code(register_code):
                 return await sendMessage(msg, "你当前已经有账号，这里只能使用续期码。", timer=60)
 
             with Session() as session:
+                user_row = _load_locked_emby_user(session, msg.from_user.id)
+                if not user_row or not user_row.embyid:
+                    return await sendMessage(msg, "你当前还没有账号，这里只能使用注册码。", timer=60)
+
                 record = _load_locked_code(session, register_code)
                 if not record:
                     return await sendMessage(msg, "你输入的续期码不存在，请检查后重试。", timer=60)
@@ -171,21 +181,21 @@ async def rgs_code(_, msg, register_code):
                     return await _reply_code_unavailable(msg, record, "续期码")
 
                 now = datetime.now()
-                current_ex = ex if ex and isinstance(ex, datetime) else now
+                current_ex = user_row.ex if user_row.ex and isinstance(user_row.ex, datetime) else now
                 if now > current_ex:
                     new_ex = now + timedelta(days=record.us)
-                    await emby.emby_change_policy(emby_id=embyid, disable=False)
-                    if lv == "c":
-                        session.query(Emby).filter(Emby.tg == msg.from_user.id).update(
-                            {Emby.ex: new_ex, Emby.lv: "b"}
-                        )
-                    else:
-                        session.query(Emby).filter(Emby.tg == msg.from_user.id).update({Emby.ex: new_ex})
+                    policy_changed = await emby.emby_change_policy(emby_id=user_row.embyid, disable=False)
+                    if not policy_changed:
+                        raise RuntimeError("Emby 用户策略恢复失败，已取消本次续期兑换")
+                    user_row.ex = new_ex
+                    if user_row.lv == "c":
+                        user_row.lv = "b"
                 else:
                     new_ex = current_ex + timedelta(days=record.us)
-                    session.query(Emby).filter(Emby.tg == msg.from_user.id).update({Emby.ex: new_ex})
+                    user_row.ex = new_ex
 
                 session.commit()
+                sql_invalidate_emby_cache(msg.from_user.id)
 
                 creator = await _creator_mention(record)
                 await sendMessage(
@@ -202,6 +212,7 @@ async def rgs_code(_, msg, register_code):
                     f"📊 使用进度 - {_code_usage_text(record)}\n"
                     f"⏰ 实时到期 - {new_ex.strftime('%Y-%m-%d %H:%M:%S')}",
                     send=True,
+                    chat_id=group,
                 )
                 LOGGER.info(
                     f"【续期码】{msg.from_user.first_name}[{msg.chat.id}] 使用了 {register_code}，"
@@ -212,10 +223,15 @@ async def rgs_code(_, msg, register_code):
         if is_renew_code(register_code):
             return await sendMessage(msg, "你当前还没有账号，这里只能使用注册码。", timer=60)
 
-        if data.us > 0:
-            return await sendMessage(msg, "你已经有注册资格，请先使用“创建账号”。")
-
         with Session() as session:
+            user_row = _load_locked_emby_user(session, msg.from_user.id)
+            if not user_row:
+                return await sendMessage(msg, "未找到你的账号记录，请先私聊发送 /start。")
+            if user_row.embyid:
+                return await sendMessage(msg, "你当前已经有账号，这里只能使用续期码。", timer=60)
+            if int(user_row.us or 0) > 0:
+                return await sendMessage(msg, "你已经有注册资格，请先使用“创建账号”。")
+
             record = _load_locked_code(session, register_code)
             if not record:
                 return await sendMessage(msg, "你输入的注册码不存在，请检查后重试。")
@@ -229,10 +245,11 @@ async def rgs_code(_, msg, register_code):
             if status == "exhausted":
                 return await _reply_code_unavailable(msg, record, "注册码")
 
-            creator = await _creator_mention(record)
-            new_credits = (data.us or 0) + record.us
-            session.query(Emby).filter(Emby.tg == msg.from_user.id).update({Emby.us: new_credits})
+            new_credits = int(user_row.us or 0) + int(record.us or 0)
+            user_row.us = new_credits
             session.commit()
+            sql_invalidate_emby_cache(msg.from_user.id)
+            creator = await _creator_mention(record)
 
             await sendPhoto(
                 msg,
@@ -251,6 +268,7 @@ async def rgs_code(_, msg, register_code):
                 f"🎫 注册码使用 - [{msg.from_user.first_name}](tg://user?id={msg.chat.id}) [{msg.from_user.id}] 使用了 {masked_code}\n"
                 f"📊 使用进度 - {_code_usage_text(record)}",
                 send=True,
+                chat_id=group,
             )
             LOGGER.info(
                 f"【注册码】{msg.from_user.first_name}[{msg.chat.id}] 使用了 {register_code}，"

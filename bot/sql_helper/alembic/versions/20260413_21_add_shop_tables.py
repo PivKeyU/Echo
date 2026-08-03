@@ -7,6 +7,7 @@ Create Date: 2026-04-13 22:30:00
 
 from alembic import op
 import sqlalchemy as sa
+from datetime import datetime
 
 
 revision = "20260413_21"
@@ -75,15 +76,23 @@ def upgrade() -> None:
         sa.column("setting_value", sa.JSON()),
         sa.column("updated_at", sa.DateTime()),
     )
-    bind.execute(
-        settings.insert().prefix_with("IGNORE"),
-        [
-            {"setting_key": "allow_user_listing", "setting_value": False, "updated_at": sa.func.now()},
-            {"setting_key": "currency_name", "setting_value": "片刻碎片", "updated_at": sa.func.now()},
-            {"setting_key": "shop_title", "setting_value": "仙舟小铺", "updated_at": sa.func.now()},
-            {"setting_key": "shop_notice", "setting_value": "欢迎使用 Emby 货币购买数字商品。", "updated_at": sa.func.now()},
-        ],
-    )
+    default_rows = [
+        {"setting_key": "allow_user_listing", "setting_value": False, "updated_at": datetime.utcnow()},
+        {"setting_key": "currency_name", "setting_value": "片刻碎片", "updated_at": datetime.utcnow()},
+        {"setting_key": "shop_title", "setting_value": "仙舟小铺", "updated_at": datetime.utcnow()},
+        {"setting_key": "shop_notice", "setting_value": "欢迎使用 Emby 货币购买数字商品。", "updated_at": datetime.utcnow()},
+    ]
+    existing_keys = {
+        row[0]
+        for row in bind.execute(
+            sa.select(settings.c.setting_key).where(
+                settings.c.setting_key.in_([row["setting_key"] for row in default_rows])
+            )
+        )
+    }
+    missing_rows = [row for row in default_rows if row["setting_key"] not in existing_keys]
+    if missing_rows:
+        bind.execute(settings.insert(), missing_rows)
 
 
 def downgrade() -> None:

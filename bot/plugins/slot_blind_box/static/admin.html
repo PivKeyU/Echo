@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
+  <title>老虎机盲盒后台</title>
+  <link rel="stylesheet" href="/plugins/slot-box/static/slot.css">
+</head>
+<body class="slot-admin">
+  <main class="slot-shell admin-shell">
+    <section class="top-band">
+      <div class="title-block">
+        <p class="eyebrow">Slot Admin</p>
+        <h1>老虎机盲盒后台</h1>
+        <p id="admin-status" class="muted">正在校验后台身份。</p>
+      </div>
+      <div class="slot-hero-visual" aria-hidden="true">
+        <div class="hero-jackpot">🎛️</div>
+        <div class="hero-lights">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+      <div class="toolbar">
+        <span id="admin-auth-mode" class="status-pill">待认证</span>
+        <a class="button-link secondary" href="/plugins/slot-box/app" aria-label="返回抽奖"><span class="button-icon">🎰</span><span>抽奖</span></a>
+        <a class="button-link secondary" href="/miniapp" aria-label="返回主页"><span class="button-icon">⌂</span><span>主页</span></a>
+        <a class="icon-link" href="/admin" aria-label="管理台" title="管理台">⚙</a>
+      </div>
+    </section>
+
+    <section class="stats-band">
+      <article class="metric">
+        <span>奖品</span>
+        <strong id="admin-prize-count">-</strong>
+      </article>
+      <article class="metric">
+        <span>启用</span>
+        <strong id="admin-active-count">-</strong>
+      </article>
+      <article class="metric">
+        <span>总抽取</span>
+        <strong id="admin-spin-count">-</strong>
+      </article>
+      <article class="metric">
+        <span>用户</span>
+        <strong id="admin-user-count">-</strong>
+      </article>
+    </section>
+
+    <section class="panel section-panel">
+      <div class="panel-head">
+        <h2>后台认证</h2>
+      </div>
+      <form id="token-form" class="grid-form">
+        <label class="wide">
+          后台令牌
+          <input id="admin-token" type="password" placeholder="输入 admin_token">
+        </label>
+        <div class="form-actions wide">
+          <button id="token-submit" type="submit">保存并验证</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel section-panel">
+      <div class="panel-head">
+        <h2>玩法设置</h2>
+        <span id="admin-blank-rate" class="status-pill">轮空 -</span>
+      </div>
+      <form id="settings-form" class="grid-form">
+        <label>
+          标题
+          <input id="setting-title" type="text" maxlength="80">
+        </label>
+        <label>
+          轮空名称
+          <input id="setting-blank-label" type="text" maxlength="24">
+        </label>
+        <label>
+          轮空图标
+          <input id="setting-blank-icon" type="text" maxlength="16">
+        </label>
+        <label>
+          轮空权重
+          <input id="setting-blank-weight" type="number" min="0" max="1000000" step="0.000001">
+        </label>
+        <label>
+          保底次数
+          <input id="setting-pity-after" type="number" min="1" max="10000">
+          <small class="field-hint">按连续轮空次数触发，任意中奖都会清零保底累计。</small>
+        </label>
+        <label>
+          每日次数上限
+          <input id="setting-daily-limit" type="number" min="0" max="100000">
+        </label>
+        <label>
+          单抽价格
+          <input id="setting-spin-cost" type="number" min="0" max="9007199254740991">
+        </label>
+        <label>
+          货币名称
+          <input id="setting-currency" type="text" maxlength="32">
+        </label>
+        <label>
+          冷却秒数
+          <input id="setting-cooldown" type="number" min="0" max="86400">
+        </label>
+        <label>
+          记录保留数
+          <input id="setting-record-limit" type="number" min="50" max="5000">
+        </label>
+        <label>
+          A 级每日上限
+          <input id="setting-limit-a" type="number" min="0" max="100000">
+        </label>
+        <label>
+          A 级每日赠送
+          <input id="setting-gift-a" type="number" min="0" max="100000">
+        </label>
+        <label>
+          B 级每日上限
+          <input id="setting-limit-b" type="number" min="0" max="100000">
+        </label>
+        <label>
+          B 级每日赠送
+          <input id="setting-gift-b" type="number" min="0" max="100000">
+        </label>
+        <label>
+          C 级每日上限
+          <input id="setting-limit-c" type="number" min="0" max="100000">
+        </label>
+        <label>
+          C 级每日赠送
+          <input id="setting-gift-c" type="number" min="0" max="100000">
+        </label>
+        <label>
+          D 级每日上限
+          <input id="setting-limit-d" type="number" min="0" max="100000">
+        </label>
+        <label>
+          D 级每日赠送
+          <input id="setting-gift-d" type="number" min="0" max="100000">
+        </label>
+        <label class="wide">
+          前台公告
+          <textarea id="setting-notice" maxlength="240"></textarea>
+        </label>
+        <label>
+          <input id="setting-enabled" type="checkbox">
+          开放抽取
+        </label>
+        <label>
+          <input id="setting-blank-enabled" type="checkbox">
+          开启轮空
+        </label>
+        <label>
+          <input id="setting-pity-enabled" type="checkbox">
+          开启保底
+        </label>
+        <div class="form-actions wide">
+          <button id="settings-submit" type="submit">保存设置</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel section-panel">
+      <div class="panel-head">
+        <h2>用户抽奖数据管理</h2>
+        <span class="status-pill">可搜索任意用户</span>
+      </div>
+      <form id="user-pity-search-form" class="grid-form compact-form">
+        <label class="wide">
+          用户检索
+          <input id="user-pity-query" type="search" placeholder="输入 TGID、TG 昵称、@username 或 Emby 名称">
+        </label>
+        <div class="form-actions wide">
+          <button id="user-pity-search-submit" type="submit" class="secondary">
+            <span class="button-icon">⌕</span><span>搜索用户</span>
+          </button>
+          <button id="user-stats-reset-all" type="button" class="secondary">
+            <span class="button-icon">⟲</span><span>清零全部用户</span>
+          </button>
+        </div>
+      </form>
+      <div id="user-pity-list" class="admin-list user-pity-list"></div>
+    </section>
+
+    <section class="panel section-panel">
+      <div class="panel-head">
+        <h2>新增奖品</h2>
+      </div>
+      <form id="prize-form" class="grid-form">
+        <label>
+          奖品名称
+          <input id="prize-name" type="text" maxlength="80" required>
+        </label>
+        <label>
+          图标
+          <input id="prize-icon" type="text" maxlength="16" value="🎁">
+        </label>
+        <label>
+          中奖权重（决定概率）
+          <input id="prize-weight" type="number" min="0" max="1000000" step="0.000001" value="10">
+          <small class="field-hint">邀请资格、开号资格支持 0.1 这类小数权重，且同类型总概率必须低于 1%。</small>
+        </label>
+        <label>
+          库存
+          <input id="prize-stock" name="stock" type="number" min="0" max="2147483647" value="-1">
+        </label>
+        <label class="stock-unlimited-toggle">
+          <input id="prize-stock-unlimited" name="stock_unlimited" type="checkbox" checked>
+          无限库存
+        </label>
+        <label>
+          奖品类型
+          <select id="prize-reward-type">
+            <option value="manual">普通奖品</option>
+            <option value="free_spin_ticket">抽奖券</option>
+            <option value="group_invite_credit">邀请资格</option>
+            <option value="account_open_credit">开号资格</option>
+            <option value="emby_currency">Emby 货币</option>
+          </select>
+        </label>
+        <label>
+          奖励数量
+          <input id="prize-free-spin-quantity" type="number" min="0" max="9007199254740991" value="0">
+        </label>
+        <label>
+          单独保底次数
+          <input id="prize-guarantee-after" type="number" min="0" max="10000" value="0">
+          <small class="field-hint">0 表示跟随全局保底；大于 0 时按连续轮空次数触发该奖品。</small>
+        </label>
+        <label class="wide">
+          奖品描述
+          <textarea id="prize-description" maxlength="500"></textarea>
+        </label>
+        <label class="wide">
+          发奖说明
+          <textarea id="prize-delivery" maxlength="1000"></textarea>
+        </label>
+        <label class="wide">
+          播报图片地址
+          <input id="prize-broadcast-image" type="text" maxlength="1000" placeholder="https://... 可留空">
+        </label>
+        <label>
+          <input id="prize-enabled" type="checkbox" checked>
+          启用奖品
+        </label>
+        <label>
+          <input id="prize-guarantee" type="checkbox" checked>
+          参与保底
+          <small class="field-hint">邀请资格、开号资格固定不参与保底，避免实际概率被保底放大。</small>
+        </label>
+        <label>
+          <input id="prize-broadcast" type="checkbox">
+          中奖群播报
+        </label>
+        <div class="form-actions wide">
+          <button id="prize-submit" type="submit">创建奖品</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel section-panel">
+      <div class="panel-head">
+        <h2>奖品清单</h2>
+        <span id="admin-total-weight" class="status-pill">总权重 -</span>
+      </div>
+      <div id="admin-prize-list" class="admin-list"></div>
+    </section>
+
+    <section class="panel section-panel">
+      <div class="panel-head">
+        <h2>兑换码</h2>
+        <span class="status-pill">背包发放</span>
+      </div>
+      <form id="redeem-code-form" class="grid-form">
+        <label>
+          兑换码
+          <input id="redeem-code-value" type="text" maxlength="40" placeholder="留空自动生成">
+        </label>
+        <label>
+          名称
+          <input id="redeem-code-title" type="text" maxlength="80" value="兑换码">
+        </label>
+        <label>
+          总使用次数
+          <input id="redeem-code-max-uses" type="number" min="0" max="1000000" value="1">
+        </label>
+        <label>
+          单人次数
+          <input id="redeem-code-per-user" type="number" min="1" max="10000" value="1">
+        </label>
+        <label>
+          抽奖券
+          <input id="redeem-grant-ticket" type="number" min="0" max="100000" value="0">
+        </label>
+        <label>
+          邀请资格
+          <input id="redeem-grant-group" type="number" min="0" max="100000" value="0">
+        </label>
+        <label>
+          开号资格
+          <input id="redeem-grant-account" type="number" min="0" max="100000" value="0">
+        </label>
+        <label>
+          <input id="redeem-code-enabled" type="checkbox" checked>
+          启用兑换码
+        </label>
+        <div class="form-actions wide">
+          <button id="redeem-code-submit" type="submit">生成兑换码</button>
+        </div>
+      </form>
+      <div id="admin-redeem-code-list" class="admin-list"></div>
+    </section>
+
+    <details class="panel section-panel collapsible-panel" id="admin-record-panel">
+      <summary class="panel-head collapsible-head">
+        <h2>最近记录</h2>
+        <span class="status-pill">可筛选</span>
+      </summary>
+      <div class="record-tools">
+        <label>
+          类型
+          <select id="admin-record-filter">
+            <option value="all">全部</option>
+            <option value="win">中奖</option>
+            <option value="blank">轮空</option>
+            <option value="emby_currency">Emby 货币</option>
+            <option value="free_spin_ticket">抽奖券</option>
+            <option value="group_invite_credit">邀请资格</option>
+            <option value="account_open_credit">开号资格</option>
+            <option value="manual">普通奖品</option>
+          </select>
+        </label>
+      </div>
+      <div id="admin-record-list" class="record-list"></div>
+      <div class="pager" id="admin-record-pager">
+        <button id="admin-record-prev" type="button" class="secondary"><span class="button-icon">‹</span><span>上一页</span></button>
+        <span id="admin-record-page-info" class="status-pill">1/1</span>
+        <button id="admin-record-next" type="button" class="secondary"><span class="button-icon">›</span><span>下一页</span></button>
+      </div>
+    </details>
+  </main>
+
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/plugins/slot-box/static/admin.js"></script>
+</body>
+</html>

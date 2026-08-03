@@ -37,7 +37,6 @@ async def server(_, call):
         keyboard, sever = await cr_page_server()
         server_info = ''.join([item['server'] for item in sever if item['id'] == server_id])
 
-    pwd = '空' if not data.pwd else data.pwd
     line = ''
     if data.lv == 'b':
         line = f'{emby_line}'
@@ -53,7 +52,8 @@ async def server(_, call):
             online = 'Emby服务器断连 ·0'
     except Exception:
         online = 'Emby服务器断连 ·0'
-    text = f'**▎↓目前线路 & 用户密码：**`{pwd}`\n' \
+    text = '**▎↓目前线路**\n' \
+           'Emby 密码已安全保存，请通过 Emby 客户端或管理员重置。\n' \
            f'{line}\n\n' \
            f'{server_info}' \
            f'· 🎬 在线 | **{online}** 人\n\n' \

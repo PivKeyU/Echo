@@ -1,10 +1,24 @@
 {
+  "schema_version": 2,
   "id": "emby-shop",
   "name": "商店插件",
   "version": "0.1.0",
   "description": "基于 Emby 货币的数字商品商店，支持后台上架、用户购买、私聊发货与群组播报。",
   "entry": "plugin",
   "enabled": true,
+  "plugin_type": "builtin",
+  "requires_restart": false,
+  "permissions": [
+    "telegram.send_group_messages",
+    "web.routes",
+    "web.static",
+    "storage.upload_files",
+    "database.shared_read",
+    "database.shared_write"
+  ],
+  "dependencies": {
+    "python": []
+  },
   "miniapp": {
     "path": "/plugins/shop/app",
     "admin_path": "/plugins/shop/admin",

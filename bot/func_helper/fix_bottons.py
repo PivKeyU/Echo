@@ -1,3 +1,5 @@
+import asyncio
+
 from cacheout import Cache
 from pykeyboard import InlineKeyboard, InlineButton
 from pyrogram.types import InlineKeyboardMarkup
@@ -6,9 +8,64 @@ from bot import chanel, main_group, bot_name, extra_emby_libs, tz_id, tz_ad, tz_
     schedall, auto_update, fuxx_pitao, moviepilot, red_envelope, config, LOGGER
 from bot.func_helper import nezha_res
 from bot.func_helper.emby import emby
-from bot.func_helper.utils import members_info
+from bot.func_helper.utils import async_memoize
+from bot.sql_helper.sql_invite import (
+    INVITE_CREDIT_TYPE_ACCOUNT_OPEN,
+    INVITE_CREDIT_TYPE_GROUP,
+    available_invite_credit_count,
+    has_viewing_access,
+    list_invite_records,
+    qualification_revoked,
+    user_has_account_open_history,
+)
+from bot.sql_helper.sql_emby import sql_get_emby
 
 cache = Cache()
+
+
+def _is_placeholder_telegram_ref(value) -> bool:
+    normalized = str(value or "").strip()
+    if normalized.startswith("https://t.me/") or normalized.startswith("http://t.me/"):
+        normalized = normalized.rsplit("/", 1)[-1]
+    normalized = normalized.strip().lstrip("@").lower()
+    return not normalized or normalized in {
+        "0",
+        "none",
+        "null",
+        "your_main_group_username",
+        "your_channel_username",
+    } or "replace_with" in normalized
+
+
+def _telegram_entry_url(value) -> str | None:
+    if _is_placeholder_telegram_ref(value):
+        return None
+    text = str(value).strip()
+    if text.startswith("http://") or text.startswith("https://"):
+        return text
+    if text.startswith("t.me/") or text.startswith("telegram.me/"):
+        return f"https://{text}"
+    if text.lstrip("-").isdigit():
+        return None
+    if text.startswith("+"):
+        return f"https://t.me/{text}"
+    return f"https://t.me/{text.lstrip('@')}"
+
+
+def _build_join_verify_keyboard() -> InlineKeyboardMarkup:
+    first_row = []
+    channel_url = _telegram_entry_url(chanel)
+    group_url = _telegram_entry_url(main_group)
+    if channel_url:
+        first_row.append(('🌟 频道入口', channel_url, 'url'))
+    if group_url:
+        first_row.append(('💫 群组入口', group_url, 'url'))
+    lines = []
+    if first_row:
+        lines.append(first_row)
+    lines.append([('🔄 我已加入，重新验证', 'back_start')])
+    lines.append([('❌ 关闭消息', 'closeit')])
+    return ikb(lines)
 
 """start面板 ↓"""
 
@@ -33,7 +90,7 @@ def judge_start_ikb(is_admin: bool, account: bool, user_id: int | None = None) -
         if schedall.partition_check and len(config.partition_libs) > 0:
             d.append(['🎟️ 使用分区码', 'partitioncode'])
     if _open.checkin:
-        d.append(['🎯 签到', 'checkin'])
+        d.append(['🎯 签、签一下', 'checkin'])
     lines = array_chunk(d, 2)
     if is_admin: lines.append([['👮🏻‍♂️ admin', 'manage']])
     keyword = ikb(lines)
@@ -43,9 +100,7 @@ def judge_start_ikb(is_admin: bool, account: bool, user_id: int | None = None) -
 # un_group_answer
 group_f = ikb([[('点击我(●ˇ∀ˇ●)', f't.me/{bot_name}', 'url')]])
 # un in group
-judge_group_ikb = ikb([[('🌟 频道入口 ', f't.me/{chanel}', 'url'),
-                        ('💫 群组入口', f't.me/{main_group}', 'url')],
-                       [('❌ 关闭消息', 'closeit')]])
+judge_group_ikb = _build_join_verify_keyboard()
 
 """members ↓"""
 
@@ -57,7 +112,7 @@ def members_ikb(is_admin: bool = False, account: bool = False) -> InlineKeyboard
     if account:
         normal = [[('🏪 兑换商店', 'storeall'), ('🗑️ 删除账号', 'delme')],
                     [('🎬 显示/隐藏', 'embyblock'), ('⭕ 重置密码', 'reset')],
-                    [('🔐 更换安全码', 'change_pwd2'), ('💖 我的收藏', 'my_favorites')],
+                    [('🔐 更换安全码', 'change_pwd2'), ('⭕ 换绑TG', 'changetg')],
                     [('💠 我的设备', 'my_devices')],
                     ]
         if moviepilot.status:
@@ -71,16 +126,16 @@ def members_ikb(is_admin: bool = False, account: bool = False) -> InlineKeyboard
         #      [('♻️ 主界面', 'back_start')]])
 
 
-back_start_ikb = ikb([[('💫 回到首页', 'back_start')]])
-back_members_ikb = ikb([[('💨 返回', 'members')]])
-back_manage_ikb = ikb([[('💨 返回', 'manage')]])
-re_create_ikb = ikb([[('🍥 重新输入', 'create'), ('💫 用户主页', 'members')]])
+back_start_ikb = ikb([[('💫 回、回去啦', 'back_start')]])
+back_members_ikb = ikb([[('💨 勉强返回', 'members')]])
+back_manage_ikb = ikb([[('💨 勉强返回', 'manage')]])
+re_create_ikb = ikb([[('🍥 真是的，重新输入', 'create'), ('💫 用户主页', 'members')]])
 re_changetg_ikb = ikb([[('✨ 换绑TG', 'changetg'), ('💫 用户主页', 'members')]])
 re_bindtg_ikb = ikb([[('✨ 绑定TG', 'bindtg'), ('💫 用户主页', 'members')]])
-re_delme_ikb = ikb([[('♻️ 重试', 'delme')], [('🔙 返回', 'members')]])
+re_delme_ikb = ikb([[('♻️ 再试一次啦', 'delme')], [('🔙 算了返回', 'members')]])
 re_reset_ikb = ikb([[('♻️ 重试', 'reset')], [('🔙 返回', 'members')]])
 re_change_pwd2_ikb = ikb([[('♻️ 重试', 'change_pwd2')], [('🔙 返回', 'members')]])
-re_exchange_b_ikb = ikb([[('♻️ 重试', 'exchange'), ('❌ 关闭', 'closeit')]])
+re_exchange_b_ikb = ikb([[('♻️ 再给你一次机会', 'exchange'), ('❌ 算了', 'closeit')]])
 re_born_ikb = ikb([[('✨ 重输', 'store-reborn'), ('💫 返回', 'storeall')]])
 
 
@@ -117,7 +172,7 @@ user_emby_unblock_ikb = ikb([[('❎ 已显示', 'members')]])
 """server ↓"""
 
 
-@cache.memoize(ttl=120)
+@async_memoize(ttl=120)
 async def cr_page_server():
     """
     翻页服务器面板
@@ -293,19 +348,6 @@ def devices_page_ikb( has_prev: bool, has_next: bool, page: int) -> InlineKeyboa
     buttons.append([('🔙 返回', 'manage')])
     keyboard = ikb(buttons)
     return keyboard
-async def favorites_page_ikb(total_page: int, current_page: int) -> InlineKeyboardMarkup:
-    keyboard = InlineKeyboard()
-    keyboard.paginate(total_page, current_page, 'page_my_favorites:{number}')
-    next = InlineButton('⏭️ 后退+5', f'page_my_favorites:{current_page + 5}')
-    previous = InlineButton('⏮️ 前进-5', f'page_my_favorites:{current_page - 5}')
-    followUp = [InlineButton('🔙 Back', 'members')]
-    if total_page > 5:
-        if current_page - 5 >= 1:
-            followUp.append(previous)
-        if current_page + 5 < total_page:
-            followUp.append(next)
-    keyboard.row(*followUp)
-    return keyboard
 def cr_renew_ikb():
     checkin = '✔️' if _open.checkin else '❌'
     exchange = '✔️' if _open.exchange else '❌'
@@ -380,25 +422,33 @@ def back_set_ikb(method) -> InlineKeyboardMarkup:
     return ikb([[("♻️ 重新设置", f"{method}"), ("🔙 返回主页", "back_config")]])
 
 
-def try_set_buy(ls: list) -> InlineKeyboardMarkup:
-    d = [[ls], [["✅ 体验结束返回", "back_config"]]]
-    return ikb(d)
-
-
 """ other """
 register_code_ikb = ikb([[('🎟️ 注册', 'create'), ('⭕ 取消', 'closeit')]])
-dp_g_ikb = ikb([[("🈺 ╰(￣ω￣ｏ)", "t.me/Aaaaa_su", "url")]])
+dp_g_ikb = ikb([[("联系主人", "https://t.me/pivkeyu", "url")]])
 
 
 async def cr_kk_ikb(uid, first):
     text = ''
     text1 = ''
     keyboard = []
-    data = await members_info(uid)
-    if data is None:
+    account = sql_get_emby(uid)
+    if account is None:
         text += f'**· 🆔 TG** ：[{first}](tg://user?id={uid}) [`{uid}`]\n数据库中没有此ID。ta 还没有私聊过我'
     else:
-        name, lv, ex, iv, embyid, pwd2 = data
+        name = account.name or '无账户信息'
+        embyid = account.embyid
+        iv = account.iv
+        lv_dict = {'a': '白名单', 'b': '**正常**', 'c': '**已禁用**', 'd': '未注册'}
+        lv = lv_dict.get(account.lv, '未知')
+        if lv == '白名单':
+            ex = '+ ∞'
+        elif account.name is not None and schedall.low_activity and not schedall.check_ex:
+            ex = f'__若{config.activity_check_days}天无观看将封禁__'
+        elif account.name is not None and not schedall.low_activity and not schedall.check_ex:
+            ex = ' __无需保号，放心食用__'
+        else:
+            ex = account.ex or '无账户信息'
+        cust_task = None
         if name != '无账户信息':
             ban = "🌟 解除禁用" if lv == "**已禁用**" else '💢 禁用账户'
             keyboard = [[ban, f'user_ban-{uid}'], ['⚠️ 删除账户', f'closeemby-{uid}']]
@@ -406,42 +456,24 @@ async def cr_kk_ikb(uid, first):
                 success, rep = await emby.user(emby_id=embyid)
                 if success:
                     try:
-                        # 新版本API：使用EnabledFolders控制访问
                         policy = rep.get("Policy", {})
                         current_enabled_folders = policy.get("EnabledFolders", [])
                         enable_all_folders = policy.get("EnableAllFolders", False)
-
-                        # 获取额外媒体库对应的文件夹ID
                         extra_folder_ids = await emby.get_folder_ids_by_names(extra_emby_libs)
-
-                        # 判断额外媒体库是否显示
                         if enable_all_folders is True:
-                            # 如果启用所有文件夹，额外媒体库是显示的,显示关闭按钮
                             libs, embyextralib = ['关闭', f'embyextralib_block-{uid}']
                         elif extra_folder_ids and len(extra_folder_ids) > 0:
-                            # 检查额外媒体库的文件夹ID是否都在启用列表中
                             if all(folder_id in current_enabled_folders for folder_id in extra_folder_ids):
-                                # 额外媒体库已启用，显示关闭按钮
                                 libs, embyextralib = ['关闭', f'embyextralib_block-{uid}']
                             else:
-                                # 额外媒体库未启用，显示开启按钮
                                 libs, embyextralib = ['开启', f'embyextralib_unblock-{uid}']
                         else:
-                            # 如果无法获取额外媒体库的文件夹ID，默认显示为未启用状态
                             libs, embyextralib = ['关闭', f'embyextralib_block-{uid}']
                         keyboard.append([f'{libs} 额外媒体库', embyextralib])
                     except Exception as e:
-                        # 如果获取策略信息失败，默认显示为未启用状态
                         LOGGER.error(f"获取额外媒体库状态失败: {str(e)}")
                         keyboard.append([f'关闭额外媒体库', f'embyextralib_block-{uid}'])
-            try:
-                rst = await emby.emby_cust_commit(emby_id=embyid, days=30)
-                last_time = rst[0][0]
-                toltime = rst[0][1]
-                text1 = f"**· 🔋 上次活动** | {last_time.split('.')[0]}\n" \
-                        f"**· 📅 过去30天** | {toltime} 分钟"
-            except (TypeError, IndexError, ValueError):
-                text1 = f"**· 📅 过去30天未有记录**"
+            cust_task = asyncio.ensure_future(emby.emby_cust_commit(emby_id=embyid, days=30))
         else:
             keyboard.append(['✨ 赠送资格', f'gift-{uid}'])
         text += f"**· 🍉 TG&名称** | [{first}](tg://user?id={uid})\n" \
@@ -450,6 +482,50 @@ async def cr_kk_ikb(uid, first):
                 f"**· 🍥 持有{sakura_b}** | {iv}\n" \
                 f"**· 💠 账号名称** | {name}\n" \
                 f"**· 🚨 到期时间** | **{ex}**\n"
+        try:
+            viewing_access = has_viewing_access(account)
+            group_credit_count = available_invite_credit_count(uid, credit_type=INVITE_CREDIT_TYPE_GROUP)
+            group_revoked = qualification_revoked(uid, credit_type=INVITE_CREDIT_TYPE_GROUP)
+            account_revoked = qualification_revoked(uid, credit_type=INVITE_CREDIT_TYPE_ACCOUNT_OPEN)
+            account_open_records = list_invite_records(
+                inviter_tg=uid,
+                credit_type=INVITE_CREDIT_TYPE_ACCOUNT_OPEN,
+                limit=1,
+            )
+            group_records = list_invite_records(
+                inviter_tg=uid,
+                credit_type=INVITE_CREDIT_TYPE_GROUP,
+                limit=1,
+            )
+            latest_open = account_open_records[0] if account_open_records else None
+            latest_group = group_records[0] if group_records else None
+            account_history = user_has_account_open_history(uid) if viewing_access else False
+            account_apply_text = "有" if viewing_access and not account_history and not account_revoked else "无"
+            if latest_open:
+                account_apply_text += f"（最近：TG {latest_open.get('invitee_tg')} · {latest_open.get('status_text')}）"
+            if account_revoked:
+                account_apply_text += "（后台已撤销）"
+            invite_text = "有" if group_credit_count > 0 else "无"
+            if latest_group:
+                invite_text += f"（最近：TG {latest_group.get('invitee_tg')} · {latest_group.get('status_text')}）"
+            if group_revoked:
+                invite_text += "（后台已撤销）"
+            text += (
+                f"**· 🎬 观影资格** | {'有' if viewing_access else '无'}\n"
+                f"**· 📨 入群邀请资格** | {invite_text}\n"
+                f"**· 📝 开号申请资格** | {account_apply_text}\n"
+            )
+        except Exception as exc:
+            LOGGER.warning(f"kk invite qualification load failed uid={uid}: {exc}")
+        if cust_task is not None:
+            try:
+                rst = await cust_task
+                last_time = rst[0][0]
+                toltime = rst[0][1]
+                text1 = f"**· 🔋 上次活动** | {last_time.split('.')[0]}\n" \
+                        f"**· 📅 过去30天** | {toltime} 分钟"
+            except (TypeError, IndexError, ValueError):
+                text1 = f"**· 📅 过去30天未有记录**"
         text += text1
         keyboard.extend([['🚫 踢出并封禁', f'fuckoff-{uid}'], ['❌ 删除消息', f'closeit']])
         lines = array_chunk(keyboard, 2)
@@ -530,10 +606,6 @@ def sched_buttons():
 request_tips_ikb = None
 
 
-def get_resource_ikb(download_name: str):
-    # 翻页 + 下载此片 + 取消操作
-    return ikb([[(f'下载本片', f'download_{download_name}'), ('激活订阅', f'submit_{download_name}')],
-                [('❌ 关闭', 'closeit')]])
 re_download_center_ikb = ikb([
     [('🍿 点播', 'get_resource'), ('📶 下载进度', 'download_rate')],
     [('🔙 返回', 'members')]])
@@ -541,21 +613,6 @@ continue_search_ikb = ikb([
     [('🔄 继续搜索', 'continue_search'), ('❌ 取消搜索', 'cancel_search')],
     [('🔙 返回', 'download_center')]
 ])
-def download_resource_ids_ikb(resource_ids: list):
-    buttons = []
-    row = []
-    for i in range(0, len(resource_ids), 2):
-        current_id = resource_ids[i]
-        current_button = [f"资源编号: {current_id}", f'download_resource_id_{current_id}']
-        if i + 1 < len(resource_ids):
-            next_id = resource_ids[i + 1]
-            next_button = [f"资源编号: {next_id}", f'download_resource_id_{next_id}']
-            row.append([current_button, next_button])
-        else:
-            row.append([current_button])
-    buttons.extend(row)
-    buttons.append([('❌ 取消', 'cancel_download')])
-    return ikb(buttons)
 def request_record_page_ikb(has_prev: bool, has_next: bool):
     buttons = []
     if has_prev:

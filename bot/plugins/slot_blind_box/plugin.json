@@ -1,0 +1,27 @@
+{
+  "schema_version": 2,
+  "id": "slot-blind-box",
+  "name": "老虎机盲盒",
+  "version": "0.1.0",
+  "description": "老虎机式盲盒插件，支持后台管理奖品、中奖权重、轮空和保底规则。",
+  "entry": "plugin",
+  "enabled": true,
+  "plugin_type": "builtin",
+  "requires_restart": false,
+  "permissions": [
+    "telegram.send_group_messages",
+    "web.routes",
+    "web.static",
+    "storage.plugin_data"
+  ],
+  "dependencies": {
+    "python": []
+  },
+  "miniapp": {
+    "path": "/plugins/slot-box/app",
+    "admin_path": "/plugins/slot-box/admin",
+    "label": "盲盒",
+    "icon": "🎰",
+    "bottom_nav_default": true
+  }
+}

@@ -2,131 +2,225 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>首页面板</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Echo 面板</title>
+  <link rel="preload" href="/static/miniapp.css" as="style">
+  <link rel="preload" href="/static/miniapp.js" as="script">
   <link rel="stylesheet" href="/static/miniapp.css">
 </head>
 <body>
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
   <main class="app-shell">
-    <section class="hero-panel card">
-      <div class="hero-main">
-        <p class="eyebrow">主控台</p>
-        <h1>首页面板</h1>
-        <p id="welcome-text" class="hero-copy">正在同步账号资料...</p>
-        <div class="hero-pills">
-          <span id="account-level-badge" class="badge badge--pending">加载中</span>
-          <span id="plugin-count-pill" class="hero-pill">0 个入口</span>
-          <span id="role-pill" class="hero-pill">普通用户</span>
+    <header class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">P</div>
+        <div>
+          <p class="eyebrow">Mini App</p>
+          <strong id="app-title">Echo 面板</strong>
         </div>
-        <p id="hero-note" class="hero-note">绑定账号后，可从这里快速进入所有可用页面。</p>
       </div>
-
-      <div class="hero-side">
-        <section class="overview-card">
-          <p class="eyebrow">概览</p>
-          <div class="overview-grid">
-            <article class="profile-item">
-              <span>站点品牌</span>
-              <strong id="brand-name">-</strong>
-            </article>
-            <article class="profile-item">
-              <span>积分名称</span>
-              <strong id="currency-name">-</strong>
-            </article>
-            <article class="profile-item">
-              <span>当前昵称</span>
-              <strong id="hero-name">-</strong>
-            </article>
-            <article class="profile-item">
-              <span>账号 ID</span>
-              <strong id="hero-id">-</strong>
-            </article>
-          </div>
-        </section>
-
-        <section id="admin-entry-card" class="hero-admin hidden">
-          <div class="hero-admin-copy">
-            <span class="hero-admin-label">主人入口</span>
-            <p>默认保留当前首页视图，需要时再进入后台面板。</p>
-          </div>
-          <button id="admin-entry-button" type="button" class="ghost">打开后台</button>
-        </section>
+      <div class="topbar-actions">
+        <button id="refresh-button" type="button" class="ghost small-button">刷新</button>
+        <button id="admin-entry-button" type="button" class="ghost small-button hidden">后台</button>
       </div>
+    </header>
+
+    <section class="status-grid">
+      <article class="card account-hero">
+        <div class="hero-status-row">
+          <span id="account-level-badge" class="badge badge--pending">同步中</span>
+          <span id="role-pill" class="soft-pill">普通用户</span>
+          <span id="sync-state" class="soft-pill">连接中</span>
+        </div>
+        <div class="hero-copy-block">
+          <p id="welcome-text" class="hero-kicker">正在连接服务器...</p>
+          <h1 id="hero-title">Echo 面板</h1>
+          <p id="hero-note" class="hero-note">稍等片刻，正在同步你的账户与功能入口。</p>
+        </div>
+        <div class="quick-actions">
+          <button id="primary-plugin-button" type="button">进入常用功能</button>
+          <button id="invite-shortcut-button" type="button" class="ghost">邀请中心</button>
+        </div>
+      </article>
+
+      <aside class="card insight-card">
+        <div class="section-head compact-head">
+          <div>
+            <p class="eyebrow">概览</p>
+            <h2>账户快照</h2>
+          </div>
+          <span id="plugin-count-pill" class="section-pill">0 个功能</span>
+        </div>
+        <div class="metric-grid">
+          <article class="metric-item">
+            <span>观影服务</span>
+            <strong id="brand-name">-</strong>
+          </article>
+          <article class="metric-item">
+            <span>积分名称</span>
+            <strong id="currency-name">-</strong>
+          </article>
+          <article class="metric-item">
+            <span>昵称</span>
+            <strong id="hero-name">-</strong>
+          </article>
+          <article class="metric-item">
+            <span>TG ID</span>
+            <strong id="hero-id">-</strong>
+          </article>
+        </div>
+      </aside>
+
+      <aside id="next-action-card" class="card next-card">
+        <div class="section-head compact-head">
+          <div>
+            <p class="eyebrow">下一步</p>
+            <h2 id="next-action-title">等待同步</h2>
+          </div>
+          <span id="next-action-tag" class="section-pill">待处理</span>
+        </div>
+        <p id="next-action-text" class="section-copy">加载完成后会根据你的账号状态推荐下一步操作。</p>
+        <button id="next-action-button" type="button" class="ghost">稍后处理</button>
+      </aside>
     </section>
 
-    <section id="fold-toolbar" class="card fold-toolbar">
-      <div class="fold-toolbar-copy">
-        <p class="eyebrow">区块折叠</p>
-        <p id="fold-count" class="section-copy">当前可折叠 0 个板块</p>
-      </div>
-      <div class="fold-toolbar-actions">
-        <button type="button" class="ghost" data-fold-open-all>全部展开</button>
-        <button type="button" class="ghost" data-fold-close-all>全部收起</button>
-      </div>
-    </section>
-
-    <section class="board-grid">
-      <details class="card fold-card">
-        <summary class="fold-summary">
+    <section class="workspace-grid">
+      <section id="account-section" class="card">
+        <div class="section-head">
           <div>
-            <p class="eyebrow">账号信息</p>
-            <h2>身份与订阅</h2>
+            <p class="eyebrow">账户</p>
+            <h2>我的账户</h2>
           </div>
-          <span class="summary-tip">等级、余额、到期时间与配额</span>
-        </summary>
-        <div class="fold-body">
-          <p id="account-level-desc" class="section-copy">正在加载账号状态...</p>
-          <div class="profile-grid">
-            <article class="profile-item">
-              <span>账号 ID</span>
-              <strong id="tg-id">-</strong>
-            </article>
-            <article class="profile-item">
-              <span>显示名称</span>
-              <strong id="tg-name">-</strong>
-            </article>
-            <article class="profile-item">
-              <span>当前余额</span>
-              <strong id="account-iv">-</strong>
-            </article>
-            <article class="profile-item">
-              <span>Emby 账号</span>
-              <strong id="account-name">-</strong>
-            </article>
-            <article class="profile-item">
-              <span>到期时间</span>
-              <strong id="account-ex">-</strong>
-            </article>
-            <article class="profile-item">
-              <span>注册/续期天数</span>
-              <strong id="account-us">-</strong>
-            </article>
+          <span id="account-state-pill" class="section-pill">未绑定</span>
+        </div>
+        <p id="account-level-desc" class="section-copy">正在获取账户信息...</p>
+        <div class="detail-grid">
+          <article class="detail-item">
+            <span>TG ID</span>
+            <strong id="tg-id">-</strong>
+          </article>
+          <article class="detail-item">
+            <span>昵称</span>
+            <strong id="tg-name">-</strong>
+          </article>
+          <article class="detail-item">
+            <span>余额</span>
+            <strong id="account-iv">-</strong>
+          </article>
+          <article class="detail-item">
+            <span>Emby 用户名</span>
+            <strong id="account-name">未绑定</strong>
+          </article>
+          <article class="detail-item">
+            <span>到期时间</span>
+            <strong id="account-ex">-</strong>
+          </article>
+          <article class="detail-item">
+            <span>使用天数</span>
+            <strong id="account-us">-</strong>
+          </article>
+        </div>
+      </section>
+
+      <section id="invite-shell" class="card hidden">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">邀请</p>
+            <h2>邀请中心</h2>
+          </div>
+          <span id="invite-total-pill" class="section-pill">0 项可用</span>
+        </div>
+
+        <div class="segment-tabs" role="tablist" aria-label="邀请类型">
+          <button type="button" class="segment-tab is-active" data-invite-tab="group">入群链接</button>
+          <button type="button" class="segment-tab" data-invite-tab="account">账号开通</button>
+        </div>
+
+        <div id="invite-card" class="invite-panel" data-invite-panel="group">
+          <div class="invite-status-card">
+            <p id="invite-status" class="section-copy">正在同步邀请资格...</p>
+            <div class="mini-metrics">
+              <article>
+                <span>可用资格</span>
+                <strong id="invite-credit-count">-</strong>
+              </article>
+              <article>
+                <span>有效期</span>
+                <strong id="invite-expire-hours">-</strong>
+              </article>
+            </div>
+          </div>
+          <form id="invite-form" class="mini-form">
+            <label>
+              被邀请人 TGID
+              <input id="invitee-tg" type="number" min="1" inputmode="numeric" placeholder="例如 123456789">
+            </label>
+            <label>
+              备注
+              <input id="invite-note" type="text" maxlength="255" placeholder="可选">
+            </label>
+            <button id="invite-submit" type="submit">发送邀请链接</button>
+          </form>
+          <div id="invite-records" class="record-list"></div>
+        </div>
+
+        <div id="invite-open-card" class="invite-panel hidden" data-invite-panel="account">
+          <div class="invite-status-card">
+            <p id="invite-open-status" class="section-copy">正在同步开通申请资格...</p>
+            <div class="mini-metrics">
+              <article>
+                <span>申请资格</span>
+                <strong id="invite-open-credit-count">-</strong>
+              </article>
+              <article>
+                <span>注册天数</span>
+                <strong id="invite-open-days">-</strong>
+              </article>
+            </div>
+          </div>
+          <form id="invite-open-form" class="mini-form">
+            <label>
+              被邀请人 TGID
+              <input id="invite-open-invitee-tg" type="number" min="1" inputmode="numeric" placeholder="例如 123456789">
+            </label>
+            <label>
+              备注
+              <input id="invite-open-note" type="text" maxlength="255" placeholder="可选">
+            </label>
+            <button id="invite-open-submit" type="submit">提交开通申请</button>
+          </form>
+          <div id="invite-open-records" class="record-list"></div>
+        </div>
+      </section>
+
+      <section id="plugin-section" class="card span-2">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">功能</p>
+            <h2>功能入口</h2>
+          </div>
+          <span id="plugin-count" class="section-pill">0 个可用</span>
+        </div>
+        <div class="plugin-controls">
+          <label class="search-box">
+            <span>搜索</span>
+            <input id="plugin-search" type="search" placeholder="输入功能名称">
+          </label>
+          <div class="segment-tabs compact-tabs" role="tablist" aria-label="功能筛选">
+            <button type="button" class="segment-tab is-active" data-plugin-filter="all">全部</button>
+            <button type="button" class="segment-tab" data-plugin-filter="running">运行中</button>
+            <button type="button" class="segment-tab" data-plugin-filter="issue">异常</button>
           </div>
         </div>
-      </details>
-
-      <details class="card fold-card span-2">
-        <summary class="fold-summary">
-          <div>
-            <p class="eyebrow">功能入口</p>
-            <h2>可用页面</h2>
-          </div>
-          <span class="summary-tip">仅展示当前可直接进入的页面入口</span>
-        </summary>
-        <div class="fold-body">
-          <div class="section-top">
-            <p class="section-copy">主页只保留当前可用的功能页面，方便你快速切换到对应模块。</p>
-            <span id="plugin-count" class="section-pill">已加载 0 / 0</span>
-          </div>
-          <div id="plugin-grid" class="plugin-grid"></div>
-        </div>
-      </details>
+        <div id="plugin-grid" class="plugin-grid"></div>
+      </section>
     </section>
   </main>
 
   <nav id="bottom-nav" class="bottom-nav"></nav>
 
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/miniapp.js"></script>
+  <script async src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script defer src="/static/miniapp.js"></script>
 </body>
 </html>

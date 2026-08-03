@@ -36,7 +36,7 @@ async def anti_use_bot(_, msg):
                                    f"[`{msg.from_user.id}`]试图将本女仆拉入 `{msg.chat.id}` 已被发现")
             asyncio.create_task(leave_bot(msg.chat.id))
             await bot.send_message(msg.chat.id,
-                                   f'❎ 这并非一个授权群组！！！[`{msg.chat.id}`]\n\n本女仆将在 **30s** 自动退出，如有疑问请联系开发👇',
+                                   f'❎ 这并非一个授权群组！！！[`{msg.chat.id}`]\n\n本女仆将在 **30s** 自动退出，如有疑问请联系开发 `@pivkeyu`👇',
                                    reply_markup=dp_g_ikb)
             LOGGER.info(f"【[{msg.from_user.first_name}](tg://user?id={msg.from_user.id})"
                         f"[`{msg.from_user.id}`]试图将本女仆拉入 `{msg.chat.id}` 已被发现】")
@@ -49,7 +49,7 @@ async def anti_use_bot(_, msg):
             await bot.send_message(chat_id=owner, text=f'有坏蛋试图将本女仆拉入 `{msg.chat.id}`，已被发现')
             asyncio.create_task(leave_bot(msg.chat.id))
             await bot.send_message(msg.chat.id,
-                                   f'❎ 这并非一个授权群组！！！[`{msg.chat.id}`]\n\n本女仆将在 **30s** 自动退出，如有疑问请联系开发👇',
+                                   f'❎ 这并非一个授权群组！！！[`{msg.chat.id}`]\n\n本女仆将在 **30s** 自动退出，如有疑问请联系开发 `@pivkeyu`👇',
                                    reply_markup=dp_g_ikb)
             LOGGER.info(f"【有坏蛋试图将本女仆拉入 `{msg.chat.id}` 已被发现】")
         except Exception as e:

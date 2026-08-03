@@ -19,6 +19,13 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
     column_names = {column["name"] for column in inspector.get_columns("Rcode")}
+    code_table = sa.table(
+        "Rcode",
+        sa.column("code", sa.String(length=50)),
+        sa.column("used", sa.BigInteger()),
+        sa.column("use_limit", sa.Integer()),
+        sa.column("use_count", sa.Integer()),
+    )
 
     if "use_limit" not in column_names:
         op.add_column(
@@ -32,17 +39,24 @@ def upgrade() -> None:
             sa.Column("use_count", sa.Integer(), nullable=False, server_default="0"),
         )
 
-    op.execute("UPDATE `Rcode` SET `use_limit` = COALESCE(`use_limit`, 1)")
-    op.execute(
-        """
-        UPDATE `Rcode`
-        SET `use_count` = CASE
-            WHEN `used` IS NULL THEN COALESCE(`use_count`, 0)
-            ELSE GREATEST(COALESCE(`use_count`, 0), 1)
-        END
-        """
+    bind.execute(
+        code_table.update().values(
+            use_limit=sa.func.coalesce(code_table.c.use_limit, 1),
+        )
     )
-    op.execute("UPDATE `Rcode` SET `use_limit` = 1 WHERE `use_limit` < 1")
+    bind.execute(
+        code_table.update().values(
+            use_count=sa.case(
+                (code_table.c.used.is_(None), sa.func.coalesce(code_table.c.use_count, 0)),
+                else_=sa.func.greatest(sa.func.coalesce(code_table.c.use_count, 0), 1),
+            )
+        )
+    )
+    bind.execute(
+        code_table.update()
+        .where(code_table.c.use_limit < 1)
+        .values(use_limit=1)
+    )
     op.alter_column("Rcode", "use_limit", server_default=None)
     op.alter_column("Rcode", "use_count", server_default=None)
 

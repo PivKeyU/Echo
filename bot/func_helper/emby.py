@@ -6,6 +6,8 @@ emby的api操作方法 - 使用aiohttp重构版本
 import asyncio
 import os
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from typing import Optional, Tuple, Dict, Any, List, Union
 from contextlib import asynccontextmanager
 
@@ -13,7 +15,7 @@ import aiohttp
 
 from bot import emby_url, emby_api, emby_block, extra_emby_libs, LOGGER
 from bot.sql_helper.sql_emby import sql_update_emby, Emby
-from bot.func_helper.utils import pwd_create, convert_runtime, cache, Singleton
+from bot.func_helper.utils import pwd_create, convert_runtime, cache, Singleton, async_memoize
 
 
 def _env_int(name: str, default: int, minimum: int = 0) -> int:
@@ -117,61 +119,88 @@ class Embyservice(metaclass=Singleton):
         :param url: Emby 服务器地址
         :param api_key: API 密钥
         :param timeout: 请求超时时间（秒）
-        :param max_retries: 最大重试次数
+        :param max_retries: 初次请求失败后的最大重试次数（至少执行一次请求）
         """
         self.url = url.rstrip('/')
         self.api_key = api_key
-        self.max_retries = max_retries
-        self.timeout = aiohttp.ClientTimeout(total=timeout)
+        # max_retries is the number of retries after the initial request; always make
+        # at least one attempt, even when callers pass 0 (or a negative value).
+        self.max_retries = max(0, int(max_retries))
+        self.timeout = aiohttp.ClientTimeout(total=timeout, connect=min(timeout, 10))
         
         # 请求头配置
         self.headers = {
             'accept': 'application/json',
             'content-type': 'application/json',
             'X-Emby-Token': self.api_key,
-            'X-Emby-Client': 'pivkeyu_emby BOT',
-            'X-Emby-Device-Name': 'pivkeyu_emby BOT',
+            'X-Emby-Client': 'Echo BOT',
+            'X-Emby-Device-Name': 'Echo BOT',
             'X-Emby-Client-Version': '1.0.0',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.82'
         }
         
         self._session: Optional[aiohttp.ClientSession] = None
         self._session_lock = asyncio.Lock()
+        self._session_idle = asyncio.Event()
+        self._session_idle.set()
+        self._session_users = 0
+        self._closing = False
+
+    @staticmethod
+    def _new_connector() -> aiohttp.TCPConnector:
+        return aiohttp.TCPConnector(
+            limit=EMBY_HTTP_LIMIT,
+            limit_per_host=EMBY_HTTP_LIMIT_PER_HOST,
+            keepalive_timeout=EMBY_HTTP_KEEPALIVE_TIMEOUT,
+            enable_cleanup_closed=True,
+            ttl_dns_cache=EMBY_HTTP_DNS_CACHE_TTL,
+        )
 
     @asynccontextmanager
     async def session(self):
-        """
-        异步上下文管理器，管理 aiohttp 会话
-        自动处理会话的创建和复用
-        """
         async with self._session_lock:
+            if self._closing:
+                raise RuntimeError("Emby 服务正在关闭")
             if self._session is None or self._session.closed:
-                connector = aiohttp.TCPConnector(
-                    limit=EMBY_HTTP_LIMIT,  # 连接池大小
-                    limit_per_host=EMBY_HTTP_LIMIT_PER_HOST,  # 每个主机的连接数
-                    keepalive_timeout=EMBY_HTTP_KEEPALIVE_TIMEOUT,  # 保持连接时间
-                    enable_cleanup_closed=True,
-                    ttl_dns_cache=EMBY_HTTP_DNS_CACHE_TTL
-                )
                 self._session = aiohttp.ClientSession(
                     headers=self.headers,
                     timeout=self.timeout,
-                    connector=connector,
-                    raise_for_status=False  # 手动处理HTTP状态码
+                    connector=self._new_connector(),
+                    raise_for_status=False,
                 )
-        
+            session = self._session
+            self._session_users += 1
+            self._session_idle.clear()
         try:
-            yield self._session
-        except Exception as e:
-            LOGGER.error(f"会话使用异常: {str(e)}")
+            yield session
+        except Exception as exc:
+            LOGGER.error(f"会话使用异常: {exc}")
             raise
+        finally:
+            async with self._session_lock:
+                self._session_users = max(0, self._session_users - 1)
+                if self._session_users == 0:
+                    self._session_idle.set()
 
     async def close(self):
-        """关闭会话并清理资源"""
-        if self._session and not self._session.closed:
-            await self._session.close()
+        """关闭会话并清理资源，等待正在进行的请求完成。"""
+        async with self._session_lock:
+            self._closing = True
+            session = self._session
+            idle = self._session_users == 0
+        if not idle:
+            await self._session_idle.wait()
+        async with self._session_lock:
+            session = self._session
             self._session = None
+            self._closing = False
+        if session is not None and not session.closed:
+            await session.close()
             LOGGER.info("Emby 服务会话已关闭")
+
+    async def shutdown(self):
+        """兼容应用 shutdown 生命周期的安全异步关闭入口。"""
+        await self.close()
 
     async def _request(self, method: str, endpoint: str, **kwargs) -> EmbyApiResult:
         """
@@ -181,67 +210,113 @@ class Embyservice(metaclass=Singleton):
         :param kwargs: 请求参数
         :return: EmbyApiResult
         """
+        # Never send an API key in a URL, including when an older caller still
+        # supplies one in the endpoint or params. Authentication is header-only.
+        endpoint_parts = urlsplit(endpoint)
+        endpoint_query = [(key, value) for key, value in parse_qsl(endpoint_parts.query, keep_blank_values=True)
+                          if key.lower() != "api_key"]
+        endpoint = urlunsplit((endpoint_parts.scheme, endpoint_parts.netloc, endpoint_parts.path,
+                               urlencode(endpoint_query), endpoint_parts.fragment))
+        if "params" in kwargs and kwargs["params"] is not None:
+            params = kwargs["params"]
+            if hasattr(params, "items"):
+                kwargs["params"] = [(key, value) for key, value in params.items()
+                                     if str(key).lower() != "api_key"]
+            elif isinstance(params, (list, tuple)):
+                kwargs["params"] = [(key, value) for key, value in params
+                                     if str(key).lower() != "api_key"]
+
         url = f"{self.url}{endpoint}"
-        
-        for attempt in range(self.max_retries):
+        safe_url = f"{self.url}{endpoint}"
+        sensitive_request = "/password" in endpoint.lower()
+        request_json = kwargs.get("json")
+        if isinstance(request_json, dict):
+            sensitive_request = sensitive_request or any(
+                str(key).lower() in {"pw", "newpw", "password"} for key in request_json
+            )
+        request_timeout = kwargs.pop("timeout", None)
+        attempts = self.max_retries + 1
+        retry_statuses = {429, 500, 502, 503, 504}
+        backoff_cap = 30.0
+
+        for attempt in range(attempts):
             try:
                 async with self.session() as session:
-                    async with session.request(method, url, **kwargs) as response:
-                        # 检查HTTP状态码
+                    async with session.request(
+                        method, url,
+                        timeout=request_timeout if request_timeout is not None else self.timeout,
+                        **kwargs,
+                    ) as response:
                         if response.status in [200, 204]:
-                            # 处理不同的响应类型
                             if response.content_type == 'application/json':
                                 try:
                                     data = await response.json()
-                                    LOGGER.debug(f"API请求成功: {method} {endpoint}")
+                                    LOGGER.debug(f"API请求成功: {method} {safe_url}")
                                     return EmbyApiResult(True, data)
                                 except Exception as e:
                                     LOGGER.error(f"JSON解析失败: {str(e)}")
                                     return EmbyApiResult(False, error=f"JSON解析失败: {str(e)}")
-                            else:
-                                # 处理二进制内容（如图片）
-                                content = await response.read()
-                                return EmbyApiResult(True, content)
-                        
-                        elif response.status == 404:
-                            return EmbyApiResult(False, error="资源不存在")
+                            content = await response.read()
+                            return EmbyApiResult(True, content)
+
+                        error_msg = f"HTTP {response.status}"
+                        if response.status == 404:
+                            error_msg = "资源不存在"
                         elif response.status == 401:
-                            return EmbyApiResult(False, error="认证失败，请检查API密钥")
+                            error_msg = "认证失败，请检查API密钥"
                         elif response.status == 403:
-                            return EmbyApiResult(False, error="权限不足")
-                        else:
-                            error_msg = f"HTTP {response.status}"
+                            error_msg = "权限不足"
+                        elif not sensitive_request:
                             try:
                                 error_text = await response.text()
                                 if error_text:
                                     error_msg += f": {error_text}"
                             except Exception:
                                 pass
-                            
-                            LOGGER.warning(f"API请求失败: {method} {url} - {error_msg}")
-                            return EmbyApiResult(False, error=error_msg)
-            
+
+                        if response.status in retry_statuses and attempt < attempts - 1:
+                            retry_after = response.headers.get("Retry-After")
+                            delay = None
+                            if retry_after:
+                                try:
+                                    delay = max(0.0, float(retry_after))
+                                except (TypeError, ValueError):
+                                    try:
+                                        retry_at = parsedate_to_datetime(retry_after)
+                                        if retry_at.tzinfo is None:
+                                            retry_at = retry_at.replace(tzinfo=timezone.utc)
+                                        delay = max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
+                                    except (TypeError, ValueError, OverflowError):
+                                        delay = None
+                            if delay is None:
+                                delay = min(backoff_cap, 1.0 * (2 ** min(attempt, 5)))
+                            delay = min(backoff_cap, delay)
+                            LOGGER.warning(f"API请求失败，将重试: {method} {safe_url} - {error_msg}; delay={delay:.1f}s")
+                            await asyncio.sleep(delay)
+                            continue
+
+                        LOGGER.warning(f"API请求失败: {method} {safe_url} - {error_msg}")
+                        return EmbyApiResult(False, error=error_msg)
+
             except asyncio.TimeoutError:
-                LOGGER.warning(f"请求超时 (尝试 {attempt + 1}/{self.max_retries}): {url}")
-                if attempt == self.max_retries - 1:
+                LOGGER.warning(f"请求超时 (尝试 {attempt + 1}/{attempts}): {safe_url}")
+                if attempt >= attempts - 1:
                     return EmbyApiResult(False, error="请求超时")
-                await asyncio.sleep(1 * (attempt + 1))  # 指数退避
-            
+                await asyncio.sleep(min(backoff_cap, 1.0 * (2 ** min(attempt, 5))))
             except aiohttp.ClientError as e:
-                LOGGER.error(f"网络请求异常 (尝试 {attempt + 1}/{self.max_retries}): {str(e)}")
-                if attempt == self.max_retries - 1:
-                    return EmbyApiResult(False, error=f"网络请求失败: {str(e)}")
-                await asyncio.sleep(1 * (attempt + 1))
-            
+                LOGGER.error(f"网络请求异常 (尝试 {attempt + 1}/{attempts}): {safe_url} - {e}")
+                if attempt >= attempts - 1:
+                    return EmbyApiResult(False, error=f"网络请求失败: {e}")
+                await asyncio.sleep(min(backoff_cap, 1.0 * (2 ** min(attempt, 5))))
             except Exception as e:
-                LOGGER.error(f"未知异常 (尝试 {attempt + 1}/{self.max_retries}): {str(e)}")
-                if attempt == self.max_retries - 1:
-                    return EmbyApiResult(False, error=f"未知错误: {str(e)}")
-                await asyncio.sleep(1 * (attempt + 1))
-        
+                LOGGER.error(f"未知异常 (尝试 {attempt + 1}/{attempts}): {safe_url} - {e}")
+                if attempt >= attempts - 1:
+                    return EmbyApiResult(False, error=f"未知错误: {e}")
+                await asyncio.sleep(min(backoff_cap, 1.0 * (2 ** min(attempt, 5))))
+
         return EmbyApiResult(False, error="达到最大重试次数")
 
-    async def emby_create(self, name: str, days: int) -> Union[Tuple[str, str, datetime], bool]:
+    async def emby_create(self, name: str, days: int, tg_id: int = 0, telegram_username: str = "") -> Union[Tuple[str, str, datetime], bool]:
         """
         创建 Emby 账户
         :param name: 用户名
@@ -253,7 +328,11 @@ class Embyservice(metaclass=Singleton):
             
             # 1. 创建用户
             LOGGER.info(f"开始创建用户: {name}")
-            result = await self._request('POST', '/emby/Users/New', json={"Name": name})
+            create_payload = {"Name": name}
+            if int(tg_id or 0) > 0:
+                create_payload["TelegramUserId"] = int(tg_id)
+                create_payload["TelegramUsername"] = str(telegram_username or "").lstrip("@")
+            result = await self._request('POST', '/emby/Users/New', json=create_payload)
             if not result.success:
                 LOGGER.error(f"创建用户失败: {result.error}")
                 return False
@@ -262,39 +341,64 @@ class Embyservice(metaclass=Singleton):
             if not user_id:
                 LOGGER.error("无法获取用户ID")
                 return False
-            
+
+            async def rollback_created_user(reason: str) -> None:
+                LOGGER.error(f"{reason}，尝试删除已创建用户: {user_id}")
+                try:
+                    if not await self.emby_del(user_id):
+                        LOGGER.error(f"回滚删除用户失败: {user_id}")
+                except Exception as cleanup_error:
+                    LOGGER.error(f"回滚删除用户异常: {user_id} - {cleanup_error}")
+
             # 2. 设置密码
             password = await pwd_create(8)
             pwd_data = pwd_policy(user_id, new=password)
             result = await self._request('POST', f'/emby/Users/{user_id}/Password', json=pwd_data)
             if not result.success:
-                LOGGER.error(f"设置密码失败: {result.error}")
+                # Do not include the API error body here: some servers echo request fields.
+                await rollback_created_user("设置密码失败")
                 return False
-            
+
             # 3. 设置策略
             policy = create_policy(False, False)
             result = await self._request('POST', f'/emby/Users/{user_id}/Policy', json=policy)
             if not result.success:
-                LOGGER.error(f"设置策略失败: {result.error}")
+                await rollback_created_user(f"设置策略失败: {result.error}")
                 return False
-            
+
             # 4. 隐藏 emby_block 和 extra_emby_libs 媒体库
             try:
-                # 使用封装的隐藏方法
                 block_libs = emby_block + extra_emby_libs
                 result = await self.hide_folders_by_names(user_id, block_libs)
                 if not result:
-                    LOGGER.warning(f"设置媒体库权限失败: {user_id}，但用户已创建成功")
+                    await rollback_created_user("设置媒体库权限失败")
+                    return False
             except Exception as e:
-                # 如果设置媒体库权限失败，记录错误但不影响用户创建
-                LOGGER.error(f"设置媒体库权限异常: {name} (ID: {user_id}) - {str(e)}")
-            
+                await rollback_created_user(f"设置媒体库权限异常: {str(e)}")
+                return False
+
             LOGGER.info(f"成功创建用户: {name} (ID: {user_id})")
             return user_id, password, expiry_date
-            
+
         except Exception as e:
             LOGGER.error(f"创建用户异常: {name} - {str(e)}")
+            if 'user_id' in locals() and user_id:
+                try:
+                    await self.emby_del(user_id)
+                except Exception as cleanup_error:
+                    LOGGER.error(f"创建用户异常后的回滚删除失败: {user_id} - {cleanup_error}")
             return False
+
+        except asyncio.CancelledError:
+            # 注册队列超时取消（BaseException，不会被 except Exception 捕获）发生在
+            # 远端创建中途时，这里尽力回滚已创建的账号再传播取消，避免孤儿账号。
+            LOGGER.error(f"创建用户被取消: {name} - 尝试回滚已创建账号")
+            if 'user_id' in locals() and user_id:
+                try:
+                    await self.emby_del(user_id)
+                except Exception as cleanup_error:
+                    LOGGER.error(f"创建用户被取消后的回滚删除失败: {user_id} - {cleanup_error}")
+            raise
 
     async def emby_del(self, emby_id: str) -> bool:
         """
@@ -389,13 +493,14 @@ class Embyservice(metaclass=Singleton):
             LOGGER.error(f"设置用户权限异常: {emby_id} - {str(e)}")
             return False
 
+    @async_memoize(ttl=300)
     async def get_emby_libs(self) -> Optional[Dict[str, str]]:
         """
         获取所有媒体库
         :return: 媒体库字典 {guid: name}
         """
         try:
-            result = await self._request('GET', f'/emby/Library/VirtualFolders?api_key={self.api_key}')
+            result = await self._request('GET', '/emby/Library/VirtualFolders')
             if result.success and result.data:
                 # {guid: lib_name, ...}
                 libs = {lib['Guid']: lib['Name'] for lib in result.data}
@@ -408,14 +513,15 @@ class Embyservice(metaclass=Singleton):
             LOGGER.error(f"获取媒体库异常: {str(e)}")
             return None
 
-    async def get_folder_ids_by_names(self, folder_names: List[str]) -> List[str]:
+    @async_memoize(ttl=300)
+    async def get_folder_ids_by_names(self, folder_names: List[str]) -> Optional[List[str]]:
         """
         根据媒体库名称获取对应的ID列表
         :param folder_names: 媒体库名称列表
         :return: 媒体库ID列表
         """
         try:
-            result = await self._request('GET', f'/emby/Library/VirtualFolders?api_key={self.api_key}')
+            result = await self._request('GET', '/emby/Library/VirtualFolders')
             if result.success and result.data:
                 folder_ids = []
                 for lib in result.data:
@@ -426,10 +532,10 @@ class Embyservice(metaclass=Singleton):
                 return folder_ids
             else:
                 LOGGER.error(f"获取文件夹ID失败: {result.error}")
-                return []
+                return None
         except Exception as e:
             LOGGER.error(f"获取文件夹ID异常: {str(e)}")
-            return []
+            return None
 
     async def update_user_enabled_folder(self, emby_id: str, enabled_folder_ids: List[str] = None, blocked_media_folders: List[str] = None, 
                                 enable_all_folders: bool = True) -> bool:
@@ -442,7 +548,7 @@ class Embyservice(metaclass=Singleton):
         """
         try:
             # 首先获取当前用户策略
-            user_result = await self._request('GET', f'/emby/Users/{emby_id}?api_key={self.api_key}')
+            user_result = await self._request('GET', f'/emby/Users/{emby_id}')
             if not user_result.success:
                 LOGGER.error(f"获取用户信息失败: {emby_id} - {user_result.error}")
                 return False
@@ -481,7 +587,7 @@ class Embyservice(metaclass=Singleton):
             success, rep = await self.user(emby_id=emby_id)
             if not success:
                 LOGGER.error(f"获取用户信息失败: {emby_id}")
-                return [], False
+                return [], False, []
             
             policy = rep.get("Policy", {})
             enable_all_folders = policy.get("EnableAllFolders", False)
@@ -498,7 +604,7 @@ class Embyservice(metaclass=Singleton):
                 
         except Exception as e:
             LOGGER.error(f"获取当前启用文件夹ID异常: {emby_id} - {str(e)}")
-            return [], False
+            return [], False, []
 
     async def hide_folders_by_names(self, emby_id: str, folder_names: List[str]) -> bool:
         """
@@ -514,15 +620,19 @@ class Embyservice(metaclass=Singleton):
             # 获取要隐藏的媒体库对应的文件夹ID
             hide_folder_ids = await self.get_folder_ids_by_names(folder_names)
             
+            if hide_folder_ids is None:
+                return False
             if not hide_folder_ids:
-                LOGGER.warning(f"未找到要隐藏的媒体库: {folder_names}")
-                return True  # 如果找不到，认为操作成功（可能已经隐藏了）
-            
-            # 从启用列表中移除要隐藏的文件夹ID
-            new_enabled_folders = [folder_id for folder_id in current_enabled_folders 
-                                  if folder_id not in hide_folder_ids]
-            # 将媒体库名称添加到阻止列表中（去重）
-            new_blocked_folders = list(set(blocked_media_folders + folder_names)) if blocked_media_folders else folder_names
+                LOGGER.info(f"没有匹配到需要隐藏的媒体库: {folder_names}")
+                return True
+
+            # Only persist names that actually exist on the server.  This
+            # avoids recording typoed configuration values in the policy.
+            library_map = await self.get_emby_libs() or {}
+            matched_names = [name for name in folder_names if name in library_map.values()]
+            new_enabled_folders = [folder_id for folder_id in current_enabled_folders
+                                   if folder_id not in hide_folder_ids]
+            new_blocked_folders = list(dict.fromkeys((blocked_media_folders or []) + matched_names))
             # 更新用户策略
             return await self.update_user_enabled_folder(
                 emby_id=emby_id,
@@ -550,20 +660,23 @@ class Embyservice(metaclass=Singleton):
             if enable_all_folders is True:
                 return await self.update_user_enabled_folder(
                     emby_id=emby_id,
-                    blocked_media_folders=[],
+                    blocked_media_folders=blocked_media_folders,
                     enable_all_folders=True,
                 )
             
             # 获取要显示的媒体库对应的文件夹ID
             show_folder_ids = await self.get_folder_ids_by_names(folder_names)
             
+            if show_folder_ids is None:
+                return False
             if not show_folder_ids:
-                LOGGER.warning(f"未找到要显示的媒体库: {folder_names}")
-                return True  # 如果找不到，认为操作成功
-            
-            # 将文件夹ID添加到启用列表中（去重）
-            new_enabled_folders = list(set(current_enabled_folders + show_folder_ids))
-            new_blocked_folders = [name for name in blocked_media_folders if name not in folder_names] if blocked_media_folders else []
+                LOGGER.info(f"没有匹配到需要显示的媒体库: {folder_names}")
+                return True
+
+            library_map = await self.get_emby_libs() or {}
+            matched_names = {name for name in folder_names if name in library_map.values()}
+            new_enabled_folders = list(dict.fromkeys(current_enabled_folders + show_folder_ids))
+            new_blocked_folders = [name for name in (blocked_media_folders or []) if name not in matched_names]
             
             # 更新用户策略
             return await self.update_user_enabled_folder(
@@ -607,7 +720,7 @@ class Embyservice(metaclass=Singleton):
             enable_all_folders=False
         )
 
-    @cache.memoize(ttl=120)
+    @async_memoize(ttl=120)
     async def get_current_playing_count(self) -> int:
         """
         获取当前播放用户数量
@@ -700,6 +813,8 @@ class Embyservice(metaclass=Singleton):
             if result.success and result.data:
                 emby_id = result.data.get("User", {}).get("Id")
                 if emby_id:
+                    if int(tg_id or 0) > 0:
+                        await self.bind_telegram_identity(emby_id, tg_id)
                     LOGGER.info(f"账户验证成功: {username} -> {emby_id}")
                     return True, emby_id
                 else:
@@ -712,6 +827,53 @@ class Embyservice(metaclass=Singleton):
             LOGGER.error(f"账户验证异常: {username} - {str(e)}")
             return False, 0
 
+    async def bind_telegram_identity(self, emby_id: str, tg_id: int, telegram_username: str = "") -> bool:
+        if not emby_id or int(tg_id or 0) <= 0:
+            return False
+        # 优先走服务端适配器（/integration/v1 + 最小权限 credential），
+        # 未启用联动时回退到旧的 Emby 兼容管理接口。
+        try:
+            from bot.func_helper.emotion import emotion_enabled, get_emotion_service
+            if emotion_enabled():
+                result = await get_emotion_service().bind_telegram(
+                    int(emby_id), int(tg_id), telegram_username
+                )
+                if not result.success:
+                    LOGGER.warning(f"Emotion adapter bind failed: emby_id={emby_id}, tg={tg_id}, error={result.error}")
+                return bool(result.success)
+        except Exception as exc:
+            LOGGER.warning(f"Emotion adapter bind exception, falling back: {exc}")
+        result = await self._request(
+            'POST',
+            f'/admin/users/{emby_id}/telegram',
+            json={
+                "telegram_user_id": int(tg_id),
+                "telegram_username": str(telegram_username or "").lstrip("@"),
+            },
+        )
+        if not result.success:
+            LOGGER.warning(f"Emotion Telegram identity bind failed: emby_id={emby_id}, tg={tg_id}, error={result.error}")
+        return bool(result.success)
+
+    async def emotion_security_summary(self, hours: int = 24) -> EmbyApiResult:
+        hours = max(1, min(int(hours or 24), 24 * 30))
+        try:
+            from bot.func_helper.emotion import emotion_enabled, get_emotion_service
+            if emotion_enabled():
+                return await get_emotion_service().security_summary(hours)
+        except Exception as exc:
+            LOGGER.warning(f"Emotion adapter security summary exception, falling back: {exc}")
+        return await self._request('GET', f'/admin/security/summary?hours={hours}')
+
+    async def emotion_security_events(self, hours: int = 24) -> EmbyApiResult:
+        hours = max(1, min(int(hours or 24), 24 * 30))
+        try:
+            from bot.func_helper.emotion import emotion_enabled, get_emotion_service
+            if emotion_enabled():
+                return await get_emotion_service().security_events(hours)
+        except Exception as exc:
+            LOGGER.warning(f"Emotion adapter security events exception, falling back: {exc}")
+        return await self._request('GET', f'/admin/security/events?hours={hours}')
     async def emby_cust_commit(self, emby_id: str = None, days: int = 7, method: str = None) -> Optional[List[Dict]]:
         """
         执行自定义查询（已修复SQL注入问题）
@@ -765,6 +927,7 @@ class Embyservice(metaclass=Singleton):
             LOGGER.error(f"获取用户列表异常: {str(e)}")
             return False, {'error': str(e)}
 
+    @async_memoize(ttl=10)
     async def user(self, emby_id: str) -> Tuple[bool, Union[Dict, Dict[str, str]]]:
         """
         通过ID获取用户信息
@@ -790,7 +953,9 @@ class Embyservice(metaclass=Singleton):
         :return: (是否成功, 用户信息或错误信息)
         """
         try:
-            result = await self._request('GET', f'/emby/Users/Query?NameStartsWithOrGreater={emby_name}&api_key={self.api_key}')
+            result = await self._request(
+                'GET', '/emby/Users/Query', params={'NameStartsWithOrGreater': emby_name}
+            )
             if result.success and result.data:
                 items = result.data.get("Items", [])
                 for item in items:
@@ -1039,7 +1204,7 @@ class Embyservice(metaclass=Singleton):
                 "ReplaceUserId": True
             }
             
-            result = await self._request('POST', f'/emby/user_usage_stats/submit_custom_query?api_key={emby_api}', json=data)
+            result = await self._request('POST', '/emby/user_usage_stats/submit_custom_query', json=data)
             if result.success and result.data:
                 ret = result.data
                 if len(ret.get("colums", [])) == 0:
@@ -1097,7 +1262,7 @@ class Embyservice(metaclass=Singleton):
                 "ReplaceUserId": False
             }
             
-            result = await self._request('POST', f'/emby/user_usage_stats/submit_custom_query?api_key={emby_api}', json=data)
+            result = await self._request('POST', '/emby/user_usage_stats/submit_custom_query', json=data)
             if result.success and result.data:
                 ret = result.data
                 if len(ret.get("colums", [])) == 0:
@@ -1179,7 +1344,7 @@ class Embyservice(metaclass=Singleton):
                 "ReplaceUserId": False
             }
             
-            result = await self._request('POST', f'/emby/user_usage_stats/submit_custom_query?api_key={emby_api}', json=data)
+            result = await self._request('POST', '/emby/user_usage_stats/submit_custom_query', json=data)
             if result.success and result.data:
                 ret = result.data
                 if len(ret.get("colums", [])) == 0:
@@ -1261,7 +1426,7 @@ class Embyservice(metaclass=Singleton):
                 "ReplaceUserId": False
             }
             
-            result = await self._request('POST', f'/emby/user_usage_stats/submit_custom_query?api_key={emby_api}', json=data)
+            result = await self._request('POST', '/emby/user_usage_stats/submit_custom_query', json=data)
             if result.success and result.data:
                 ret = result.data
                 if len(ret.get("colums", [])) == 0:
@@ -1326,7 +1491,7 @@ class Embyservice(metaclass=Singleton):
                 "ReplaceUserId": True
             }
             
-            result = await self._request('POST', f'/emby/user_usage_stats/submit_custom_query?api_key={emby_api}', json=data)
+            result = await self._request('POST', '/emby/user_usage_stats/submit_custom_query', json=data)
             if result.success and result.data:
                 ret = result.data
                 if len(ret.get("colums", [])) == 0:
@@ -1358,27 +1523,69 @@ class Embyservice(metaclass=Singleton):
         获取媒体数量统计
         :return: 统计文本
         """
+        api_key = str(emby_api or "").strip()
+        base_url = str(emby_url or "").strip().rstrip("/")
+        placeholder_markers = ("replace_with", "your_", "example", "api_key")
+
+        if not base_url or any(marker in base_url.lower() for marker in ("replace_with", "example")):
+            LOGGER.error("获取媒体统计失败: Emby URL 未配置")
+            return "🤕Emby 服务器地址未配置，请先填写 emby_url。"
+
+        if not api_key or any(marker in api_key.lower() for marker in placeholder_markers):
+            LOGGER.error("获取媒体统计失败: Emby API Key 未配置")
+            return "🤕Emby API Key 未配置，请先填写有效的 emby_api。"
+
         try:
             # 创建临时会话进行请求
             timeout = aiohttp.ClientTimeout(total=10)
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                url = f"{emby_url}/emby/Items/Counts?api_key={emby_api}"
-                async with session.get(url) as response:
+                url = f"{base_url}/emby/Items/Counts"
+                headers = {
+                    "Accept": "application/json",
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache",
+                    "X-Emby-Token": api_key,
+                }
+                params = {
+                    "_": str(int(datetime.now().timestamp())),
+                }
+                async with session.get(url, headers=headers, params=params) as response:
                     if response.status in [200, 204]:
-                        result = await response.json()
+                        try:
+                            result = await response.json(content_type=None)
+                        except Exception as e:
+                            LOGGER.error(f"获取媒体统计失败: JSON解析失败 - {str(e)}")
+                            return "🤕Emby 服务器返回的数据不是有效 JSON。"
                         movie_count = result.get("MovieCount", 0)
                         tv_count = result.get("SeriesCount", 0)
                         episode_count = result.get("EpisodeCount", 0)
                         music_count = result.get("SongCount", 0)
+                        item_count = result.get("ItemCount")
                         
                         txt = f'🎬 电影数量：{movie_count}\n' \
                               f'📽️ 剧集数量：{tv_count}\n' \
                               f'🎵 音乐数量：{music_count}\n' \
                               f'🎞️ 总集数：{episode_count}\n'
+                        if item_count is not None:
+                            txt += f'📦 总项目数：{item_count}\n'
                         LOGGER.debug("获取媒体统计成功")
                         return txt
+                    if response.status == 401:
+                        LOGGER.error("获取媒体统计失败: Emby API Key 认证失败")
+                        return "🤕Emby API Key 认证失败，请检查 emby_api。"
+                    if response.status == 403:
+                        LOGGER.error("获取媒体统计失败: Emby API Key 权限不足")
+                        return "🤕Emby API Key 权限不足，请检查该 Key 是否允许读取媒体库统计。"
+                    if response.status == 404:
+                        LOGGER.error("获取媒体统计失败: /emby/Items/Counts 不存在")
+                        return "🤕Emby 服务器不支持 Items/Counts 接口，请检查 emby_url 是否填到了正确服务。"
                     else:
-                        LOGGER.error(f"获取媒体统计失败: HTTP {response.status}")
+                        body = ""
+                        try:
+                            body = (await response.text())[:300]
+                        except Exception:
+                            pass
+                        LOGGER.error(f"获取媒体统计失败: HTTP {response.status} {body}")
                         return '🤕Emby 服务器返回数据为空!'
         except Exception as e:
             LOGGER.error(f"获取媒体统计异常: {str(e)}")
@@ -1402,13 +1609,9 @@ class Embyservice(metaclass=Singleton):
                    f"&StartIndex={int(start)}&Recursive=true&SearchTerm={encoded_title}&Limit={int(limit)}&IncludeSearchTypes=false")
             
             # 使用较短的超时时间
-            old_timeout = self.timeout
-            self.timeout = aiohttp.ClientTimeout(total=3)
-            
-            try:
-                result = await self._request('GET', url)
-            finally:
-                self.timeout = old_timeout
+            result = await self._request(
+                'GET', url, timeout=aiohttp.ClientTimeout(total=3, connect=3)
+            )
             
             if result.success and result.data:
                 items = result.data.get("Items", [])
@@ -1471,13 +1674,11 @@ class Embyservice(metaclass=Singleton):
             return False, '获取设备信息异常'
 
     def __del__(self):
-        """析构函数，确保资源清理"""
         if hasattr(self, '_session') and self._session and not self._session.closed:
-            # 在事件循环中清理会话
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_event_loop_policy().get_event_loop()
                 if loop.is_running():
-                    loop.create_task(self.close())
+                    asyncio.ensure_future(self.close(), loop=loop)
             except Exception:
                 pass
 

@@ -85,7 +85,10 @@
         <button type="button" class="nav-pill" data-section-target="update-section">自动更新</button>
         <button type="button" class="nav-pill" data-section-target="migration-section">数据迁移</button>
         <button type="button" class="nav-pill" data-section-target="codes-section">注册码</button>
+        <button type="button" class="nav-pill" data-section-target="invites-section">邀请管理</button>
         <button type="button" class="nav-pill" data-section-target="users-section">用户检索</button>
+        <button type="button" class="nav-pill" data-section-target="moderation-section">群组管理</button>
+        <button type="button" class="nav-pill" data-section-target="bot-block-section">Bot 黑名单</button>
         <button type="button" class="nav-pill" data-section-target="editor-section">用户编辑</button>
         <button type="button" class="nav-pill" data-section-target="plugins-section">插件状态</button>
       </div>
@@ -110,6 +113,10 @@
             <strong id="summary-active">-</strong>
           </article>
           <article class="metric-card">
+            <span>白名单用户</span>
+            <strong id="summary-whitelist">-</strong>
+          </article>
+          <article class="metric-card">
             <span>已封禁用户</span>
             <strong id="summary-banned">-</strong>
           </article>
@@ -118,6 +125,68 @@
             <strong id="summary-currency">-</strong>
           </article>
         </div>
+
+        <section class="plugin-import-card">
+          <div>
+            <p class="eyebrow">批量账号操作</p>
+            <h3>按等级批量删除 / 封禁 / 改级别</h3>
+          </div>
+          <p id="user-batch-status" class="plugin-meta">先选择处理范围和动作，点击预览后再执行。删除资格会删除 Emby 服务账号，并把后台记录恢复为未注册状态。</p>
+          <form id="user-batch-form" class="grid-form">
+            <label>
+              处理范围
+              <select id="user-batch-scope">
+                <option value="exclude_whitelist">除白名单外的所有账号</option>
+                <option value="whitelist">所有白名单账号</option>
+                <option value="all">所有账号</option>
+                <option value="level">指定当前等级</option>
+              </select>
+            </label>
+            <label>
+              当前等级
+              <select id="user-batch-source-level">
+                <option value="a">a · 白名单用户</option>
+                <option value="b" selected>b · 正常用户</option>
+                <option value="c">c · 已封禁用户</option>
+                <option value="d">d · 未注册用户</option>
+              </select>
+            </label>
+            <label>
+              批量动作
+              <select id="user-batch-action">
+                <option value="set_level">设置为某个等级</option>
+                <option value="ban">封禁账号</option>
+                <option value="delete">删除资格</option>
+              </select>
+            </label>
+            <label>
+              目标等级
+              <select id="user-batch-target-level">
+                <option value="a">a · 白名单用户</option>
+                <option value="b" selected>b · 正常用户</option>
+                <option value="c">c · 已封禁用户</option>
+                <option value="d">d · 未注册用户</option>
+              </select>
+            </label>
+            <div id="user-batch-preview" class="wide-field code-result hidden"></div>
+            <div class="form-actions">
+              <button id="user-batch-preview-button" type="submit" class="secondary">预览影响账号</button>
+              <button id="user-batch-apply-button" type="button" disabled>确认执行批量操作</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="plugin-import-card">
+          <div>
+            <p class="eyebrow">Emby 服务控制</p>
+            <h3>一键暂停 / 恢复 Emby 服务</h3>
+          </div>
+          <p id="emby-service-status" class="plugin-meta">开启后，所有用户的 Emby 账号将在服务器端被禁用，即使手机已保存线路也无法播放。关闭后，有账号的用户自动恢复。</p>
+          <div class="form-actions">
+            <span id="emby-service-badge" class="badge badge--normal">服务正常</span>
+            <button id="emby-service-toggle" type="button">暂停 Emby 服务</button>
+          </div>
+        </section>
       </div>
     </details>
 
@@ -170,11 +239,11 @@
             </label>
             <label>
               Compose 服务名
-              <input id="auto-update-compose-service" type="text" placeholder="pivkeyu_emby">
+              <input id="auto-update-compose-service" type="text" placeholder="echo">
             </label>
             <label>
               容器名
-              <input id="auto-update-container-name" type="text" placeholder="pivkeyu_emby">
+              <input id="auto-update-container-name" type="text" placeholder="echo">
             </label>
             <label>
               检查间隔（分钟）
@@ -350,6 +419,267 @@
       </div>
     </details>
 
+    <details id="invites-section" class="card fold-card">
+      <summary class="fold-summary">
+        <div>
+          <p class="eyebrow">邀请管理</p>
+          <h2>邀请资格</h2>
+        </div>
+          <span class="summary-tip">管理入群邀请、账号开通申请，以及邀请人和被邀请人关系</span>
+      </summary>
+      <div class="fold-body">
+        <div class="summary-grid">
+          <article class="metric-card">
+            <span>历史入群资格</span>
+            <strong id="invite-total">-</strong>
+          </article>
+          <article class="metric-card">
+            <span>入群资格来源</span>
+            <strong id="invite-available">-</strong>
+          </article>
+          <article class="metric-card">
+            <span>已使用入群资格</span>
+            <strong id="invite-used">-</strong>
+          </article>
+          <article class="metric-card">
+            <span>已撤销入群资格</span>
+            <strong id="invite-revoked">-</strong>
+          </article>
+          <article class="metric-card">
+            <span>注册资格总数</span>
+            <strong id="invite-open-total">-</strong>
+          </article>
+          <article class="metric-card">
+            <span>可用注册资格</span>
+            <strong id="invite-open-available">-</strong>
+          </article>
+          <article class="metric-card">
+            <span>已发放注册资格</span>
+            <strong id="invite-open-used">-</strong>
+          </article>
+          <article class="metric-card">
+            <span>已删除注册资格</span>
+            <strong id="invite-open-revoked">-</strong>
+          </article>
+        </div>
+
+        <section class="plugin-import-card">
+          <div>
+            <p class="eyebrow">功能开关</p>
+            <h3>邀请模块设置</h3>
+          </div>
+          <p id="invite-settings-status" class="plugin-meta">用户端包含入群资格邀请和账号开通申请，目标群组与验证开关共用这里的设置。</p>
+          <form id="invite-settings-form" class="grid-form">
+            <label class="wide-field inline-check">
+              <input id="invite-enabled" type="checkbox">
+              启用邀请功能模块
+            </label>
+            <label>
+              目标群组 ID
+              <input id="invite-target-chat-id" type="number" placeholder="-100...">
+            </label>
+            <label>
+              链接有效期（小时）
+              <input id="invite-expire-hours" type="number" min="1" max="168" value="24">
+            </label>
+            <label>
+              默认注册天数
+              <input id="invite-account-open-days" type="number" min="1" max="3650" value="30">
+            </label>
+            <label class="wide-field inline-check">
+              <input id="invite-group-verification-enabled" type="checkbox" checked>
+              启用群组验证
+            </label>
+            <label class="wide-field inline-check">
+              <input id="invite-channel-verification-enabled" type="checkbox">
+              启用频道验证
+            </label>
+            <div class="form-actions">
+              <button id="invite-settings-save" type="submit">保存邀请设置</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="plugin-import-card">
+          <div>
+            <p class="eyebrow">列表搜索</p>
+            <h3>邀请关系检索</h3>
+          </div>
+          <form id="invite-search-form" class="search-form">
+            <label class="search-field">
+              <span>搜索 TG 昵称 / TGID</span>
+              <input id="invite-search-input" type="search" placeholder="例如 昵称、@username、123456789">
+            </label>
+            <button id="invite-search-submit" type="submit">搜索邀请</button>
+          </form>
+        </section>
+
+        <section class="plugin-import-card">
+          <div>
+            <p class="eyebrow">资格控制</p>
+            <h3>用户界面资格开关</h3>
+          </div>
+          <form id="invite-qualification-form" class="grid-form">
+            <label>
+              用户 TGID
+              <input id="invite-qualification-owner" type="number" min="1" placeholder="例如 123456789">
+            </label>
+            <label>
+              资格类型
+              <select id="invite-qualification-type">
+                <option value="group_join">入群资格</option>
+                <option value="account_open">开通申请资格</option>
+              </select>
+            </label>
+            <label>
+              操作
+              <select id="invite-qualification-enabled">
+                <option value="false">撤销资格</option>
+                <option value="true">恢复资格</option>
+              </select>
+            </label>
+            <label class="wide-field">
+              原因
+              <input id="invite-qualification-reason" type="text" maxlength="255" placeholder="例如 管理员手动撤销、恢复权限">
+            </label>
+            <div class="form-actions">
+              <button id="invite-qualification-submit" type="submit">更新资格</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="plugin-import-card">
+          <div>
+            <p class="eyebrow">注册资格</p>
+            <h3>申请审核与代发</h3>
+          </div>
+          <p id="invite-open-grant-status" class="plugin-meta">注册资格已改为申请制，优先在下方开通申请关系中审核。</p>
+          <form id="invite-open-create-form" class="grid-form">
+            <label>
+              申请人 TGID
+              <input id="invite-open-create-inviter" type="number" min="1" placeholder="拥有观影资格的用户">
+            </label>
+            <label>
+              被申请人 TGID
+              <input id="invite-open-create-invitee" type="number" min="1" placeholder="未开通 Emby 的用户">
+            </label>
+            <label class="wide-field">
+              代发备注
+              <input id="invite-open-create-note" type="text" maxlength="255" placeholder="管理员代发时可填写">
+            </label>
+            <div class="form-actions">
+              <button id="invite-open-grant-use-selected" type="button" class="secondary">带入当前选中用户为申请人</button>
+              <button id="invite-open-create-submit" type="submit">管理员代发注册资格</button>
+            </div>
+          </form>
+          <form id="invite-open-grant-form" class="grid-form">
+            <label>
+              旧版资格拥有人 TGID
+              <input id="invite-open-grant-tg" type="number" min="1" placeholder="已有 Emby 观影资格的用户">
+            </label>
+            <label>
+              旧版注册天数
+              <input id="invite-open-grant-days" type="number" min="1" max="3650" value="30">
+            </label>
+            <label class="wide-field">
+              旧版备注
+              <input id="invite-open-grant-note" type="text" maxlength="255" placeholder="仅兼容历史库存">
+            </label>
+            <div class="form-actions">
+              <button id="invite-open-grant-submit" type="submit">赠送旧版注册资格</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card-lite">
+          <div class="code-toolbar">
+            <div>
+              <div class="plugin-name">注册资格库存</div>
+              <p class="plugin-meta">仅用于历史库存查看和删除；新版请处理开通申请关系。</p>
+            </div>
+            <div class="control-actions">
+              <button id="invite-open-credit-select-page" type="button" class="secondary">全选可删</button>
+              <button id="invite-open-credit-clear-selection" type="button" class="secondary">清空选择</button>
+              <button id="invite-open-credit-delete-selected" type="button">删除已选</button>
+            </div>
+          </div>
+          <div id="invite-open-credit-list" class="stack-list code-list"></div>
+        </section>
+
+        <section class="card-lite">
+          <div class="plugin-card-top">
+            <div>
+              <div class="plugin-name">开通申请关系</div>
+              <p class="plugin-meta">展示申请人、被申请人、审核人和处理状态。</p>
+            </div>
+          </div>
+          <div id="invite-open-record-list" class="stack-list code-list"></div>
+          <div class="pager">
+            <button id="invite-open-prev-page" type="button" class="secondary">上一页</button>
+            <span id="invite-open-page-label">第 1 页</span>
+            <button id="invite-open-next-page" type="button" class="secondary">下一页</button>
+          </div>
+        </section>
+
+        <section class="plugin-import-card">
+          <div>
+            <p class="eyebrow">手动发放</p>
+            <h3>旧版入群资格</h3>
+          </div>
+          <p id="invite-grant-status" class="plugin-meta">入群资格已改为拥有观影资格后自动获得一次；此表单仅保留旧库存兼容。</p>
+          <form id="invite-grant-form" class="grid-form">
+            <label>
+              用户 TGID
+              <input id="invite-grant-tg" type="number" min="1" placeholder="例如 123456789">
+            </label>
+            <label>
+              数量
+              <input id="invite-grant-count" type="number" min="1" max="500" value="1">
+            </label>
+            <label class="wide-field">
+              备注
+              <input id="invite-grant-note" type="text" maxlength="255" placeholder="例如 活动赠送、补偿发放">
+            </label>
+            <div class="form-actions">
+              <button id="invite-grant-use-selected" type="button" class="secondary">带入当前选中用户</button>
+              <button id="invite-grant-submit" type="submit">赠送旧版入群资格</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card-lite">
+          <div class="code-toolbar">
+            <div>
+              <div class="plugin-name">入群资格库存</div>
+              <p class="plugin-meta">新版入群邀请由观影资格自动派生，旧库存仅用于历史记录查看和删除。</p>
+            </div>
+            <div class="control-actions">
+              <button id="invite-credit-select-page" type="button" class="secondary">全选可删</button>
+              <button id="invite-credit-clear-selection" type="button" class="secondary">清空选择</button>
+              <button id="invite-credit-delete-selected" type="button">删除已选</button>
+            </div>
+          </div>
+          <div id="invite-credit-list" class="stack-list code-list"></div>
+        </section>
+
+        <section class="card-lite">
+          <div class="plugin-card-top">
+            <div>
+              <div class="plugin-name">入群邀请关系</div>
+              <p class="plugin-meta">支持按 TG 昵称和 TGID 搜索，每页最多显示 20 条。</p>
+            </div>
+            <button id="invite-refresh" type="button" class="secondary">刷新邀请数据</button>
+          </div>
+          <div id="invite-record-list" class="stack-list code-list"></div>
+          <div class="pager">
+            <button id="invite-group-prev-page" type="button" class="secondary">上一页</button>
+            <span id="invite-group-page-label">第 1 页</span>
+            <button id="invite-group-next-page" type="button" class="secondary">下一页</button>
+          </div>
+        </section>
+      </div>
+    </details>
+
     <section class="admin-grid">
       <details id="users-section" class="card fold-card">
         <summary class="fold-summary">
@@ -423,14 +753,7 @@
               注册/续期天数
               <input id="field-us" type="number">
             </label>
-            <label>
-              登录密码
-              <input id="field-pwd" type="text">
-            </label>
-            <label>
-              安全码
-              <input id="field-pwd2" type="text">
-            </label>
+            <p class="muted">登录密码和安全码不在后台用户资料接口中展示或修改，请通过 Emby 客户端或专用重置流程处理。</p>
             <label>
               创建时间
               <input id="field-cr" type="datetime-local">
@@ -451,6 +774,167 @@
         </div>
       </details>
 
+      <details id="moderation-section" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">群组管理</p>
+            <h2>群管动作与警告</h2>
+          </div>
+          <span class="summary-tip">支持按 TG 昵称、@username 或 TGID 搜成员，并执行禁言、踢出、头衔、置顶和警告</span>
+        </summary>
+        <div class="fold-body">
+          <section class="plugin-import-card">
+            <div>
+              <p class="eyebrow">当前群组</p>
+              <h3>选择需要管理的群</h3>
+            </div>
+            <p id="moderation-status" class="plugin-meta">正在加载可管理群组与警告配置。</p>
+            <form id="moderation-chat-form" class="grid-form">
+              <label>
+                管理群组
+                <select id="moderation-chat-select"></select>
+              </label>
+              <div class="form-actions">
+                <button id="moderation-refresh" type="button" class="secondary">刷新群管理数据</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="plugin-import-card">
+            <div>
+              <p class="eyebrow">成员搜索</p>
+              <h3>按 TG 昵称 / @username / TGID 搜索</h3>
+            </div>
+            <p class="plugin-meta">仅搜索当前群成员。搜索结果会展示当前警告次数，并可直接带入下方操作区。</p>
+            <form id="moderation-search-form" class="search-form">
+              <label class="search-field">
+                <span>搜索关键词</span>
+                <input id="moderation-search-input" type="search" placeholder="例如：昵称、@username、123456789">
+              </label>
+              <button id="moderation-search-submit" type="submit">搜索成员</button>
+            </form>
+            <div id="moderation-member-list" class="stack-list user-list"></div>
+          </section>
+
+          <section class="plugin-import-card">
+            <div>
+              <p class="eyebrow">即时操作</p>
+              <h3>禁言、踢出、头衔、置顶与警告</h3>
+            </div>
+            <p id="moderation-target-status" class="plugin-meta">先在上方搜索并选择一个群成员。</p>
+            <form id="moderation-action-form" class="grid-form">
+              <label>
+                选中成员
+                <input id="moderation-target-display" type="text" readonly placeholder="未选择群成员">
+              </label>
+              <label>
+                禁言分钟
+                <input id="moderation-mute-minutes" type="number" min="0" max="10080" value="60" placeholder="0 表示解除禁言">
+              </label>
+              <label>
+                管理员头衔
+                <input id="moderation-title" type="text" maxlength="16" placeholder="仅管理员可设置">
+              </label>
+              <label>
+                消息 ID
+                <input id="moderation-message-id" type="number" min="1" placeholder="用于置顶 / 取消置顶">
+              </label>
+              <label class="wide-field">
+                原因 / 备注
+                <input id="moderation-reason" type="text" maxlength="255" placeholder="会用于警告记录，也可作为处罚备注">
+              </label>
+              <div class="form-actions moderation-actions">
+                <button id="moderation-mute-button" type="button">禁言</button>
+                <button id="moderation-unmute-button" type="button" class="secondary">解除禁言</button>
+                <button id="moderation-kick-button" type="button">踢出</button>
+                <button id="moderation-warn-button" type="button">警告</button>
+                <button id="moderation-clear-warn-button" type="button" class="secondary">清空警告</button>
+                <button id="moderation-title-button" type="button" class="secondary">设置头衔</button>
+                <button id="moderation-pin-button" type="button" class="secondary">置顶消息</button>
+                <button id="moderation-unpin-button" type="button" class="secondary">取消置顶</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="plugin-import-card">
+            <div>
+              <p class="eyebrow">警告阈值</p>
+              <h3>当前群自动处罚配置</h3>
+            </div>
+            <p id="moderation-settings-status" class="plugin-meta">达到阈值后会自动触发禁言或踢出。</p>
+            <form id="moderation-settings-form" class="grid-form">
+              <label>
+                警告次数阈值
+                <input id="moderation-warn-threshold" type="number" min="1" max="100" value="3">
+              </label>
+              <label>
+                达标处罚
+                <select id="moderation-warn-action">
+                  <option value="mute">mute · 自动禁言</option>
+                  <option value="kick">kick · 自动踢出</option>
+                </select>
+              </label>
+              <label>
+                自动禁言分钟
+                <input id="moderation-warn-mute-minutes" type="number" min="1" max="10080" value="60">
+              </label>
+              <div class="form-actions">
+                <button id="moderation-settings-save" type="submit">保存警告配置</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="card-lite">
+            <div class="plugin-card-top">
+              <div class="plugin-name">当前群警告列表</div>
+              <button id="moderation-warning-refresh" type="button" class="secondary">刷新列表</button>
+            </div>
+            <div id="moderation-warning-list" class="stack-list"></div>
+          </section>
+        </div>
+      </details>
+
+      <details id="bot-block-section" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">Bot 访问控制</p>
+            <h2>Bot 黑名单</h2>
+          </div>
+          <span class="summary-tip">精确匹配 TGID 或 @username，命中后 Bot 不再响应该用户，Mini App 返回 404</span>
+        </summary>
+        <div class="fold-body">
+          <section class="plugin-import-card">
+            <div>
+              <p class="eyebrow">新增规则</p>
+              <h3>禁止指定 TG 用户使用 Bot</h3>
+            </div>
+            <p id="bot-block-status" class="plugin-meta">支持填写 TGID、@username，二者至少填写一个。若从左侧已选中用户，可直接一键带入。</p>
+            <form id="bot-block-form" class="grid-form">
+              <label>
+                TGID
+                <input id="bot-block-tg" type="number" min="1" placeholder="例如 123456789">
+              </label>
+              <label>
+                TG 用户名
+                <input id="bot-block-username" type="text" maxlength="255" placeholder="例如 @telegram_user">
+              </label>
+              <label class="wide-field">
+                备注
+                <input id="bot-block-note" type="text" maxlength="255" placeholder="可选，记录封禁原因或备注">
+              </label>
+              <div class="form-actions">
+                <button id="bot-block-use-selected" type="button" class="secondary">带入当前选中用户</button>
+                <button id="bot-block-submit" type="submit">加入黑名单</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="card-lite">
+            <div id="bot-block-list" class="stack-list"></div>
+          </section>
+        </div>
+      </details>
+
       <details id="plugins-section" class="card fold-card">
         <summary class="fold-summary">
           <div>
@@ -466,7 +950,7 @@
               <h3>上传插件 ZIP</h3>
             </div>
             <p class="plugin-meta">压缩包根目录，或唯一一级目录内需要包含 <code>plugin.json</code> 和入口模块文件。</p>
-            <p class="plugin-meta">如果导入结果提示需要重建容器，说明插件声明了额外 Python 依赖。建议切换到本地构建模式后执行 <code>docker compose up -d --build pivkeyu_emby</code>，或自行构建一个自定义镜像。</p>
+            <p class="plugin-meta">如果导入结果提示需要重建容器，说明插件声明了额外 Python 依赖。建议切换到本地构建模式后执行 <code>docker compose up -d --build echo</code>，或自行构建一个自定义镜像。</p>
             <form id="plugin-import-form" class="mini-form plugin-import-form">
               <label>
                 插件压缩包

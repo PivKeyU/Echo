@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#16102b">
+  <title>斗罗大陆</title>
+  <link rel="preconnect" href="https://telegram.org" crossorigin>
+  <link rel="preload" href="/plugins/douluo/static/app.css" as="style">
+  <link rel="preload" href="/plugins/douluo/static/app.js" as="script">
+  <link rel="stylesheet" href="/plugins/douluo/static/app.css">
+</head>
+<body class="douluo-app auth-locked">
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+  <main class="app-shell">
+    <section id="auth-card" class="card auth-card hidden">
+      <div class="auth-head">
+        <div>
+          <p class="eyebrow">斗罗大陆 · 统一账号</p>
+          <h2>登录并绑定 Telegram</h2>
+        </div>
+        <div class="tab-row">
+          <button type="button" class="ghost" data-auth-mode="login">登录</button>
+          <button type="button" class="ghost" data-auth-mode="register">注册</button>
+        </div>
+      </div>
+      <p id="auth-status" class="section-copy">与修仙、斗破共用账号，完成 TG 绑定后才可进入斗罗大陆。</p>
+      <ol class="auth-steps" aria-label="进入游戏步骤">
+        <li><span>1</span><div><strong>登录或注册</strong><small>建立统一游戏账号</small></div></li>
+        <li><span>2</span><div><strong>绑定 Telegram</strong><small>确认唯一的魂师身份</small></div></li>
+        <li><span>3</span><div><strong>进入游戏</strong><small>斗罗角色进度独立保存</small></div></li>
+      </ol>
+      <form id="auth-login-form" class="mini-form auth-form">
+        <label>账号 <input id="auth-login-username" type="text" autocomplete="username" maxlength="64" required></label>
+        <label>密码 <input id="auth-login-password" type="password" autocomplete="current-password" maxlength="128" required></label>
+        <button id="auth-login-submit" type="submit">登录</button>
+      </form>
+      <form id="auth-register-form" class="mini-form auth-form hidden">
+        <label>账号 <input id="auth-register-username" type="text" autocomplete="username" maxlength="64" required></label>
+        <label>昵称 <input id="auth-register-display" type="text" autocomplete="nickname" maxlength="80"></label>
+        <label>密码 <input id="auth-register-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+        <label>确认密码 <input id="auth-register-confirm" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+        <button id="auth-register-submit" type="submit">注册</button>
+      </form>
+      <div id="auth-bind-panel" class="auth-bind-panel hidden">
+        <div>
+          <strong id="auth-account-name">网页账号</strong>
+          <span id="auth-bind-state" class="tag">待绑定</span>
+          <p id="auth-bind-hint" class="section-copy">请从 Telegram Mini App 打开此页完成绑定。</p>
+        </div>
+        <div class="exchange-actions">
+          <button id="auth-bind-telegram" type="button">绑定当前 Telegram</button>
+          <button id="auth-close" type="button" class="ghost hidden">返回游戏</button>
+          <button id="auth-logout" type="button" class="ghost">退出</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="hero-panel card">
+      <div class="hero-main">
+        <p class="eyebrow">史莱克 · 斗罗大陆</p>
+        <h1>斗罗大陆</h1>
+        <p id="status-text" class="hero-copy">正在同步魂师状态...</p>
+        <div class="hero-pills">
+          <span id="realm-badge" class="badge badge--normal">魂士</span>
+          <span id="star-pill" class="hero-pill">一星</span>
+          <span id="battle-pill" class="hero-pill">战力 0</span>
+        </div>
+        <p id="hero-note" class="hero-note">修炼、猎杀、斗魂、宗门与讨伐进度会在这里汇总。</p>
+      </div>
+
+      <div class="hero-side">
+        <div id="feedback-chip" class="feedback-chip hidden"></div>
+        <div id="hero-admin-entry" class="hero-admin hidden">
+          <div class="hero-admin-copy">
+            <span class="hero-admin-label">大陆执事入口</span>
+            <p>管理员默认停留在游戏页，需要调整玩家与全局参数时再进入后台。</p>
+          </div>
+          <button id="open-admin-panel" type="button" class="ghost">打开斗罗后台</button>
+        </div>
+        <div class="hero-metrics">
+          <article>
+            <span>魂力</span>
+            <strong id="hero-soul-power">0</strong>
+          </article>
+          <article>
+            <span>金魂币</span>
+            <strong id="hero-coin">0</strong>
+          </article>
+          <article>
+            <span>精神力</span>
+            <strong id="hero-spirit-power">0</strong>
+          </article>
+          <article>
+            <span>Emby碎片</span>
+            <strong id="hero-fragment">0</strong>
+          </article>
+        </div>
+        <div class="hero-actions">
+          <button id="focus-train" type="button">魂力修炼</button>
+          <button id="focus-hunt" type="button" class="ghost">猎杀魂兽</button>
+          <button id="open-account-center" type="button" class="ghost">账号中心</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="board-grid">
+      <details id="wuhun-card" class="card fold-card span-2" open>
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">武魂</p>
+            <h2>武魂 · 魂环 · 魂骨</h2>
+          </div>
+          <span class="summary-tip">觉醒武魂、查看魂环魂技与已装备魂骨</span>
+        </summary>
+        <div class="fold-body">
+          <div id="wuhun-status" class="stack-list"></div>
+          <div id="wuhun-actions" class="action-section-grid"></div>
+        </div>
+      </details>
+
+      <details id="train-card" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">修炼</p>
+            <h2>静室修炼</h2>
+          </div>
+          <span class="summary-tip">主产出魂力与金魂币，可能触发奇遇</span>
+        </summary>
+        <div class="fold-body">
+          <div id="actions-train" class="action-section-grid"></div>
+        </div>
+      </details>
+
+      <details id="hunt-card" class="card fold-card" open>
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">猎杀</p>
+            <h2>魂兽猎杀</h2>
+          </div>
+          <span class="summary-tip">获取魂环解锁魂技，区域随境界开放</span>
+        </summary>
+        <div class="fold-body">
+          <div id="hunt-regions" class="module-grid"></div>
+          <div id="actions-hunt" class="action-section-grid"></div>
+        </div>
+      </details>
+
+      <details id="breakthrough-card" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">突破</p>
+            <h2>境界突破</h2>
+          </div>
+          <span class="summary-tip">满星后冲击下一境界，失败保底</span>
+        </summary>
+        <div class="fold-body">
+          <div id="actions-breakthrough" class="action-section-grid"></div>
+        </div>
+      </details>
+
+      <details id="bloodline-card" class="card fold-card span-2">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">血脉 · 龙王传说</p>
+            <h2>血脉与魂导传承</h2>
+          </div>
+          <span class="summary-tip">觉醒血脉、淬炼提升，魂导师熟练度</span>
+        </summary>
+        <div class="fold-body">
+          <div id="bloodline-status" class="stack-list"></div>
+          <div id="bloodline-actions" class="action-section-grid"></div>
+          <div id="craftsman-status" class="entry"></div>
+        </div>
+      </details>
+
+      <details id="craft-card" class="card fold-card span-2">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">魂导堂 · 绝世唐门</p>
+            <h2>矿脉勘探与魂导锻造</h2>
+          </div>
+          <span class="summary-tip">勘探获取锻造材料，按配方打造魂导器</span>
+        </summary>
+        <div class="fold-body">
+          <div id="prospect-regions" class="module-grid"></div>
+          <div id="actions-prospect" class="action-section-grid"></div>
+          <div id="craft-devices" class="stack-list"></div>
+        </div>
+      </details>
+
+      <details id="armor-card" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">斗铠 · 龙王传说</p>
+            <h2>斗铠与魂核</h2>
+          </div>
+          <span class="summary-tip">斗铠逐字升级，魂核凝聚天地之力</span>
+        </summary>
+        <div class="fold-body">
+          <div id="armor-status" class="stack-list"></div>
+          <div id="actions-armor" class="action-section-grid"></div>
+          <div id="soul-core-status" class="entry"></div>
+        </div>
+      </details>
+
+      <details id="inventory-card" class="card fold-card span-2">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">背包</p>
+            <h2>储物魂导器</h2>
+          </div>
+          <span class="summary-tip">魂骨、暗器与材料，可装备或上架拍卖</span>
+        </summary>
+        <div class="fold-body">
+          <div id="equipment-summary" class="equipment-summary"></div>
+          <div id="inventory-groups" class="inventory-groups"></div>
+        </div>
+      </details>
+
+      <details id="sect-card" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">宗门</p>
+            <h2>宗门与俸禄</h2>
+          </div>
+          <span class="summary-tip">加入宗门，按职位领取每日俸禄</span>
+        </summary>
+        <div class="fold-body">
+          <div id="sect-choice" class="sect-choice"></div>
+          <div id="actions-sect" class="action-section-grid"></div>
+        </div>
+      </details>
+
+      <details id="task-card" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">任务</p>
+            <h2>每日任务</h2>
+          </div>
+          <span class="summary-tip">修炼、猎杀、拍卖等达成后可领奖</span>
+        </summary>
+        <div class="fold-body">
+          <div id="task-list" class="stack-list"></div>
+        </div>
+      </details>
+
+      <details id="auction-card" class="card fold-card span-2">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">拍卖</p>
+            <h2>拍卖行</h2>
+          </div>
+          <span class="summary-tip">魂骨暗器互通有无，上架需手续费</span>
+        </summary>
+        <div class="fold-body">
+          <div id="auction-place" class="action-section-grid"></div>
+          <div id="auction-list" class="auction-list"></div>
+        </div>
+      </details>
+
+      <details id="boss-card" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">讨伐</p>
+            <h2>魂兽 Boss 讨伐</h2>
+          </div>
+          <span class="summary-tip">按境界解锁，产出魂骨与战绩分</span>
+        </summary>
+        <div class="fold-body">
+          <div id="boss-list" class="boss-list"></div>
+          <div id="boss-record" class="stack-list"></div>
+        </div>
+      </details>
+
+      <details id="exchange-card" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">货币</p>
+            <h2>货币互通</h2>
+          </div>
+          <span class="summary-tip">Emby 碎片与金魂币兑换</span>
+        </summary>
+        <div class="fold-body">
+          <p id="exchange-hint" class="section-copy">-</p>
+          <form id="exchange-form" class="mini-form">
+            <label>
+              数量
+              <input id="exchange-amount" type="number" min="1" inputmode="numeric" value="100">
+            </label>
+            <div class="exchange-actions">
+              <button id="fragment-to-coin-btn" type="button">碎片换魂币</button>
+              <button id="coin-to-fragment-btn" type="button" class="ghost">魂币换碎片</button>
+            </div>
+          </form>
+        </div>
+      </details>
+
+      <details id="rank-card" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">排行榜</p>
+            <h2>斗罗榜</h2>
+          </div>
+          <span class="summary-tip">战力、魂环年限与金魂币排行</span>
+        </summary>
+        <div class="fold-body">
+          <div class="tab-row">
+            <button type="button" class="ghost" data-rank-kind="power">战力</button>
+            <button type="button" class="ghost" data-rank-kind="rings">魂环</button>
+            <button type="button" class="ghost" data-rank-kind="coin">魂币</button>
+          </div>
+          <div id="rank-list" class="stack-list"></div>
+        </div>
+      </details>
+
+      <details id="journal-card" class="card fold-card span-2">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">记录</p>
+            <h2>最近记录</h2>
+          </div>
+          <span class="summary-tip">行动与结算结果</span>
+        </summary>
+        <div class="fold-body">
+          <div id="journal-list" class="stack-list"></div>
+        </div>
+      </details>
+    </div>
+  </main>
+
+  <div class="fab-container">
+    <button id="fab-admin" class="fab admin-fab hidden" type="button" title="斗罗管理后台" aria-label="打开斗罗管理后台">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14,12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.1 7.1 0 0 0-1.62-.94l-.36-2.54A.49.49 0 0 0 13.89,2h-3.84a.49.49 0 0 0-.49.41L9.2,4.95c-.59.24-1.13.56-1.62.94l-2.39-.96a.49.49 0 0 0-.61.22L2.66,8.47a.5.5 0 0 0 .12.64l2.03,1.58c-.05.3-.09.65-.09.97s.03.64.08.94l-2.03,1.58a.5.5 0 0 0-.12.64l1.92,3.32c.12.22.38.29.61.22l2.39-.96c.49.38 1.03.7 1.62.94l.36,2.54c.05.24.25.41.49.41h3.84c.24 0 .45-.17.49-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.23.08.49 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.02-1.58ZM12,15.5A3.5,3.5 0 1,1 12,8a3.5,3.5 0 0,1 0,7.5Z"/></svg>
+    </button>
+  </div>
+
+  <nav id="bottom-nav" class="bottom-nav"></nav>
+
+  <script async src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script defer src="/plugins/douluo/static/app.js"></script>
+</body>
+</html>

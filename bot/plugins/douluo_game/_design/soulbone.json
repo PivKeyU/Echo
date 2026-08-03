@@ -1,0 +1,301 @@
+{
+  "soulbones": [
+    {
+      "key": "canglang_skull",
+      "name": "苍狼头骨",
+      "part": "头骨",
+      "rarity": "十年",
+      "stats": { "attack": 30, "defense": 45, "speed": 35 },
+      "skill": "头骨·苍狼啸月",
+      "description": "十年苍狼孕育的头骨，蕴含一丝野性精神之力。吸收后可小幅提升精神感知与反应，月圆之夜隐隐可闻狼啸。"
+    },
+    {
+      "key": "xuanbing_skull",
+      "name": "玄冰头骨",
+      "part": "头骨",
+      "rarity": "百年",
+      "stats": { "attack": 70, "defense": 90, "speed": 60 },
+      "skill": "头骨·玄冰凝视",
+      "description": "百年玄冰剑魂兽的冰晶头骨，寒气凝而不散。可凝聚精神寒气令敌动作迟滞，冰系魂师吸收可获双倍契合。"
+    },
+    {
+      "key": "zijitong_skull",
+      "name": "紫极瞳头骨",
+      "part": "头骨",
+      "rarity": "千年",
+      "stats": { "attack": 160, "defense": 150, "speed": 130 },
+      "skill": "头骨·紫极神光",
+      "description": "相传由紫极魔瞳大成者温养的千年头骨，通体泛紫光。激发后可射出凝实精神光束，直击敌魂识，防不胜防。"
+    },
+    {
+      "key": "jingshen_ningju_skull",
+      "name": "精神凝聚之头骨",
+      "part": "头骨",
+      "rarity": "万年",
+      "stats": { "attack": 480, "defense": 420, "speed": 380 },
+      "skill": "头骨·精神凝聚·定神术",
+      "description": "万年精神系魂兽核心凝聚而成的头骨，海神岛珍藏之宝。可瞬间聚拢全部精神力施展定身，强于自身精神力的敌人亦难摆脱。"
+    },
+    {
+      "key": "zhihui_skull",
+      "name": "智慧头骨",
+      "part": "头骨",
+      "rarity": "十万年",
+      "stats": { "attack": 1100, "defense": 1000, "speed": 900 },
+      "skill": "头骨·智慧之心·海神之眼",
+      "description": "十万年魂兽陨落时留下的智慧结晶，佩戴者心思通明、算无遗策。开启海神之眼可洞悉对手魂技破绽，战场上料敌于先。"
+    },
+    {
+      "key": "haishen_xin_skull",
+      "name": "海神之心头骨",
+      "part": "头骨",
+      "rarity": "神级",
+      "stats": { "attack": 2600, "defense": 2400, "speed": 2200 },
+      "skill": "头骨·海神之眼·潮汐幻境",
+      "description": "蕴含海神之力的神级头骨，其内仿佛藏着一片无垠沧海。发动时以精神潮汐将敌拖入无穷幻境，神级以下鲜有人能自行挣脱。"
+    },
+    {
+      "key": "qingyan_yuan_left_arm",
+      "name": "青岩猿左臂骨",
+      "part": "左臂骨",
+      "rarity": "十年",
+      "stats": { "attack": 40, "defense": 35, "speed": 25 },
+      "skill": "左臂骨·碎石一击",
+      "description": "十年青岩猿的左臂骨，筋骨粗壮有力。吸收后左臂力量得到强化，可轻易击碎青石，是最初级的强攻型魂骨。"
+    },
+    {
+      "key": "dali_yuan_left_arm",
+      "name": "大力猿左臂骨",
+      "part": "左臂骨",
+      "rarity": "百年",
+      "stats": { "attack": 100, "defense": 80, "speed": 60 },
+      "skill": "左臂骨·裂地重拳",
+      "description": "百年大力猿的左臂骨，蕴含磅礴蛮力。挥拳时可引动大地之力，一拳之下地裂数丈，力量型魂师的不二之选。"
+    },
+    {
+      "key": "lieyan_shi_left_arm",
+      "name": "烈焰狮王左臂骨",
+      "part": "左臂骨",
+      "rarity": "千年",
+      "stats": { "attack": 260, "defense": 200, "speed": 170 },
+      "skill": "左臂骨·烈焰狮王拳",
+      "description": "落日森林烈焰狮王所遗左臂骨，燃烧着赤色火焰。挥拳时烈焰翻腾，灼热冲击波可焚穿同阶防御。"
+    },
+    {
+      "key": "taitai_juyuan_left_arm",
+      "name": "泰坦巨猿左臂骨",
+      "part": "左臂骨",
+      "rarity": "万年",
+      "stats": { "attack": 780, "defense": 650, "speed": 520 },
+      "skill": "左臂骨·泰坦之握",
+      "description": "星斗大森林霸主泰坦巨猿的左臂骨，力量可撼山岳。发动泰坦之握可凭空禁锢对手并施加恐怖重力碾压。"
+    },
+    {
+      "key": "anmo_xieshen_left_arm",
+      "name": "暗魔邪神虎左臂骨",
+      "part": "左臂骨",
+      "rarity": "十万年",
+      "stats": { "attack": 1900, "defense": 1500, "speed": 1600 },
+      "skill": "左臂骨·邪神之爪·吞噬",
+      "description": "暗魔邪神虎的左臂骨，通体萦绕邪恶黑气。邪神之爪可撕裂防御，命中后吞噬敌一缕魂力为己所用，阴毒霸道。"
+    },
+    {
+      "key": "fengwei_lang_right_arm",
+      "name": "风尾狼右臂骨",
+      "part": "右臂骨",
+      "rarity": "十年",
+      "stats": { "attack": 35, "defense": 30, "speed": 40 },
+      "skill": "右臂骨·疾风爪击",
+      "description": "十年风尾狼的右臂骨，刃口如风。挥动间带起数道青色风刃，速度极快，适合敏攻系魂师前期过渡。"
+    },
+    {
+      "key": "huowen_bao_right_arm",
+      "name": "火纹豹右臂骨",
+      "part": "右臂骨",
+      "rarity": "百年",
+      "stats": { "attack": 95, "defense": 70, "speed": 90 },
+      "skill": "右臂骨·烈焰冲刺",
+      "description": "百年火纹豹的右臂骨，赤红火纹如血脉流转。蓄力后可化作一道烈焰疾影冲撞敌人，兼具速度与爆发。"
+    },
+    {
+      "key": "renmian_mozhu_right_arm",
+      "name": "人面魔蛛右臂骨",
+      "part": "右臂骨",
+      "rarity": "千年",
+      "stats": { "attack": 240, "defense": 230, "speed": 210 },
+      "skill": "右臂骨·蛛毒穿心刺",
+      "description": "千年人面魔蛛的右臂骨，骨面狰狞如鬼面。可凝出剧毒骨刺穿心而出，毒素入体瞬间麻痹经脉，狠辣至极。"
+    },
+    {
+      "key": "tianqing_niumang_right_arm",
+      "name": "天青牛蟒右臂骨",
+      "part": "右臂骨",
+      "rarity": "万年",
+      "stats": { "attack": 720, "defense": 700, "speed": 600 },
+      "skill": "右臂骨·天青神雷·雷霆万钧",
+      "description": "星斗大森林森林之王天青牛蟒的右臂骨，蕴藏青天之雷。挥臂引动万千雷霆轰落，威力霸道刚猛，乃强攻系顶级魂骨。"
+    },
+    {
+      "key": "shenhai_mojing_right_arm",
+      "name": "深海魔鲸王右臂骨",
+      "part": "右臂骨",
+      "rarity": "十万年",
+      "stats": { "attack": 2000, "defense": 1800, "speed": 1500 },
+      "skill": "右臂骨·魔鲸吞噬·吞天漩涡",
+      "description": "海洋霸主深海魔鲸王的右臂骨，幽蓝深邃似蕴藏整片深海。发动可召出吞天漩涡，将敌人连同其魂力一并绞碎吞噬。"
+    },
+    {
+      "key": "xiuluo_right_arm",
+      "name": "修罗右臂骨",
+      "part": "右臂骨",
+      "rarity": "神级",
+      "stats": { "attack": 4500, "defense": 3800, "speed": 3200 },
+      "skill": "右臂骨·修罗血刃·屠神",
+      "description": "凝聚修罗神杀戮意志的神级右臂骨，赤红血光冲天。修罗血刃出鞘则天地变色，威能足以屠神灭魔。"
+    },
+    {
+      "key": "xunjie_tu_left_leg",
+      "name": "迅捷兔左腿骨",
+      "part": "左腿骨",
+      "rarity": "十年",
+      "stats": { "attack": 25, "defense": 30, "speed": 45 },
+      "skill": "左腿骨·弹射加速",
+      "description": "十年迅捷兔的左腿骨，肌腱强劲。吸收后可令身法愈发轻灵，关键时刻弹射提速，躲避致命一击。"
+    },
+    {
+      "key": "jifeng_lang_left_leg",
+      "name": "疾风狼左腿骨",
+      "part": "左腿骨",
+      "rarity": "百年",
+      "stats": { "attack": 60, "defense": 55, "speed": 120 },
+      "skill": "左腿骨·疾风步",
+      "description": "百年疾风狼的左腿骨，奔跑如风。发动疾风步周身青光一闪，速度倍增，是敏攻系魂师上佳的腿部魂骨。"
+    },
+    {
+      "key": "youming_lingmao_left_leg",
+      "name": "幽冥灵猫左腿骨",
+      "part": "左腿骨",
+      "rarity": "千年",
+      "stats": { "attack": 180, "defense": 160, "speed": 320 },
+      "skill": "左腿骨·幽冥鬼影",
+      "description": "千年幽冥灵猫的左腿骨，暗影随行。身影可化幽冥鬼影游走战场，虚实难辨，令对手无从捕捉。"
+    },
+    {
+      "key": "leiying_left_leg",
+      "name": "雷鹰左腿骨",
+      "part": "左腿骨",
+      "rarity": "万年",
+      "stats": { "attack": 480, "defense": 420, "speed": 850 },
+      "skill": "左腿骨·雷光疾走",
+      "description": "落日森林雷鹰的左腿骨，电芒缭绕。化身雷光疾走穿梭于战场，身之所至电闪雷鸣，速度冠绝同阶。"
+    },
+    {
+      "key": "youming_yingwang_left_leg",
+      "name": "幽冥影王左腿骨",
+      "part": "左腿骨",
+      "rarity": "十万年",
+      "stats": { "attack": 1200, "defense": 1000, "speed": 2300 },
+      "skill": "左腿骨·影遁·空间跳跃",
+      "description": "十万年幽冥影王的左腿骨，与阴影共生。可瞬间遁入阴影实现短距空间跳跃，神出鬼没，万军之中取敌首级如探囊取物。"
+    },
+    {
+      "key": "zhuifeng_lu_right_leg",
+      "name": "追风鹿右腿骨",
+      "part": "右腿骨",
+      "rarity": "十年",
+      "stats": { "attack": 25, "defense": 28, "speed": 48 },
+      "skill": "右腿骨·风影疾行",
+      "description": "十年追风鹿的右腿骨，骨纹如风。吸收后脚步生风，长途奔袭不耗体力，是游走猎杀的好帮手。"
+    },
+    {
+      "key": "shandian_diao_right_leg",
+      "name": "闪电貂右腿骨",
+      "part": "右腿骨",
+      "rarity": "百年",
+      "stats": { "attack": 55, "defense": 50, "speed": 130 },
+      "skill": "右腿骨·电光石火",
+      "description": "百年闪电貂的右腿骨，迅若惊鸿。身动之间如电光石火，往往对手尚未反应，身影已掠至身后。"
+    },
+    {
+      "key": "fengwei_jiguan_she_right_leg",
+      "name": "凤尾鸡冠蛇右腿骨",
+      "part": "右腿骨",
+      "rarity": "千年",
+      "stats": { "attack": 200, "defense": 170, "speed": 300 },
+      "skill": "右腿骨·蛇影穿云",
+      "description": "落日森林凤尾鸡冠蛇的右腿骨，身法飘忽如蛇。发动可腾身穿云化出蛇形残影，惊鸿掠影间已至敌身。"
+    },
+    {
+      "key": "lanyinhuang_right_leg",
+      "name": "蓝银皇右腿骨",
+      "part": "右腿骨",
+      "rarity": "万年",
+      "stats": { "attack": 560, "defense": 480, "speed": 900 },
+      "skill": "右腿骨·蓝银皇翼·飞行",
+      "description": "蓝银皇蜕变时脱落的右腿骨，生机盎然。吸收后可借蓝银之力凝出皇翼翱翔长空，彻底摆脱大地束缚，攻防进退尽在掌控。"
+    },
+    {
+      "key": "senluo_wanxiang_right_leg",
+      "name": "蓝银皇·森罗万象右腿骨",
+      "part": "右腿骨",
+      "rarity": "十万年",
+      "stats": { "attack": 1300, "defense": 1100, "speed": 2100 },
+      "skill": "右腿骨·森罗万象·蓝银领域",
+      "description": "十万年蓝银皇的右腿骨，蕴含森罗万象生机。发动蓝银领域，万千蓝银藤蔓自虚空蔓延，缚敌困杀，领域之内我为王。"
+    },
+    {
+      "key": "yanxi_torso",
+      "name": "岩犀躯干骨",
+      "part": "躯干骨",
+      "rarity": "十年",
+      "stats": { "attack": 30, "defense": 50, "speed": 25 },
+      "skill": "躯干骨·岩肤",
+      "description": "十年岩犀的躯干骨，厚重坚实。吸收后皮肤覆上岩石纹理，防御小幅提升，为躯干受击提供最初级的保护。"
+    },
+    {
+      "key": "tiebei_xiong_torso",
+      "name": "铁背熊躯干骨",
+      "part": "躯干骨",
+      "rarity": "百年",
+      "stats": { "attack": 65, "defense": 110, "speed": 50 },
+      "skill": "躯干骨·铁背防御",
+      "description": "百年铁背熊的躯干骨，硬逾钢铁。发动时背脊铁光流转，可硬撼刀剑劈砍，护住要害不破。"
+    },
+    {
+      "key": "dali_jingang_xiong_torso",
+      "name": "大力金刚熊躯干骨",
+      "part": "躯干骨",
+      "rarity": "千年",
+      "stats": { "attack": 200, "defense": 300, "speed": 150 },
+      "skill": "躯干骨·金刚不坏",
+      "description": "大力金刚熊的躯干骨，蕴含金刚之力。发动金刚不坏身，浑身如金铁铸就，同阶攻击难撼分毫。"
+    },
+    {
+      "key": "dadi_moxiong_torso",
+      "name": "大地魔熊躯干骨",
+      "part": "躯干骨",
+      "rarity": "万年",
+      "stats": { "attack": 550, "defense": 800, "speed": 400 },
+      "skill": "躯干骨·地脉护体",
+      "description": "万年大地魔熊的躯干骨，与大地方舟相连。引动地脉之力护体，身周凝成厚重大地战铠，稳如磐石。"
+    },
+    {
+      "key": "qianjun_yihuang_torso",
+      "name": "千钧蚁皇躯干骨",
+      "part": "躯干骨",
+      "rarity": "十万年",
+      "stats": { "attack": 1500, "defense": 2000, "speed": 900 },
+      "skill": "躯干骨·千钧之力·不动如山",
+      "description": "十万年千钧蚁皇的躯干骨，重逾千钧。发动不动如山之躯，无论何等冲击皆难以动摇，防御之最，万军莫开。"
+    },
+    {
+      "key": "longwang_torso",
+      "name": "龙王躯干骨",
+      "part": "躯干骨",
+      "rarity": "神级",
+      "stats": { "attack": 4000, "defense": 5000, "speed": 3000 },
+      "skill": "躯干骨·龙皇之躯·金刚龙鳞",
+      "description": "凝聚龙王威压的神级躯干骨，龙鳞金纹密布。发动龙皇之躯，浑身覆盖金刚龙鳞，万法难侵，威震四方。"
+    }
+  ]
+}

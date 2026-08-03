@@ -322,6 +322,14 @@ h2 {
   color: #b54c57;
 }
 
+.plugin-meta[data-tone="success"] {
+  color: var(--success);
+}
+
+.plugin-meta[data-tone="warning"] {
+  color: var(--warning);
+}
+
 .user-card {
   width: 100%;
   cursor: pointer;
@@ -443,6 +451,11 @@ button:disabled,
   background: rgba(185, 28, 28, 0.12);
 }
 
+.badge--warning {
+  color: var(--warning);
+  background: rgba(180, 83, 9, 0.12);
+}
+
 .badge--pending,
 .badge--unknown {
   color: #61707f;
@@ -475,7 +488,8 @@ button:disabled,
 .code-result-head,
 .code-card-badges,
 .code-info-grid,
-.code-redeemer-list {
+.code-redeemer-list,
+.moderation-actions {
   display: grid;
   gap: 10px;
 }
@@ -568,6 +582,14 @@ button:disabled,
   font-size: 12px;
   line-height: 1.6;
   color: var(--muted);
+}
+
+.batch-sample-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
 }
 
 .code-actor-line {
@@ -707,7 +729,8 @@ button:disabled,
 }
 
 #editor-section,
-#users-section {
+#users-section,
+#moderation-section {
   scroll-margin-top: 92px;
 }
 
@@ -740,8 +763,16 @@ button:disabled,
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .grid-form .wide-field {
+    grid-column: 1 / -1;
+  }
+
   .form-actions {
     grid-column: 1 / -1;
+  }
+
+  .moderation-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

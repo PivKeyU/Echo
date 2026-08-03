@@ -1,89 +1,220 @@
 import asyncio
-import glob
 import os
 from datetime import datetime
+from pathlib import Path
 
 from bot import LOGGER
 
 
 class BackupDBUtils:
+    @staticmethod
+    def _ensure_backup_dir(backup_dir: str) -> Path:
+        target = Path(backup_dir).expanduser().resolve()
+        target.mkdir(parents=True, exist_ok=True)
+        return target
 
     @staticmethod
-    # 数据库备份(mysql直装/本机含有mysql)
+    def _safe_name(value: str) -> str:
+        normalized = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in str(value or ""))
+        return normalized.strip("._") or "database"
+
+    @staticmethod
+    def _backup_path(backup_dir: str, database_name: str, suffix: str) -> Path:
+        root = BackupDBUtils._ensure_backup_dir(backup_dir)
+        safe_database_name = BackupDBUtils._safe_name(database_name)
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+        return root / f"{safe_database_name}-{timestamp}.{suffix}"
+
+    @staticmethod
+    def _rotate_backups(backup_dir: str, database_name: str, suffix: str, max_backup_count: int) -> None:
+        root = BackupDBUtils._ensure_backup_dir(backup_dir)
+        prefix = f"{BackupDBUtils._safe_name(database_name)}-"
+        expected_suffix = f".{suffix.lstrip('.')}"
+        all_backups = sorted(
+            item
+            for item in root.iterdir()
+            if item.is_file() and item.name.startswith(prefix) and item.name.endswith(expected_suffix)
+        )
+        # Always retain the backup just created; a zero/invalid retention value
+        # must not turn a successful backup into a missing file for the caller.
+        keep_count = max(int(max_backup_count or 1), 1)
+        while len(all_backups) > keep_count:
+            all_backups.pop(0).unlink(missing_ok=True)
+
+    @staticmethod
+    async def _run_dump(*args: str, output_path: Path, env: dict[str, str] | None = None) -> tuple[int, str]:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with output_path.open("wb") as output_file:
+                process = await asyncio.create_subprocess_exec(
+                    *args,
+                    env=env,
+                    stdout=output_file,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                _, stderr = await process.communicate()
+        except Exception:
+            output_path.unlink(missing_ok=True)
+            raise
+
+        return_code = int(process.returncode or 0)
+        error_text = (stderr or b"").decode("utf-8", errors="replace").strip()
+        if return_code != 0 or not output_path.exists() or output_path.stat().st_size <= 0:
+            output_path.unlink(missing_ok=True)
+            return return_code or 1, error_text or "备份命令未生成有效文件"
+        return 0, error_text
+
+    @staticmethod
+    def _log_failure(return_code: int, error_text: str) -> None:
+        detail = f": {error_text}" if error_text else ""
+        LOGGER.error(f"BOT数据库备份失败, error code: {return_code}{detail}")
+
+    @staticmethod
     async def backup_mysql_db(host, port, user, password, database_name, backup_dir, max_backup_count):
-        # 如果文件夹不存在，就创建它
-        if not os.path.exists(backup_dir):
-            os.makedirs(backup_dir)
-        # 根据时间创建当前备份文件
-        backup_file = os.path.join(backup_dir, f'{database_name}-{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}.sql')
-        command = f"mysqldump -h{host} --no-tablespaces -P{port} -u{user} -p\'{password}\' {database_name} > {backup_file}"
-        skip_ssl_command = f"mysqldump -h{host} --skip-ssl --no-tablespaces -P{port} -u{user} -p\'{password}\' {database_name} > {backup_file}"
-        return_code = -1
+        backup_file = BackupDBUtils._backup_path(backup_dir, database_name, "sql")
+        env = dict(os.environ)
+        env["MYSQL_PWD"] = str(password)
+        base_args = (
+            "mysqldump",
+            "-h",
+            str(host),
+            "-P",
+            str(port),
+            "-u",
+            str(user),
+            "--no-tablespaces",
+        )
         try:
-            process = await asyncio.create_subprocess_shell(command)
-            await process.communicate()
-            return_code = process.returncode
+            return_code, error_text = await BackupDBUtils._run_dump(
+                *base_args,
+                str(database_name),
+                output_path=backup_file,
+                env=env,
+            )
             if return_code != 0:
-                LOGGER.warning(f"BOT数据库备份失败，使用 skip-ssl方式尝试备份")
-                process = await asyncio.create_subprocess_shell(skip_ssl_command)
-                await process.communicate()
-                return_code = process.returncode
+                LOGGER.warning("BOT数据库备份失败，使用 skip-ssl 方式尝试备份")
+                return_code, error_text = await BackupDBUtils._run_dump(
+                    *base_args,
+                    "--skip-ssl",
+                    str(database_name),
+                    output_path=backup_file,
+                    env=env,
+                )
             if return_code != 0:
-                LOGGER.error(f"BOT数据库备份失败, error code: {return_code}")
+                BackupDBUtils._log_failure(return_code, error_text)
                 return None
-            LOGGER.info(f"BOT数据库备份成功,文件保存为 {backup_file}")
-            # 获取所有备份文件，并且通过时间进行排序
-            all_backups = sorted(glob.glob(os.path.join(backup_dir, f'{database_name}-*.sql')))
-            # 如果超过了当前的备份最大数量，则删除最久的一个
-            while len(all_backups) > max_backup_count:
-                os.remove(all_backups[0])
-                all_backups.pop(0)
-        except Exception as e:
-            LOGGER.error(f"BOT数据库备份失败, error: {str(e)}")
+        except Exception as exc:
+            LOGGER.error(f"BOT数据库备份失败, error: {exc}")
             return None
-        return backup_file
+
+        LOGGER.info(f"BOT数据库备份成功,文件保存为 {backup_file}")
+        BackupDBUtils._rotate_backups(backup_dir, database_name, "sql", max_backup_count)
+        return str(backup_file)
 
     @staticmethod
-    # 数据库备份(docker)
     async def backup_mysql_db_docker(container_name, user, password, database_name, backup_dir, max_backup_count):
-        # 如果文件夹不存在，就创建它
-        if not os.path.exists(backup_dir):
-            os.makedirs(backup_dir)
-        # 根据当前时间创建备份文件
-        backup_file_in_container = f'{database_name}-{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}.sql'
-        backup_file_on_host = os.path.join(backup_dir, backup_file_in_container)
-        # 进入容器，使用mysqldump备份文件
-        command = f'docker exec {container_name} sh -c "mysqldump  --no-tablespaces -u{user} -p\'{password}\' {database_name} > {backup_file_in_container}"'
-        skip_ssl_command = f'docker exec {container_name} sh -c "mysqldump --skip-ssl --no-tablespaces -u{user} -p\'{password}\' {database_name} > {backup_file_in_container}"'
-        return_code = -1
+        backup_file = BackupDBUtils._backup_path(backup_dir, database_name, "sql")
+        env = dict(os.environ)
+        env["MYSQL_PWD"] = str(password)
+        base_args = (
+            "docker",
+            "exec",
+            "-e",
+            "MYSQL_PWD",
+            str(container_name),
+            "mysqldump",
+            "--no-tablespaces",
+            "-u",
+            str(user),
+        )
         try:
-            process = await asyncio.create_subprocess_shell(command)
-            await process.communicate()
-            return_code = process.returncode
+            return_code, error_text = await BackupDBUtils._run_dump(
+                *base_args,
+                str(database_name),
+                output_path=backup_file,
+                env=env,
+            )
             if return_code != 0:
-                LOGGER.warning(f"BOT数据库备份失败，使用 skip-ssl方式尝试备份")
-                process = await asyncio.create_subprocess_shell(skip_ssl_command)
-                await process.communicate()
-                return_code = process.returncode
+                LOGGER.warning("BOT数据库备份失败，使用 skip-ssl 方式尝试备份")
+                return_code, error_text = await BackupDBUtils._run_dump(
+                    *base_args,
+                    "--skip-ssl",
+                    str(database_name),
+                    output_path=backup_file,
+                    env=env,
+                )
             if return_code != 0:
-                LOGGER.error(f"BOT数据库备份失败, error code: {return_code}")
+                BackupDBUtils._log_failure(return_code, error_text)
                 return None
-            # 将容器中的备份文件复制到本地
-            command = f'docker cp {container_name}:{backup_file_in_container} {backup_file_on_host}'
-            process = await asyncio.create_subprocess_shell(command)
-            await process.communicate()
-        except Exception as e:
-            LOGGER.error(f"BOT数据库备份失败, error: {str(e)}")
-        finally:
-            # 删除容器中文件
-            command = f'docker exec {container_name} rm {backup_file_in_container}'
-            process = await asyncio.create_subprocess_shell(command)
-            await process.communicate()
-        LOGGER.info(f"BOT数据库备份成功,文件保存为 {backup_file_on_host}")
-        # 获取所有备份文件，并且通过时间进行排序
-        all_backups = sorted(glob.glob(os.path.join(backup_dir, f'{database_name}-*.sql')))
-        # 如果超过了当前的备份最大数量，则删除最久的一个
-        while len(all_backups) > max_backup_count:
-            os.remove(all_backups[0])
-            all_backups.pop(0)
-        return backup_file_on_host
+        except Exception as exc:
+            LOGGER.error(f"BOT数据库备份失败, error: {exc}")
+            return None
+
+        LOGGER.info(f"BOT数据库备份成功,文件保存为 {backup_file}")
+        BackupDBUtils._rotate_backups(backup_dir, database_name, "sql", max_backup_count)
+        return str(backup_file)
+
+    @staticmethod
+    async def backup_postgres_db(host, port, user, password, database_name, backup_dir, max_backup_count):
+        backup_file = BackupDBUtils._backup_path(backup_dir, database_name, "dump")
+        env = dict(os.environ)
+        env["PGPASSWORD"] = str(password)
+        try:
+            return_code, error_text = await BackupDBUtils._run_dump(
+                "pg_dump",
+                "-h",
+                str(host),
+                "-p",
+                str(port),
+                "-U",
+                str(user),
+                "-d",
+                str(database_name),
+                "-F",
+                "c",
+                output_path=backup_file,
+                env=env,
+            )
+            if return_code != 0:
+                BackupDBUtils._log_failure(return_code, error_text)
+                return None
+        except Exception as exc:
+            LOGGER.error(f"BOT数据库备份失败, error: {exc}")
+            return None
+
+        LOGGER.info(f"BOT数据库备份成功,文件保存为 {backup_file}")
+        BackupDBUtils._rotate_backups(backup_dir, database_name, "dump", max_backup_count)
+        return str(backup_file)
+
+    @staticmethod
+    async def backup_postgres_db_docker(container_name, user, password, database_name, backup_dir, max_backup_count):
+        backup_file = BackupDBUtils._backup_path(backup_dir, database_name, "dump")
+        env = dict(os.environ)
+        env["PGPASSWORD"] = str(password)
+        try:
+            return_code, error_text = await BackupDBUtils._run_dump(
+                "docker",
+                "exec",
+                "-e",
+                "PGPASSWORD",
+                str(container_name),
+                "pg_dump",
+                "-U",
+                str(user),
+                "-d",
+                str(database_name),
+                "-F",
+                "c",
+                output_path=backup_file,
+                env=env,
+            )
+            if return_code != 0:
+                BackupDBUtils._log_failure(return_code, error_text)
+                return None
+        except Exception as exc:
+            LOGGER.error(f"BOT数据库备份失败, error: {exc}")
+            return None
+
+        LOGGER.info(f"BOT数据库备份成功,文件保存为 {backup_file}")
+        BackupDBUtils._rotate_backups(backup_dir, database_name, "dump", max_backup_count)
+        return str(backup_file)

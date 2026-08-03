@@ -9,6 +9,7 @@ import cn2an
 import asyncio
 import random
 import math
+import re
 from datetime import datetime, timedelta
 from pyrogram import filters
 from pyrogram.types import ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
@@ -18,7 +19,7 @@ from bot import bot, prefixes, sakura_b, bot_photo, red_envelope, _open
 from bot.func_helper.filters import user_in_group_on_filter
 from bot.func_helper.fix_bottons import users_iv_button
 from bot.func_helper.msg_utils import sendPhoto, sendMessage, callAnswer, editMessage
-from bot.func_helper.utils import pwd_create, judge_admins, get_users, cache
+from bot.func_helper.utils import pwd_create, judge_admins, get_users, cache, async_memoize
 from bot.sql_helper import Session
 from bot.sql_helper.sql_emby import Emby, sql_get_emby, sql_update_emby
 from bot.ranks_helper.ranks_draw import RanksDraw
@@ -27,6 +28,15 @@ from bot.schemas import Yulv, MAX_INT_VALUE, MIN_INT_VALUE
 # 小项目，说实话不想写数据库里面。放内存里了，从字典里面每次拿分
 
 red_envelopes = {}
+MARKDOWN_ESCAPE_PATTERN = re.compile(r"([_*\[`])")
+
+
+def _md_escape(value):
+    return MARKDOWN_ESCAPE_PATTERN.sub(r"\\\1", str(value or ""))
+
+
+def _user_markdown_link(user_id, name):
+    return f"[{_md_escape(name or 'Anonymous')}](tg://user?id={user_id})"
 
 
 class RedEnvelope:
@@ -171,12 +181,15 @@ async def send_red_envelope(_, msg):
             money, 1, user_pic, f"{msg.reply_to_message.from_user.first_name} 专享"
         )
 
-        sign_name = f'{msg.sender_chat.title}' if msg.sender_chat else f'[{msg.from_user.first_name}](tg://user?id={msg.from_user.id})'
+        sign_name = (
+            _md_escape(msg.sender_chat.title)
+            if msg.sender_chat
+            else _user_markdown_link(msg.from_user.id, msg.from_user.first_name)
+        )
         await asyncio.gather(
             sendPhoto(msg, photo=cover, buttons=ikb),
             reply.edit(
-                f"🔥 [{msg.reply_to_message.from_user.first_name}]"
-                f"(tg://user?id={msg.reply_to_message.from_user.id})\n"
+                f"🔥 {_user_markdown_link(msg.reply_to_message.from_user.id, msg.reply_to_message.from_user.first_name)}\n"
                 f"您收到一个来自 {sign_name} 的专属红包"
             )
         )
@@ -332,7 +345,7 @@ async def verify_red_envelope_sender(msg, money, is_private=False):
 
         if not all(conditions):
             error_msg = (
-                f"[{msg.from_user.first_name}](tg://user?id={msg.from_user.id}) "
+                f"{_user_markdown_link(msg.from_user.id, msg.from_user.first_name)} "
                 f"违反规则，禁言一分钟。\nⅰ 所持有{sakura_b}不得小于5\nⅱ 发出{sakura_b}不得小于5"
             )
             if is_private:
@@ -375,12 +388,14 @@ async def get_user_photo(user):
 
 async def generate_final_message(envelope):
     """生成红包领取完毕的消息"""
+    escaped_message = _md_escape(envelope.message)
+    escaped_sender_name = _md_escape(envelope.sender_name)
     if envelope.type == "private":
         receiver = envelope.receivers[envelope.target_user]
         return (
-            f"🧧 {sakura_b}红包\n\n**{envelope.message}\n\n"
-            f"🕶️{envelope.sender_name} **的专属红包已被 "
-            f"[{receiver['name']}](tg://user?id={envelope.target_user}) 领取"
+            f"🧧 {sakura_b}红包\n\n**{escaped_message}\n\n"
+            f"🕶️{escaped_sender_name} **的专属红包已被 "
+            f"{_user_markdown_link(envelope.target_user, receiver['name'])} 领取"
         )
 
     # 排序领取记录
@@ -388,17 +403,18 @@ async def generate_final_message(envelope):
         envelope.receivers.items(), key=lambda x: x[1]["amount"], reverse=True
     )
     envelope.message = envelope.message[:50] + "..." if len(envelope.message) > 53 else envelope.message
+    escaped_message = _md_escape(envelope.message)
 
     text = (
-        f"🧧 {sakura_b}红包\n\n**{envelope.message}\n\n"
-        f"😎 {envelope.sender_name} **的红包已经被抢光啦~\n\n"
+        f"🧧 {sakura_b}红包\n\n**{escaped_message}\n\n"
+        f"😎 {escaped_sender_name} **的红包已经被抢光啦~\n\n"
     )
 
     for i, (user_id, details) in enumerate(sorted_receivers):
         if i == 0:
-            text += f"**🏆 手气最佳 [{details['name']}](tg://user?id={user_id}) **获得了 {details['amount']} {sakura_b}"
+            text += f"**🏆 手气最佳 {_user_markdown_link(user_id, details['name'])} **获得了 {details['amount']} {sakura_b}"
         else:
-            text += f"\n**[{details['name']}](tg://user?id={user_id})** 获得了 {details['amount']} {sakura_b}"
+            text += f"\n**{_user_markdown_link(user_id, details['name'])}** 获得了 {details['amount']} {sakura_b}"
 
     return text
 
@@ -448,7 +464,7 @@ async def s_rank(_, msg):
     )
 
 
-@cache.memoize(ttl=120)
+@async_memoize(ttl=120)
 async def users_iv_rank():
     with Session() as session:
         # 查询 Emby 表的所有数据，且>0 的条数

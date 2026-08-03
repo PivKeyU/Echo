@@ -1,6 +1,6 @@
 # 自动反代与 HTTPS
 
-当前仓库已内置 `Caddy` 自动反代服务，定义在 `docker-compose.yml` 里的 `pivkeyu-caddy`。
+当前仓库已内置 `Caddy` 自动反代服务，定义在 `docker-compose.yml` 里的 `echo-caddy`。
 
 ## 作用
 

@@ -3,15 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>商店后台</title>
+  <meta name="theme-color" content="#080b14">
+  <title>Emby 商店控制台</title>
   <link rel="stylesheet" href="/plugins/shop/static/shop.css">
 </head>
-<body>
+<body class="shop-admin">
   <main class="shop-shell">
     <section class="hero">
       <div>
-        <p class="eyebrow">商店后台</p>
-        <h1>商品与订单管理</h1>
+        <p class="eyebrow">Emby Store Console</p>
+        <h1>商品、库存与订单</h1>
         <p id="admin-status" class="muted">正在校验后台身份并加载商店数据...</p>
         <div class="hero-actions">
           <span id="admin-auth-mode" class="tag">待认证</span>
@@ -103,6 +104,18 @@
           <input id="item-stock" type="number" min="1" value="1">
         </label>
         <label>
+          商品类型
+          <select id="item-type">
+            <option value="digital">普通数字商品</option>
+            <option value="group_invite_credit">入群资格邀请</option>
+            <option value="account_open_credit">注册资格</option>
+          </select>
+        </label>
+        <label>
+          每份资格数量
+          <input id="item-invite-quantity" type="number" min="0" value="0">
+        </label>
+        <label>
           图片地址
           <input id="item-image" type="text" placeholder="https://... 或上传后自动回填">
           <div class="upload-inline">
@@ -139,8 +152,8 @@
     <section class="card section">
       <div class="card-head">
         <div>
-          <p class="eyebrow">商品清单</p>
-          <h2>当前商品</h2>
+          <p class="eyebrow">Catalog</p>
+          <h2>当前商品片单</h2>
         </div>
       </div>
       <div id="admin-product-list" class="list-grid"></div>
@@ -149,8 +162,8 @@
     <section class="card section">
       <div class="card-head">
         <div>
-          <p class="eyebrow">最近订单</p>
-          <h2>成交记录</h2>
+          <p class="eyebrow">Order Timeline</p>
+          <h2>最近成交记录</h2>
         </div>
       </div>
       <div id="admin-order-list" class="list-grid"></div>

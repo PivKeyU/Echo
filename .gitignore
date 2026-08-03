@@ -3,6 +3,7 @@
 
 # IntelliJ project files
 .idea/
+.vscode/
 *.iml
 out
 gen
@@ -17,8 +18,23 @@ log/
 *.sql
 bot-env
 
+# Local test and preview runtime
+.test_runtime/
+docker-compose.test.yml
+requirements.local.txt
+preview_doupo.py
+scripts/run_web_only_test.py
+start_preview_doupo.bat
+stop_preview_doupo.bat
+start_test.bat
+stop_test.bat
+start_test.ps1
+stop_test.ps1
+
 # Local runtime state
 data/
 db/
 caddy/config/
 caddy/data/
+.pi/
+.workflow/

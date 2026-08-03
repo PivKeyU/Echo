@@ -9,6 +9,12 @@ def _legacy_world_service():
     return legacy_world_service
 
 
+def _legacy_service():
+    from bot.plugins.xiuxian_game import service as legacy_service
+
+    return legacy_service
+
+
 def create_red_envelope_for_user(**kwargs) -> dict[str, Any]:
     return _legacy_world_service().create_red_envelope_for_user(**kwargs)
 
@@ -43,3 +49,11 @@ def format_duel_bet_board(pool_id: int) -> str:
 
 def update_duel_bet_pool_message(pool_id: int, bet_message_id: int) -> None:
     return _legacy_world_service().update_duel_bet_pool_message(pool_id, bet_message_id)
+
+
+def switch_social_mode_for_user(tg: int, social_mode: str) -> dict[str, Any]:
+    return _legacy_service().switch_social_mode_for_user(tg, social_mode)
+
+
+def harvest_furnace_for_user(tg: int, furnace_tg: int) -> dict[str, Any]:
+    return _legacy_service().harvest_furnace_for_user(tg, furnace_tg)

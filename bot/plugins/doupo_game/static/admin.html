@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#180b08" />
+  <title>斗破后台</title>
+  <link rel="stylesheet" href="/plugins/doupo/static/app.css" />
+</head>
+<body class="admin-body doupo-admin">
+  <main class="page admin-page">
+    <header id="overview" class="card admin-hero">
+      <div class="admin-hero-head">
+        <div>
+          <p class="eyebrow">斗气大陆运营台</p>
+          <h1>斗破后台</h1>
+          <p id="admin-status" class="section-copy">正在载入管理数据...</p>
+        </div>
+        <a id="page-back-link" class="button-link ghost" href="/plugins/doupo/app">返回游戏</a>
+      </div>
+      <div id="admin-metrics" class="admin-metrics" aria-label="运营概览"></div>
+      <div class="row admin-login-row">
+        <input id="admin-token" type="password" autocomplete="current-password" placeholder="管理 Token（Telegram 管理员内打开可留空）" />
+        <button id="admin-login-btn">验证并刷新</button>
+      </div>
+    </header>
+
+    <nav class="card admin-nav" aria-label="后台模块导航">
+      <a href="#overview">概览</a>
+      <a href="#accounts">账号</a>
+      <a href="#players">玩家</a>
+      <a href="#content">内容</a>
+      <a href="#actions">行动</a>
+      <a href="#settings">设置</a>
+      <a href="#danger-zone">危险操作</a>
+    </nav>
+
+    <section id="accounts" class="card admin-section">
+      <div class="section-heading">
+        <div><p class="eyebrow">统一账号</p><h2>账号与 TG 绑定</h2></div>
+        <span class="section-copy">修仙、斗破共用账号；角色数据独立</span>
+      </div>
+      <form id="account-search-form" class="row admin-filter-row">
+        <input id="account-search-q" type="search" placeholder="搜索账号、昵称、TG ID 或 @username" />
+        <select id="account-bound-filter">
+          <option value="">全部绑定状态</option>
+          <option value="true">已绑定 TG</option>
+          <option value="false">未绑定 TG</option>
+        </select>
+        <select id="account-enabled-filter">
+          <option value="">全部账号状态</option>
+          <option value="true">正常</option>
+          <option value="false">已停用</option>
+        </select>
+        <button type="submit">查询账号</button>
+      </form>
+      <div id="account-summary" class="admin-metrics compact"></div>
+      <div id="account-list" class="admin-list"></div>
+    </section>
+
+    <section id="players" class="card admin-section">
+      <div class="section-heading">
+        <div><p class="eyebrow">玩家服务</p><h2>玩家搜索与资源调整</h2></div>
+        <span class="section-copy">先搜索并选择玩家，再执行资源操作</span>
+      </div>
+      <form id="player-search-form" class="row admin-filter-row">
+        <input id="player-search-q" type="search" placeholder="TG ID、昵称或 @username" />
+        <button type="submit">搜索玩家</button>
+      </form>
+      <div id="player-search-list" class="admin-list"></div>
+      <div class="row">
+        <input id="player-tg" inputmode="numeric" placeholder="已选择的 TG ID" />
+        <button id="load-player-btn">查看玩家详情</button>
+      </div>
+      <div class="row">
+        <select id="grant-resource">
+          <option value="gold">金币</option>
+          <option value="douqi">斗气</option>
+          <option value="fire_seed">异火火候</option>
+          <option value="alchemy_exp">炼药经验</option>
+          <option value="beast_core">魔核</option>
+          <option value="sect_contribution">宗门贡献</option>
+          <option value="pill_stock">丹药</option>
+          <option value="technique_level">斗技等级</option>
+          <option value="fire_progress">异火线索</option>
+          <option value="boss_score">Boss 战绩</option>
+          <option value="tower_floor">塔层</option>
+          <option value="auction_credit">拍卖声望</option>
+        </select>
+        <input id="grant-amount" type="number" value="100" aria-label="调整数量" />
+        <button id="grant-btn">确认调整</button>
+      </div>
+      <div class="row">
+        <select id="grant-item-key"><option value="">选择要发放的物品</option></select>
+        <input id="grant-item-amount" type="number" min="1" value="1" aria-label="物品发放数量" />
+        <button id="grant-item-btn">发放物品</button>
+      </div>
+      <div id="player-detail" class="admin-detail section-copy">尚未选择玩家</div>
+    </section>
+
+    <section id="content" class="card admin-section">
+      <div class="section-heading">
+        <div><p class="eyebrow">大陆图鉴</p><h2>材料、配方与游历来源</h2></div>
+        <span class="section-copy">物品与区域为内置内容；配方可直接跳转到行动编辑器调整</span>
+      </div>
+      <div id="content-summary" class="admin-metrics"></div>
+      <div class="row admin-filter-row content-filter-row">
+        <input id="content-search" type="search" placeholder="搜索名称、key、描述或来源" />
+        <select id="content-category"><option value="">全部分类</option></select>
+        <button id="new-item-btn" type="button">新建物品</button>
+      </div>
+      <div id="item-editor" class="item-editor">
+        <div class="section-heading compact-heading">
+          <div><p class="eyebrow">物品定义</p><h3 id="item-editor-title">新建物品</h3></div>
+          <span id="item-version-badge" class="tag">未保存</span>
+        </div>
+        <div class="item-editor-grid">
+          <label><span>物品 key</span><input id="item-key" maxlength="64" placeholder="例如 flame_sword" /></label>
+          <label><span>名称</span><input id="item-name" maxlength="128" placeholder="例如 赤焰剑" /></label>
+          <label><span>分类</span><select id="item-category">
+            <option value="pill">丹药</option><option value="herb">药材</option><option value="ore">矿材</option>
+            <option value="core">魔核</option><option value="fire">异火</option><option value="technique">斗技</option>
+            <option value="method">功法</option><option value="gear">装备</option><option value="token">凭证</option>
+          </select></label>
+          <label><span>品质</span><input id="item-rarity" maxlength="32" value="凡品" /></label>
+          <label><span>图标</span><input id="item-icon" maxlength="512" placeholder="emoji 或 HTTPS 图片地址" /></label>
+          <label><span>堆叠上限</span><input id="item-stack-limit" type="number" min="1" value="9999" /></label>
+          <label class="inline-setting"><input id="item-tradable" type="checkbox" /> 允许交易</label>
+          <label class="inline-setting"><input id="item-enabled" type="checkbox" checked /> 启用物品</label>
+        </div>
+        <label class="editor-wide-label"><span>描述</span><textarea id="item-description" rows="3" maxlength="4000"></textarea></label>
+
+        <details id="equipment-editor-fold" class="admin-config-fold">
+          <summary>装备槽位与属性</summary>
+          <div class="item-editor-grid">
+            <label><span>装备槽位</span><select id="item-equipment-slot">
+              <option value="">不可穿戴</option><option value="weapon">武器</option><option value="armor">护甲</option>
+              <option value="boots">靴履</option><option value="accessory">饰品</option><option value="ring">纳戒</option><option value="cauldron">药鼎</option>
+            </select></label>
+            <label><span>攻击</span><input id="item-attack" type="number" min="0" value="0" /></label>
+            <label><span>防御</span><input id="item-defense" type="number" min="0" value="0" /></label>
+            <label><span>身法</span><input id="item-agility" type="number" min="0" value="0" /></label>
+            <label><span>异火加成</span><input id="item-fire-bonus" type="number" min="0" value="0" /></label>
+            <label><span>炼药加成</span><input id="item-alchemy-bonus" type="number" min="0" value="0" /></label>
+          </div>
+        </details>
+
+        <details class="admin-config-fold">
+          <summary>制作配方</summary>
+          <div class="item-editor-grid">
+            <label class="inline-setting"><input id="item-recipe-enabled" type="checkbox" /> 启用制作配方</label>
+            <label><span>制作类型</span><select id="item-recipe-type"><option value="alchemy">炼药</option><option value="craft">炼器</option></select></label>
+            <label><span>行动 key</span><input id="item-recipe-action-key" placeholder="留空自动生成" /></label>
+            <label><span>行动名称</span><input id="item-recipe-name" placeholder="例如 打造赤焰剑" /></label>
+            <label><span>冷却秒数</span><input id="item-recipe-cooldown" type="number" min="0" value="60" /></label>
+            <label><span>金币成本</span><input id="item-recipe-gold" type="number" min="0" value="0" /></label>
+            <label><span>成品数量</span><input id="item-recipe-output" type="number" min="1" value="1" /></label>
+            <label><span>排序</span><input id="item-recipe-sort" type="number" value="75" /></label>
+          </div>
+          <div class="builder-heading"><strong>配方材料</strong><button id="add-recipe-material-btn" type="button" class="ghost mini">添加材料</button></div>
+          <div id="item-recipe-materials" class="builder-list"></div>
+          <label class="editor-wide-label"><span>境界与资源门槛 JSON</span><textarea id="item-recipe-requirements" rows="4" placeholder='{"realm_stage_min":"斗师","alchemy_min":120}'></textarea></label>
+        </details>
+        <details class="admin-config-fold">
+          <summary>掉落来源</summary>
+          <div class="builder-heading"><strong>关联已有行动</strong><button id="add-drop-source-btn" type="button" class="ghost mini">添加来源</button></div>
+          <div id="item-drop-sources" class="builder-list"></div>
+        </details>
+        <label class="editor-wide-label"><span>版本说明</span><input id="item-change-note" maxlength="255" placeholder="说明本次属性或来源调整" /></label>
+        <div class="row">
+          <button id="save-item-btn" type="button">保存并生成新版本</button>
+          <button id="item-versions-btn" type="button" class="ghost">查看历史版本</button>
+          <button id="archive-item-btn" type="button" class="ghost danger-button">停用物品</button>
+        </div>
+        <div id="item-version-list" class="version-list hidden"></div>
+      </div>
+      <div id="content-catalog" class="content-catalog"></div>
+
+      <details class="admin-config-fold" open>
+        <summary>制作配方速查</summary>
+        <p class="section-copy">点击“编辑配方”会载入行动编辑器；修改材料、产物、金币与门槛后保存即可生效。</p>
+        <div id="recipe-catalog" class="recipe-catalog"></div>
+      </details>
+
+      <details class="admin-config-fold">
+        <summary>游历区域与事件来源</summary>
+        <div id="region-catalog" class="region-catalog"></div>
+      </details>
+    </section>
+
+    <section id="actions" class="card admin-section">
+      <div class="section-heading">
+        <div><p class="eyebrow">玩法配置</p><h2>行动编辑器</h2></div>
+        <span class="section-copy">从下方列表选择行动后编辑，减少误改</span>
+      </div>
+      <div class="row">
+        <input id="action-key" placeholder="action_key，例如 train_breath" />
+        <input id="action-name" placeholder="行动名称" />
+        <select id="action-type">
+          <option value="train">修炼 train</option>
+          <option value="adventure">历练 adventure</option>
+          <option value="alchemy">炼药 alchemy</option>
+          <option value="craft">炼器 craft</option>
+          <option value="fire">异火 fire</option>
+          <option value="sect">宗门 sect</option>
+          <option value="auction">拍卖 auction</option>
+          <option value="pill">丹药 pill</option>
+          <option value="technique">斗技 technique</option>
+          <option value="boss">Boss boss</option>
+          <option value="tower">塔修 tower</option>
+          <option value="faction">阵营 faction</option>
+          <option value="pet">伙伴 pet</option>
+          <option value="black_corner">黑角域 black_corner</option>
+          <option value="breakthrough">突破 breakthrough</option>
+        </select>
+      </div>
+      <div class="row">
+        <input id="action-cooldown" type="number" min="0" value="0" placeholder="冷却秒数" />
+        <input id="action-desc" placeholder="描述" />
+      </div>
+      <div class="row">
+        <textarea id="action-reward" rows="4" style="width:100%;" placeholder='reward_config JSON'></textarea>
+      </div>
+      <div class="row">
+        <textarea id="action-requirement" rows="4" style="width:100%;" placeholder='requirement_config JSON'></textarea>
+      </div>
+      <p class="section-copy">行动可通过 reward_config / requirement_config 拓展金币回收、材料掉落、宗门门槛、物品消耗和专项成长；保存后会自动出现在对应玩法模块。</p>
+      <div class="row">
+        <label><input id="action-enabled" type="checkbox" checked /> 启用</label>
+        <input id="action-sort" type="number" value="0" />
+        <button id="save-action-btn">保存行动</button>
+      </div>
+      <ul id="action-list"></ul>
+    </section>
+
+    <section id="settings" class="card admin-section">
+      <div class="section-heading">
+        <div><p class="eyebrow">全局规则</p><h2>基础设置</h2></div>
+        <span class="section-copy">数值修改统一保存，避免逐项请求</span>
+      </div>
+      <div class="balance-settings-grid">
+        <label><span>每日行动力</span><input id="setting-daily-action-points" type="number" min="0" value="12" /></label>
+        <label><span>斗气软上限</span><input id="setting-daily-douqi-soft-cap" type="number" min="0" value="250" /></label>
+        <label><span>斗气硬上限</span><input id="setting-daily-douqi-hard-cap" type="number" min="0" value="400" /></label>
+        <label><span>超额收益比例（%）</span><input id="setting-daily-douqi-overflow" type="number" min="0" max="100" value="20" /></label>
+        <label><span>突破失败斗气损失（%）</span><input id="setting-breakthrough-loss" type="number" min="0" max="100" value="10" /></label>
+        <label><span>每日行动金币上限</span><input id="setting-daily-gold-cap" type="number" min="0" value="650" /></label>
+      </div>
+      <p class="section-copy">软上限后斗气按超额比例结算，达到硬上限后不再增加；所有成长行动同时消耗行动力。</p>
+
+      <div class="section-heading compact-heading">
+        <div><p class="eyebrow">次数控制</p><h3>各玩法每日上限</h3></div>
+        <span class="section-copy">填写 0 表示不限次</span>
+      </div>
+      <div class="balance-settings-grid balance-settings-grid--wide">
+        <label><span>修炼</span><input id="setting-daily-train-limit" type="number" min="0" value="5" /></label>
+        <label><span>游历</span><input id="setting-daily-expedition-limit" type="number" min="0" value="3" /></label>
+        <label><span>历练</span><input data-action-limit="adventure" type="number" min="0" value="5" /></label>
+        <label><span>炼药</span><input data-action-limit="alchemy" type="number" min="0" value="3" /></label>
+        <label><span>炼器</span><input data-action-limit="craft" type="number" min="0" value="5" /></label>
+        <label><span>服丹</span><input data-action-limit="pill" type="number" min="0" value="3" /></label>
+        <label><span>异火</span><input data-action-limit="fire" type="number" min="0" value="3" /></label>
+        <label><span>宗门</span><input data-action-limit="sect" type="number" min="0" value="5" /></label>
+        <label><span>拍卖</span><input data-action-limit="auction" type="number" min="0" value="3" /></label>
+        <label><span>斗技</span><input data-action-limit="technique" type="number" min="0" value="3" /></label>
+        <label><span>阵营</span><input data-action-limit="faction" type="number" min="0" value="3" /></label>
+        <label><span>Boss</span><input data-action-limit="boss" type="number" min="0" value="2" /></label>
+        <label><span>塔修</span><input data-action-limit="tower" type="number" min="0" value="2" /></label>
+        <label><span>伙伴</span><input data-action-limit="pet" type="number" min="0" value="3" /></label>
+        <label><span>黑角域</span><input data-action-limit="black_corner" type="number" min="0" value="3" /></label>
+        <label><span>突破</span><input data-action-limit="breakthrough" type="number" min="0" value="3" /></label>
+      </div>
+
+      <details class="admin-config-fold">
+        <summary>高级：各玩法行动力消耗</summary>
+        <p class="section-copy">行动力在行动成功受理后扣除；游历只在进入区域时扣除一次。</p>
+        <div class="balance-settings-grid balance-settings-grid--wide">
+          <label><span>修炼</span><input data-action-point-cost="train" type="number" min="0" value="1" /></label>
+          <label><span>游历</span><input data-action-point-cost="expedition" type="number" min="0" value="2" /></label>
+          <label><span>历练</span><input data-action-point-cost="adventure" type="number" min="0" value="2" /></label>
+          <label><span>炼药</span><input data-action-point-cost="alchemy" type="number" min="0" value="1" /></label>
+          <label><span>炼器</span><input data-action-point-cost="craft" type="number" min="0" value="1" /></label>
+          <label><span>服丹</span><input data-action-point-cost="pill" type="number" min="0" value="1" /></label>
+          <label><span>异火</span><input data-action-point-cost="fire" type="number" min="0" value="2" /></label>
+          <label><span>宗门</span><input data-action-point-cost="sect" type="number" min="0" value="1" /></label>
+          <label><span>拍卖</span><input data-action-point-cost="auction" type="number" min="0" value="1" /></label>
+          <label><span>斗技</span><input data-action-point-cost="technique" type="number" min="0" value="1" /></label>
+          <label><span>阵营</span><input data-action-point-cost="faction" type="number" min="0" value="1" /></label>
+          <label><span>Boss</span><input data-action-point-cost="boss" type="number" min="0" value="3" /></label>
+          <label><span>塔修</span><input data-action-point-cost="tower" type="number" min="0" value="3" /></label>
+          <label><span>伙伴</span><input data-action-point-cost="pet" type="number" min="0" value="2" /></label>
+          <label><span>黑角域</span><input data-action-point-cost="black_corner" type="number" min="0" value="2" /></label>
+          <label><span>突破</span><input data-action-point-cost="breakthrough" type="number" min="0" value="2" /></label>
+        </div>
+      </details>
+
+      <div class="section-heading compact-heading">
+        <div><p class="eyebrow">经济与互动</p><h3>兑换、斗战和播报</h3></div>
+      </div>
+      <div class="balance-settings-grid">
+        <label class="inline-setting"><input id="setting-enabled" type="checkbox" checked /> 开启兑换</label>
+        <label><span>兑换汇率</span><input id="setting-rate" type="number" min="1" value="100" /></label>
+        <label><span>金币最低兑换量</span><input id="setting-min-gold" type="number" min="1" value="100" /></label>
+        <label><span>斗战最低金币</span><input id="setting-duel-min-stake" type="number" min="0" value="0" /></label>
+        <label><span>斗战最高金币</span><input id="setting-duel-max-stake" type="number" min="0" value="500" /></label>
+        <label><span>斗战备战秒数</span><input id="setting-duel-prepare-seconds" type="number" min="0" max="600" value="8" /></label>
+        <label class="inline-setting"><input id="setting-broadcast-enabled" type="checkbox" checked /> 开启播报</label>
+        <label><span>消息自动删除秒数</span><input id="setting-message-auto-delete" type="number" min="0" value="180" /></label>
+      </div>
+
+      <div class="section-heading compact-heading">
+        <div><p class="eyebrow">游历与宗门</p><h3>首领/隐藏事件与社交调优</h3></div>
+      </div>
+      <div class="balance-settings-grid">
+        <label><span>游历首领触发概率%</span><input id="setting-expedition-boss-chance" type="number" min="0" max="100" value="14" /></label>
+        <label><span>隐藏事件触发概率%</span><input id="setting-expedition-hidden-chance" type="number" min="0" max="100" value="8" /></label>
+        <label><span>转宗冷却天数</span><input id="setting-sect-transfer-cooldown" type="number" min="0" value="7" /></label>
+        <label><span>转宗费用</span><input id="setting-sect-transfer-cost" type="number" min="0" value="1500" /></label>
+        <label><span>转宗贡献保留%</span><input id="setting-sect-transfer-retain" type="number" min="0" max="100" value="50" /></label>
+        <label><span>离宗费用</span><input id="setting-sect-leave-cost" type="number" min="0" value="0" /></label>
+      </div>
+      <div class="row"><button id="save-settings-btn">保存全部设置</button></div>
+    </section>
+
+    <section id="danger-zone" class="card admin-section danger-zone">
+      <div><p class="eyebrow">危险操作</p><h2>数据重置</h2></div>
+      <p class="section-copy">该操作会清空全部斗破角色、背包、日志和进度，不影响统一游戏账号。</p>
+      <button id="reset-all-btn">重置全部斗破玩家数据</button>
+    </section>
+  </main>
+
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/plugins/doupo/static/admin.js"></script>
+</body>
+</html>

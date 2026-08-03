@@ -7,6 +7,7 @@ Create Date: 2026-04-13 20:30:00
 
 from alembic import op
 import sqlalchemy as sa
+from datetime import datetime
 
 
 revision = "20260413_20"
@@ -59,31 +60,39 @@ def downgrade() -> None:
             sa.column("setting_value", sa.JSON()),
             sa.column("updated_at", sa.DateTime()),
         )
-        bind.execute(
-            settings.insert().prefix_with("IGNORE"),
-            [
-                {
-                    "setting_key": "red_packet_merit_min_stone",
-                    "setting_value": 100,
-                    "updated_at": sa.func.now(),
-                },
-                {
-                    "setting_key": "red_packet_merit_min_count",
-                    "setting_value": 3,
-                    "updated_at": sa.func.now(),
-                },
-                {
-                    "setting_key": "red_packet_merit_reward",
-                    "setting_value": 2,
-                    "updated_at": sa.func.now(),
-                },
-                {
-                    "setting_key": "red_packet_merit_modes",
-                    "setting_value": ["normal", "lucky", "exclusive"],
-                    "updated_at": sa.func.now(),
-                },
-            ],
-        )
+        default_rows = [
+            {
+                "setting_key": "red_packet_merit_min_stone",
+                "setting_value": 100,
+                "updated_at": datetime.utcnow(),
+            },
+            {
+                "setting_key": "red_packet_merit_min_count",
+                "setting_value": 3,
+                "updated_at": datetime.utcnow(),
+            },
+            {
+                "setting_key": "red_packet_merit_reward",
+                "setting_value": 2,
+                "updated_at": datetime.utcnow(),
+            },
+            {
+                "setting_key": "red_packet_merit_modes",
+                "setting_value": ["normal", "lucky", "exclusive"],
+                "updated_at": datetime.utcnow(),
+            },
+        ]
+        existing_keys = {
+            row[0]
+            for row in bind.execute(
+                sa.select(settings.c.setting_key).where(
+                    settings.c.setting_key.in_([row["setting_key"] for row in default_rows])
+                )
+            )
+        }
+        missing_rows = [row for row in default_rows if row["setting_key"] not in existing_keys]
+        if missing_rows:
+            bind.execute(settings.insert(), missing_rows)
 
     if _has_table(inspector, "xiuxian_red_envelopes") and _has_column(inspector, "xiuxian_red_envelopes", "image_url"):
         op.drop_column("xiuxian_red_envelopes", "image_url")

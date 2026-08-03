@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from threading import RLock
+
+_MIGRATION_DB_LOCK = RLock()
 
 from sqlalchemy import Boolean, Column, DateTime, Index, Integer, JSON, String, Text, UniqueConstraint
 
@@ -112,7 +115,7 @@ def mark_plugin_error(plugin_id: str, error: str | None) -> None:
 
 
 def list_applied_plugin_migrations(plugin_id: str) -> dict[str, str]:
-    with Session() as session:
+    with _MIGRATION_DB_LOCK, Session() as session:
         rows = (
             session.query(PluginMigrationRecord)
             .filter(PluginMigrationRecord.plugin_id == plugin_id)
@@ -120,3 +123,21 @@ def list_applied_plugin_migrations(plugin_id: str) -> dict[str, str]:
             .all()
         )
         return {row.migration_name: row.checksum for row in rows}
+
+
+def update_plugin_migration_checksum(plugin_id: str, migration_name: str, checksum: str) -> bool:
+    with _MIGRATION_DB_LOCK, Session() as session:
+        row = (
+            session.query(PluginMigrationRecord)
+            .filter(
+                PluginMigrationRecord.plugin_id == str(plugin_id),
+                PluginMigrationRecord.migration_name == str(migration_name),
+            )
+            .with_for_update()
+            .first()
+        )
+        if row is None:
+            return False
+        row.checksum = str(checksum)
+        session.commit()
+        return True

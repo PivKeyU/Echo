@@ -45,18 +45,18 @@ async def login(request: Request):
     Success Response (200):
     {
         "code": 200,
-        "message": "登录成功",
+        "message": "哼，算你登录成功啦~",
         "data": {
             "token": "xxxxxxxxxxxxx",
             "embyid": "user_id",
             "username": "user_name"
         }
     }
-    
+
     Error Response:
     {
         "code": 401,
-        "message": "用户名或密码错误"
+        "message": "用户名或密码错了啦！"
     }
     """
     try:
@@ -79,14 +79,14 @@ async def login(request: Request):
             LOGGER.warning(f"Login attempt missing credentials")
             return LoginResponse(
                 code=400,
-                message="缺少用户名"
+                message="连用户名都不给本女仆...怎么登录嘛！"
             )
         embyindb = sql_get_emby(username)
         if not embyindb:
             LOGGER.warning(f"Login attempt for non-existent user: {username}")
             return LoginResponse(
                 code=404,
-                message="用户不存在"
+                message="哼，根本没有这个用户啦~"
             )
         
         # 调用Emby API进行身份验证
@@ -100,14 +100,14 @@ async def login(request: Request):
             LOGGER.warning(f"Login failed for user: {username}")
             return LoginResponse(
                 code=401,
-                message="用户名或密码错误"
+                message="用户名或密码错了啦！"
             )
         
         LOGGER.info(f"User logged in successfully: {username}")
         
         return LoginResponse(
             code=200,
-            message="登录成功",
+            message="哼，算你登录成功啦~",
             data={
                 "embyid": str(embyid),
                 "username": username
@@ -118,11 +118,11 @@ async def login(request: Request):
         LOGGER.error(f"Invalid JSON format in login request")
         return LoginResponse(
             code=400,
-            message="无效的JSON格式"
+            message="这个JSON格式不对啦！本女仆看不懂..."
         )
     except Exception as e:
         LOGGER.error(f"Login error: {str(e)}")
         return LoginResponse(
             code=500,
-            message=f"服务器错误: {str(e)}"
+            message=f"呜...服务器出错了: {str(e)}。才不是本女仆的错！"
         )

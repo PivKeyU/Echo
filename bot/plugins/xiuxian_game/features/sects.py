@@ -32,3 +32,14 @@ def set_user_sect_role(tg: int, sect_id: int, role_key: str) -> dict[str, Any]:
 def claim_sect_salary_for_user(tg: int) -> dict[str, Any]:
     return _legacy_world_service().claim_sect_salary_for_user(tg)
 
+
+def perform_sect_attendance(tg: int) -> dict[str, Any]:
+    return _legacy_world_service().perform_sect_attendance(tg)
+
+
+def perform_sect_teach(tg: int, cultivation_amount: int) -> dict[str, Any]:
+    return _legacy_world_service().perform_sect_teach(tg, cultivation_amount)
+
+
+def donate_item_to_sect_treasury(tg: int, item_kind: str, item_ref_id: int, quantity: int) -> dict[str, Any]:
+    return _legacy_world_service().donate_item_to_sect_treasury(tg, item_kind, item_ref_id, quantity)

@@ -38,6 +38,23 @@ def admin_grant_player_resource(
     )
 
 
+def admin_batch_update_player_resource(
+    item_kind: str,
+    item_ref_id: int,
+    quantity: int,
+    *,
+    operation: str = "grant",
+    equip: bool = False,
+) -> dict[str, Any]:
+    return _legacy_service().admin_batch_update_player_resource(
+        item_kind,
+        item_ref_id,
+        quantity,
+        operation=operation,
+        equip=equip,
+    )
+
+
 def admin_set_player_inventory(
     tg: int,
     item_kind: str,
@@ -66,3 +83,6 @@ def admin_set_player_selection(tg: int, selection_kind: str, item_ref_id: int | 
 def admin_seed_demo_assets(tg: int) -> dict[str, Any]:
     return _legacy_service().admin_seed_demo_assets(tg)
 
+
+def admin_clear_all_xiuxian_data() -> dict[str, Any]:
+    return _legacy_service().admin_clear_all_xiuxian_data()

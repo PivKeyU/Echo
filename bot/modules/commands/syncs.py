@@ -28,7 +28,6 @@ from bot.func_helper.utils import tem_deluser, split_long_message
 from bot.sql_helper.sql_emby import get_all_emby, Emby, sql_get_emby, sql_update_embys, sql_delete_emby, sql_update_emby
 from bot.func_helper.msg_utils import deleteMessage, sendMessage, sendPhoto
 from bot.sql_helper.sql_emby2 import sql_get_emby2
-from bot.sql_helper.sql_favorites import sql_update_favorites, EmbyFavorites
 
 
 @bot.on_message(filters.command('syncgroupm', prefixes) & admins_on_filter)
@@ -124,7 +123,7 @@ async def sync_emby_unbound(_, msg):
                         e1 = sql_get_emby2(name=embyid)
                         if e1 is None:
                             a += 1
-                            if confirm_delete:
+                            if confirm_delete == 'true':
                                 await emby.emby_del(emby_id=embyid)
                                 text += f"🎯 #{v['Name']} 未绑定本女仆，删除\n"
                             else:
@@ -139,7 +138,7 @@ async def sync_emby_unbound(_, msg):
     end = time.perf_counter()
     times = end - start
     if a != 0:
-        if confirm_delete:
+        if confirm_delete == 'true':
             await sendMessage(msg, text=f"⚡扫描未绑定本女仆任务完成\n  共检索出 {b} 个账户，{a} 个未绑定，耗时：{times:.3f}s，已删除")
         else:
             await sendMessage(msg, text=f"⚡扫描未绑定本女仆任务完成\n  共检索出 {b} 个账户，{a} 个未绑定，耗时：{times:.3f}s，如需删除请输入 `/syncunbound true`")
@@ -173,12 +172,6 @@ async def bindall_id(_, msg):
             continue
         ls.append([e.tg, Name, Emby_id])
     if sql_update_embys(some_list=ls, method='bind'):
-        # 更新收藏记录
-        for i in ls:
-           favorites_updated = sql_update_favorites(condition=EmbyFavorites.embyname == i[1], embyid=i[2])
-           if not favorites_updated:
-               LOGGER.warning(f"用户 {i[1]} 的收藏记录更新失败，可能存在数据冲突")
-               pass
         end = time.perf_counter()
         times = end - start
         n = 1000
@@ -299,18 +292,11 @@ async def restore_from_db(_, msg):
                         embyid = data[0]
                         pwd = data[1]
                         sql_update_emby(Emby.tg == tg, embyid=embyid, pwd=pwd)
-                        
-                        # 更安全的收藏记录更新，带错误处理
-                        favorites_updated = sql_update_favorites(condition=EmbyFavorites.embyname == embyuser.name, embyid=embyid)
-                        if not favorites_updated:
-                            LOGGER.warning(f"用户 {embyuser.name} 的收藏记录更新失败，可能存在数据冲突")
-                            text += f'**- ⚠️ 恢复用户：#id{embyuser.tg} - [{embyuser.name}](tg://user?id={embyuser.tg}) 成功，但收藏记录更新失败\n**'
-                        else:
-                            text += f'**- ✅ 恢复用户：#id{embyuser.tg} - [{embyuser.name}](tg://user?id={embyuser.tg}) 成功！\n**'
+                        text += f'**- ✅ 恢复用户：#id{embyuser.tg} - [{embyuser.name}](tg://user?id={embyuser.tg}) 成功！\n**'
                         success_count += 1
                         LOGGER.info(f"恢复 #id{embyuser.tg} - [{embyuser.name}](tg://user?id={embyuser.tg}) 成功")
                         try:
-                            user_notification = f'🤖 #恢复成功：id：{embyuser.tg} \n\n🧬您的账号`{embyuser.name}`已恢复成功 ！\n🪅密码为：`{pwd}`\n🔮安全码为：`{embyuser.pwd2}`\n'
+                            user_notification = f'🤖 #恢复成功：id：{embyuser.tg} \n\n🧬您的账号`{embyuser.name}`已恢复成功！\n🔐登录凭据已安全保存，请通过 Emby 客户端或管理员重置。\n'
                             await bot.send_message(tg, user_notification)
                         except FloodWait as f:
                             LOGGER.warning(str(f))

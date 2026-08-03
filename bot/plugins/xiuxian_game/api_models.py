@@ -6,7 +6,33 @@ from pydantic import BaseModel, Field
 
 
 class InitDataPayload(BaseModel):
+    init_data: str = ""
+
+
+class WebAuthRegisterPayload(BaseModel):
+    username: str
+    password: str
+    display_name: str | None = None
+    init_data: str = ""
+
+
+class WebAuthLoginPayload(BaseModel):
+    username: str
+    password: str
+    init_data: str = ""
+
+
+class WebAuthSessionPayload(BaseModel):
+    session_token: str = ""
+    init_data: str = ""
+
+
+class WebAuthBindTelegramPayload(WebAuthSessionPayload):
     init_data: str
+
+
+class AdminGameAccountStatePayload(BaseModel):
+    enabled: bool
 
 
 class BreakthroughPayload(InitDataPayload):
@@ -15,6 +41,7 @@ class BreakthroughPayload(InitDataPayload):
 
 class ConsumePillPayload(InitDataPayload):
     pill_id: int
+    quantity: int = 1
 
 
 class BatchConsumePillPayload(InitDataPayload):
@@ -55,6 +82,18 @@ class ExchangePayload(InitDataPayload):
     amount: int
 
 
+class GamblingExchangePayload(InitDataPayload):
+    count: int = 1
+
+
+class GamblingOpenPayload(InitDataPayload):
+    count: int = 1
+
+
+class CommissionClaimPayload(InitDataPayload):
+    commission_key: str
+
+
 class LeaderboardPayload(InitDataPayload):
     kind: str = "stone"
     page: int = 1
@@ -69,6 +108,15 @@ class PersonalShopPayload(InitDataPayload):
     broadcast: bool = False
 
 
+class PersonalAuctionPayload(InitDataPayload):
+    item_kind: str
+    item_ref_id: int
+    quantity: int
+    opening_price_stone: int
+    bid_increment_stone: int
+    buyout_price_stone: int | None = None
+
+
 class PurchasePayload(InitDataPayload):
     item_id: int
     quantity: int = 1
@@ -80,6 +128,16 @@ class OfficialRecyclePayload(InitDataPayload):
     quantity: int = 1
 
 
+class OfficialRecycleBatchItemPayload(BaseModel):
+    item_kind: str
+    item_ref_id: int
+    quantity: int = 1
+
+
+class OfficialRecycleBatchPayload(InitDataPayload):
+    items: list[OfficialRecycleBatchItemPayload] = Field(default_factory=list)
+
+
 class RetreatPayload(InitDataPayload):
     hours: int = 1
 
@@ -88,17 +146,112 @@ class SectJoinPayload(InitDataPayload):
     sect_id: int
 
 
+class SectTeachPayload(InitDataPayload):
+    cultivation_amount: int
+
+
+class SectDonatePayload(InitDataPayload):
+    item_kind: str
+    item_ref_id: int
+    quantity: int = 1
+
+
 class GiftPayload(InitDataPayload):
     target_tg: int
     amount: int
+
+
+class SocialModePayload(InitDataPayload):
+    social_mode: str
+
+
+class GenderSetPayload(InitDataPayload):
+    gender: str
+
+
+class MarriageRequestPayload(InitDataPayload):
+    target_tg: int
+    message: str = ""
+
+
+class MarriageRequestActionPayload(InitDataPayload):
+    request_id: int
+    action: str
+
+
+class MentorshipRequestPayload(InitDataPayload):
+    target_tg: int
+    sponsor_role: str = "disciple"
+    message: str = ""
+
+
+class MentorshipRequestActionPayload(InitDataPayload):
+    request_id: int
+    action: str
+
+
+class MentorshipTeachPayload(InitDataPayload):
+    disciple_tg: int
+
+
+class MentorshipTargetPayload(InitDataPayload):
+    target_tg: int
+
+
+class FurnaceHarvestPayload(InitDataPayload):
+    target_tg: int
+
+
+class ItemGiftPayload(InitDataPayload):
+    target_tg: int
+    item_kind: str
+    item_ref_id: int
+    quantity: int = 1
+
+
+class PlayerLookupPayload(InitDataPayload):
+    query: str = ""
+    page: int = 1
+    page_size: int = 8
 
 
 class TaskClaimPayload(InitDataPayload):
     task_id: int
 
 
+class TaskCancelPayload(InitDataPayload):
+    task_id: int
+
+
 class CraftPayload(InitDataPayload):
     recipe_id: int
+    quantity: int = 1
+
+
+class RecipeFragmentSynthesisPayload(InitDataPayload):
+    recipe_id: int
+
+
+class FarmPlantPayload(InitDataPayload):
+    slot_index: int
+    material_id: int
+
+
+class FarmCarePayload(InitDataPayload):
+    slot_index: int
+    action: str
+
+
+class FarmHarvestPayload(InitDataPayload):
+    slot_index: int
+
+
+class FarmUnlockPayload(InitDataPayload):
+    slot_index: int
+
+
+class FishingCastPayload(InitDataPayload):
+    spot_key: str
 
 
 class ExploreStartPayload(InitDataPayload):
@@ -134,7 +287,11 @@ class UserTaskPayload(InitDataPayload):
     required_item_kind: str | None = None
     required_item_ref_id: int | None = None
     required_item_quantity: int = 0
+    requirement_metric_key: str | None = None
+    requirement_metric_target: int = 0
     reward_stone: int = 0
+    reward_cultivation: int = 0
+    reward_scale_mode: str = "fixed"
     reward_item_kind: str | None = None
     reward_item_ref_id: int | None = None
     reward_item_quantity: int = 0
@@ -146,6 +303,9 @@ class UserTaskPayload(InitDataPayload):
 class AdminBootstrapPayload(BaseModel):
     token: str | None = None
     init_data: str | None = None
+    player_query: str | None = None
+    player_page: int = 1
+    player_page_size: int = 10
 
 
 class RootQualityRulePayload(BaseModel):
@@ -167,20 +327,69 @@ class ItemQualityValueRulePayload(BaseModel):
     talisman_multiplier: float
 
 
+class ActivityStatGrowthRulePayload(BaseModel):
+    chance_percent: int
+    gain_min: int
+    gain_max: int
+    attribute_count: int = 1
+
+
+class GamblingQualityWeightRulePayload(BaseModel):
+    weight_multiplier: float = 1.0
+
+
+class GamblingRewardPoolEntryPayload(BaseModel):
+    item_kind: str
+    item_ref_id: int | None = None
+    item_name: str | None = None
+    quantity_min: int = 1
+    quantity_max: int = 1
+    base_weight: float = 1.0
+    enabled: bool = True
+    gambling_weight: float | None = None
+    fishing_weight: float | None = None
+    gambling_enabled: bool | None = None
+    fishing_enabled: bool | None = None
+
+
+class ArenaStageRulePayload(BaseModel):
+    realm_stage: str
+    duration_minutes: int
+    reward_cultivation: int
+
+
+class EventSummaryRefreshPayload(BaseModel):
+    chat_id: int | str | None = None
+    force_create: bool = True
+
+
 class AdminSettingPayload(BaseModel):
+    coin_stone_exchange_enabled: bool | None = None
     coin_exchange_rate: int | None = None
     exchange_fee_percent: int | None = None
     min_coin_exchange: int | None = None
     duel_bet_minutes: int | None = None
+    duel_bet_enabled: bool | None = None
+    duel_bet_seconds: int | None = None
+    duel_bet_min_amount: int | None = None
+    duel_bet_max_amount: int | None = None
+    duel_bet_amount_options: list[int] | None = None
     duel_invite_timeout_seconds: int | None = None
     duel_winner_steal_percent: int | None = None
+    arena_open_fee_stone: int | None = None
+    arena_challenge_fee_stone: int | None = None
     artifact_plunder_chance: int | None = None
     message_auto_delete_seconds: int | None = None
     equipment_unbind_cost: int | None = None
     shop_broadcast_cost: int | None = None
+    shop_notice_group_id: int | str | None = None
     official_shop_name: str | None = None
+    auction_fee_percent: int | None = None
+    auction_duration_minutes: int | None = None
+    auction_notice_group_id: int | str | None = None
     allow_user_task_publish: bool | None = None
     task_publish_cost: int | None = None
+    user_task_daily_limit: int | None = None
     artifact_equip_limit: int | None = None
     allow_non_admin_image_upload: bool | None = None
     chat_cultivation_chance: int | None = None
@@ -188,17 +397,43 @@ class AdminSettingPayload(BaseModel):
     chat_cultivation_max_gain: int | None = None
     robbery_daily_limit: int | None = None
     robbery_max_steal: int | None = None
+    exploration_daily_limit: int | None = None
+    fishing_daily_limit: int | None = None
+    encounter_claim_daily_limit: int | None = None
+    encounter_auto_dispatch_enabled: bool | None = None
+    encounter_auto_dispatch_hour: int | None = None
+    encounter_auto_dispatch_minute: int | None = None
     high_quality_broadcast_level: int | None = None
+    gambling_exchange_cost_stone: int | None = None
+    gambling_exchange_max_count: int | None = None
+    gambling_open_max_count: int | None = None
+    gambling_broadcast_quality_level: int | None = None
+    gambling_fortune_divisor: int | None = None
+    gambling_fortune_bonus_per_quality_percent: int | None = None
+    arena_notice_group_id: int | str | None = None
+    arena_stage_rules: list[ArenaStageRulePayload] | None = None
+    event_summary_interval_minutes: int | None = None
     slave_tribute_percent: int | None = None
+    furnace_harvest_cultivation_percent: int | None = None
     slave_challenge_cooldown_hours: int | None = None
+    rebirth_cooldown_enabled: bool | None = None
+    rebirth_cooldown_base_hours: int | None = None
+    rebirth_cooldown_increment_hours: int | None = None
     sect_salary_min_stay_days: int | None = None
     sect_betrayal_cooldown_days: int | None = None
+    marriage_divorce_cooldown_days: int | None = None
     sect_betrayal_stone_percent: int | None = None
     sect_betrayal_stone_min: int | None = None
     sect_betrayal_stone_max: int | None = None
+    error_log_retention_count: int | None = None
+    seclusion_cultivation_efficiency_percent: int | None = None
     root_quality_value_rules: dict[str, RootQualityRulePayload] | None = None
     exploration_drop_weight_rules: DropWeightRulePayload | None = None
     item_quality_value_rules: dict[str, ItemQualityValueRulePayload] | None = None
+    activity_stat_growth_rules: dict[str, ActivityStatGrowthRulePayload] | None = None
+    gambling_quality_weight_rules: dict[str, GamblingQualityWeightRulePayload] | None = None
+    fishing_quality_weight_rules: dict[str, GamblingQualityWeightRulePayload] | None = None
+    gambling_reward_pool: list[GamblingRewardPoolEntryPayload] | None = None
     immortal_touch_infusion_layers: int | None = None
 
 
@@ -209,6 +444,7 @@ class ArtifactPayload(BaseModel):
     artifact_role: str = "battle"
     equip_slot: str = "weapon"
     artifact_set_id: int | None = None
+    unique_item: bool = False
     image_url: str = ""
     description: str = ""
     attack_bonus: int = 0
@@ -397,8 +633,16 @@ class SectPayload(BaseModel):
     cultivation_bonus: int = 0
     fortune_bonus: int = 0
     body_movement_bonus: int = 0
+    salary_min_stay_days: int = 30
     entry_hint: str = ""
     roles: list[SectRolePayload] = Field(default_factory=list)
+
+
+class ErrorLogQueryPayload(BaseModel):
+    limit: int = 100
+    tg: int | None = None
+    level: str | None = None
+    keyword: str | None = None
 
 
 class ArtifactSetPayload(BaseModel):
@@ -431,6 +675,13 @@ class MaterialPayload(BaseModel):
     quality_level: int = 1
     image_url: str = ""
     description: str = ""
+    can_plant: bool = False
+    seed_price_stone: int = 0
+    growth_minutes: int = 0
+    yield_min: int = 0
+    yield_max: int = 0
+    unlock_realm_stage: str | None = None
+    unlock_realm_layer: int = 1
     enabled: bool = True
 
 
@@ -508,15 +759,58 @@ class EncounterPayload(BaseModel):
     reward_item_ref_id: int | None = None
     reward_item_quantity_min: int = 1
     reward_item_quantity_max: int = 1
-    reward_willpower: int = 0
-    reward_charisma: int = 0
-    reward_karma: int = 0
     enabled: bool = True
 
 
 class EncounterDispatchPayload(BaseModel):
     template_id: int | None = None
     group_chat_id: int | None = None
+
+
+class BossWorldSpawnPayload(BaseModel):
+    boss_id: int | None = None
+
+
+class AdminSocialPatchPayload(BaseModel):
+    status: str | None = None
+    bond_value: int | None = None
+
+
+class BossPayload(BaseModel):
+    name: str
+    boss_type: str = "personal"
+    realm_stage: str = "炼气"
+    description: str = ""
+    image_url: str = ""
+    hp: int = 500
+    attack_power: int = 30
+    defense_power: int = 15
+    body_movement: int = 10
+    divine_sense: int = 10
+    fortune: int = 10
+    qi_blood: int = 500
+    true_yuan: int = 200
+    skill_name: str | None = None
+    skill_ratio_percent: int = 30
+    skill_hit_bonus: int = 0
+    passive_name: str | None = None
+    passive_effect_kind: str | None = None
+    passive_ratio_percent: int = 0
+    passive_chance: int = 25
+    loot_pills_json: list[dict[str, Any]] = Field(default_factory=list)
+    loot_materials_json: list[dict[str, Any]] = Field(default_factory=list)
+    loot_artifacts_json: list[dict[str, Any]] = Field(default_factory=list)
+    loot_talismans_json: list[dict[str, Any]] = Field(default_factory=list)
+    loot_recipes_json: list[dict[str, Any]] = Field(default_factory=list)
+    loot_techniques_json: list[dict[str, Any]] = Field(default_factory=list)
+    stone_reward_min: int = 0
+    stone_reward_max: int = 0
+    cultivation_reward: int = 0
+    daily_attempt_limit: int = 3
+    ticket_cost_stone: int = 100
+    flavor_text: str = ""
+    sort_order: int = 0
+    enabled: bool = True
 
 
 class UploadPermissionPayload(BaseModel):
@@ -534,7 +828,11 @@ class AdminTaskPayload(BaseModel):
     required_item_kind: str | None = None
     required_item_ref_id: int | None = None
     required_item_quantity: int = 0
+    requirement_metric_key: str | None = None
+    requirement_metric_target: int = 0
     reward_stone: int = 0
+    reward_cultivation: int = 0
+    reward_scale_mode: str = "fixed"
     reward_item_kind: str | None = None
     reward_item_ref_id: int | None = None
     reward_item_quantity: int = 0
@@ -597,3 +895,16 @@ class PlayerSelectionPayload(BaseModel):
 class PlayerRevokePayload(BaseModel):
     item_kind: str
     item_ref_id: int
+
+
+class PlayerBatchResourcePayload(BaseModel):
+    item_kind: str
+    item_ref_id: int
+    quantity: int = Field(default=1, ge=1)
+    operation: str = Field(default="grant")
+    equip: bool = False
+    announce_in_group: bool = False
+
+
+class BossChallengePayload(InitDataPayload):
+    boss_id: int = Field(default=0, ge=1)

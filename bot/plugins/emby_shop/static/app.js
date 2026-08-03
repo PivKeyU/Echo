@@ -19,7 +19,8 @@ const refs = {
   myProductList: document.querySelector("#my-product-list"),
   listingForm: document.querySelector("#listing-form"),
   listingSubmit: document.querySelector("#listing-submit"),
-  listingUpload: document.querySelector("#listing-upload")
+  listingUpload: document.querySelector("#listing-upload"),
+  adminEntry: document.querySelector("#shop-admin-entry")
 };
 
 function escapeHtml(value) {
@@ -92,22 +93,39 @@ function renderMyItems(items = []) {
   `).join("");
 }
 
+function inviteItemType(itemType) {
+  if (itemType === "invite_credit" || itemType === "group_invite_credit") return "group";
+  if (itemType === "account_open_credit") return "account";
+  return "";
+}
+
+function inviteItemLabel(item) {
+  const type = inviteItemType(item?.item_type);
+  if (type === "group") return "入群资格";
+  if (type === "account") return "注册资格";
+  return item?.official ? "官方" : "个人";
+}
+
 function renderProducts(items = []) {
   if (!items.length) {
     refs.productList.innerHTML = `<div class="empty">当前还没有可购买的商品。</div>`;
     return;
   }
-  refs.productList.innerHTML = items.map((item) => `
+  refs.productList.innerHTML = items.map((item) => {
+    const inviteType = inviteItemType(item.item_type);
+    const isInviteCredit = Boolean(inviteType);
+    return `
     <article class="product-card">
       ${item.image_url ? `<img class="product-media" src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.title)}">` : `<div class="product-media"></div>`}
       <div class="card-head">
         <strong>${escapeHtml(item.title)}</strong>
-        <span class="tag">${item.official ? "官方" : "用户"}</span>
+        <span class="tag">${escapeHtml(inviteItemLabel(item))}</span>
       </div>
       <p class="muted">${escapeHtml(item.description || "暂无描述")}</p>
       <div class="product-meta">
         <span class="tag">库存 ${escapeHtml(item.stock)}</span>
         <span class="tag">销量 ${escapeHtml(item.sold_count)}</span>
+        ${isInviteCredit ? `<span class="tag">每份 ${escapeHtml(item.invite_credit_quantity || 1)} 次</span>` : ""}
         ${item.owner_display_name ? `<span class="tag">卖家 ${escapeHtml(item.owner_display_name)}</span>` : ""}
       </div>
       <div class="card-head">
@@ -115,14 +133,19 @@ function renderProducts(items = []) {
         <button type="button" data-purchase="${escapeHtml(item.id)}">立即购买</button>
       </div>
     </article>
-  `).join("");
+  `;
+  }).join("");
 
   refs.productList.querySelectorAll("[data-purchase]").forEach((button) => {
     button.addEventListener("click", async () => {
       const itemId = Number(button.dataset.purchase);
       const item = items.find((row) => Number(row.id) === itemId);
       if (!item) return;
-      const confirmed = window.confirm(`确认花费 ${item.price_iv} 购买《${item.title}》吗？机器人会通过私聊自动发货。`);
+      const inviteType = inviteItemType(item.item_type);
+      const deliveryHint = inviteType
+        ? `购买后将获得 ${item.invite_credit_quantity || 1} 次${inviteItemLabel(item)}。`
+        : "机器人会通过私聊自动发货。";
+      const confirmed = window.confirm(`确认花费 ${item.price_iv} 购买《${item.title}》吗？${deliveryHint}`);
       if (!confirmed) return;
       const previous = button.textContent;
       button.disabled = true;
@@ -134,7 +157,13 @@ function renderProducts(items = []) {
           quantity: 1
         });
         applyBundle(payload);
-        setStatus(`已购买《${item.title}》，机器人会把发货内容私聊给你。`, "success");
+        const inviteCount = payload.granted_invites?.length || 0;
+        setStatus(
+          inviteCount
+            ? `已购买《${item.title}》，获得 ${inviteCount} 次${inviteItemLabel(item)}。`
+            : `已购买《${item.title}》，机器人会把发货内容私聊给你。`,
+          "success"
+        );
         window.alert(`购买成功，订单号 #${payload.last_order?.id || "-"}`);
       } catch (error) {
         setStatus(String(error.message || error), "error");
@@ -152,23 +181,49 @@ function applyBundle(bundle) {
   const settings = bundle.settings || {};
   const permissions = bundle.permissions || {};
   const account = bundle.account || {};
-  refs.title.textContent = settings.shop_title || "仙舟小铺";
-  refs.notice.textContent = settings.shop_notice || "欢迎使用 Emby 货币购买数字商品。";
+  refs.title.textContent = settings.shop_title || "Emby 光影商店";
+  refs.notice.textContent = settings.shop_notice || "欢迎使用积分购买数字商品。";
   refs.balance.textContent = `${account.iv ?? 0} ${settings.currency_name || ""}`.trim();
   refs.itemCount.textContent = String((bundle.items || []).length);
   refs.myItemCount.textContent = String((bundle.my_items || []).length);
   refs.version.textContent = `v${bundle.meta?.version || "-"}`;
-  refs.role.textContent = permissions.is_admin ? "管理员" : permissions.can_publish ? "可上架用户" : "普通买家";
+  refs.role.textContent = permissions.is_admin ? "管理员" : permissions.can_publish ? "卖家" : "普通用户";
+  refs.adminEntry?.classList.toggle("hidden", !permissions.is_admin);
+  if (refs.adminEntry && permissions.admin_url) {
+    refs.adminEntry.href = permissions.admin_url;
+  }
   refs.listingSection.classList.toggle("hidden", !permissions.can_publish);
   renderProducts(bundle.items || []);
   renderMyItems(bundle.my_items || []);
+  renderBottomNav();
+}
+
+function renderBottomNav() {
+  const nav = document.querySelector("#bottom-nav");
+  if (!nav) return;
+  const configuredItems = Array.isArray(state.bundle?.meta?.bottom_nav) ? state.bundle.meta.bottom_nav : [];
+  const items = configuredItems.length ? configuredItems : [
+    { label: "主页", path: "/miniapp", icon: "🏠" },
+    { label: "商店", path: "/plugins/shop/app", icon: "🛒" }
+  ];
+  const currentPath = window.location.pathname;
+  nav.innerHTML = "";
+  for (const item of items) {
+    const link = document.createElement("a");
+    link.href = item.path;
+    link.textContent = `${item.icon || ""} ${item.label || item.id || "入口"}`.trim();
+    if (item.path === currentPath) {
+      link.classList.add("is-active");
+    }
+    nav.appendChild(link);
+  }
 }
 
 async function bootstrap() {
   setStatus("正在同步商店数据...");
   const data = await request("POST", "/plugins/shop/api/bootstrap", { init_data: state.initData });
   applyBundle(data);
-  setStatus("商店数据已同步完成。", "success");
+  setStatus("商店数据已同步。", "success");
 }
 
 refs.refresh?.addEventListener("click", () => {
@@ -189,7 +244,7 @@ refs.listingUpload?.addEventListener("click", async () => {
   try {
     const payload = await uploadImage(file);
     document.querySelector("#listing-image").value = payload.url || payload.relative_url || "";
-    setStatus("商品图片上传成功。", "success");
+    setStatus("图片上传成功。", "success");
   } catch (error) {
     setStatus(String(error.message || error), "error");
     window.alert(String(error.message || error));
@@ -217,7 +272,7 @@ refs.listingForm?.addEventListener("submit", async (event) => {
     });
     applyBundle(payload);
     refs.listingForm.reset();
-    setStatus("商品已经发布成功。", "success");
+    setStatus("商品发布成功。", "success");
   } catch (error) {
     setStatus(String(error.message || error), "error");
     window.alert(String(error.message || error));
@@ -231,8 +286,8 @@ refs.listingForm?.addEventListener("submit", async (event) => {
   if (tg) {
     tg.ready();
     tg.expand();
-    tg.setHeaderColor("#f5efe5");
-    tg.setBackgroundColor("#f5efe5");
+    tg.setHeaderColor("#101010");
+    tg.setBackgroundColor("#101010");
     tg.BackButton.show();
     tg.BackButton.onClick(() => {
       window.location.href = "/miniapp";

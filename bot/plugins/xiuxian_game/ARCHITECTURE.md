@@ -50,17 +50,28 @@
 - `world_service.py`
   - 老的世界玩法聚合文件，保留给旧调用路径。
 - `plugin.py`
-  - 插件入口、路由注册、消息回调。
+  - 薄入口，分别导出 `register_bot` / `register_web`。
+- `plugin_bot_handlers.py` / `plugin_web_routes.py`
+  - Bot 指令回调与 Web API 注册。
 
 ## 数据层
 
-- `bot/sql_helper/sql_xiuxian.py`
-  - ORM、序列化、底层 CRUD。
+- `bot/sql_helper/sql_xiuxian/`
+  - ORM、序列化、底层 CRUD（按领域拆分子模块）。
 - `bot/sql_helper/alembic/versions/`
   - 修仙表结构迁移。
+
+## 公共 SDK
+
+- `bot/plugins/sdk/`
+  - Mini App 鉴权、底栏导航、公开 URL 等插件公共能力。
+  - 新功能优先复用 SDK，避免在各插件内重复实现。
 
 ## 这次新增的解耦点
 
 - 高风险逻辑已经从超大文件中抽离：闭关、灵石赠送、丹药、秘境。
 - `plugin.py` 不再直接依赖两个超大服务文件的公共能力，而是按领域依赖 `features/`。
 - 请求模型集中到 `api_models.py`，避免入口文件里混入大量 schema 定义。
+- `shared/request_helpers.py` 统一了 Web/Bot 共用的鉴权、上传、请求上下文解析。
+- `shared/runtime_contract.py` 作为 Web 与 Bot 入口共享契约，避免 `plugin_web_routes.py` 直接依赖 `plugin_bot_handlers.py` 的实现细节。
+- `features/runtime_facade.py` 收敛了 `miniapp_bundle` 对 `service.py` / `world_service.py` 的遗留依赖，后续按领域逐步替换为纯 `features/` 实现。

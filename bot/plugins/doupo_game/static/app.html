@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#180b08">
+  <title>斗破修炼</title>
+  <link rel="preconnect" href="https://telegram.org" crossorigin>
+  <link rel="preload" href="/plugins/doupo/static/app.css" as="style">
+  <link rel="preload" href="/plugins/doupo/static/app.js" as="script">
+  <link rel="stylesheet" href="/plugins/doupo/static/app.css">
+</head>
+<body class="doupo-app auth-locked">
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+  <main class="app-shell">
+    <section id="auth-card" class="card auth-card hidden">
+      <div class="auth-head">
+        <div>
+          <p class="eyebrow">统一游戏账号</p>
+          <h2>登录并绑定 Telegram</h2>
+        </div>
+        <div class="tab-row">
+          <button type="button" class="ghost" data-auth-mode="login">登录</button>
+          <button type="button" class="ghost" data-auth-mode="register">注册</button>
+        </div>
+      </div>
+      <p id="auth-status" class="section-copy">修仙与斗破共用账号，完成 TG 绑定后才可进入游戏。</p>
+      <ol class="auth-steps" aria-label="进入游戏步骤">
+        <li><span>1</span><div><strong>登录或注册</strong><small>建立统一游戏账号</small></div></li>
+        <li><span>2</span><div><strong>绑定 Telegram</strong><small>确认唯一的玩家身份</small></div></li>
+        <li><span>3</span><div><strong>进入游戏</strong><small>修仙与斗破角色进度分别保存</small></div></li>
+      </ol>
+      <form id="auth-login-form" class="mini-form auth-form">
+        <label>账号 <input id="auth-login-username" type="text" autocomplete="username" maxlength="64" required></label>
+        <label>密码 <input id="auth-login-password" type="password" autocomplete="current-password" maxlength="128" required></label>
+        <button id="auth-login-submit" type="submit">登录</button>
+      </form>
+      <form id="auth-register-form" class="mini-form auth-form hidden">
+        <label>账号 <input id="auth-register-username" type="text" autocomplete="username" maxlength="64" required></label>
+        <label>昵称 <input id="auth-register-display" type="text" autocomplete="nickname" maxlength="80"></label>
+        <label>密码 <input id="auth-register-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+        <label>确认密码 <input id="auth-register-confirm" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+        <button id="auth-register-submit" type="submit">注册</button>
+      </form>
+      <div id="auth-bind-panel" class="auth-bind-panel hidden">
+        <div>
+          <strong id="auth-account-name">网页账号</strong>
+          <span id="auth-bind-state" class="tag">待绑定</span>
+          <p id="auth-bind-hint" class="section-copy">请从 Telegram Mini App 打开此页完成绑定。</p>
+        </div>
+        <div class="exchange-actions">
+          <button id="auth-bind-telegram" type="button">绑定当前 Telegram</button>
+          <button id="auth-close" type="button" class="ghost hidden">返回游戏</button>
+          <button id="auth-logout" type="button" class="ghost">退出</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="hero-panel card">
+      <div class="hero-main">
+        <p class="eyebrow">斗气大陆</p>
+        <h1>斗破修炼</h1>
+        <p id="status-text" class="hero-copy">正在同步你的斗气状态...</p>
+        <div class="hero-pills">
+          <span id="realm-badge" class="badge badge--normal">斗之气</span>
+          <span id="star-pill" class="hero-pill">一星</span>
+          <span id="battle-pill" class="hero-pill">战力 0</span>
+        </div>
+        <p id="hero-note" class="hero-note">修炼、历练、炼药、异火与宗门进度会在这里汇总。</p>
+      </div>
+
+      <div class="hero-side">
+        <div id="feedback-chip" class="feedback-chip hidden"></div>
+        <div id="hero-admin-entry" class="hero-admin hidden">
+          <div class="hero-admin-copy">
+            <span class="hero-admin-label">大陆执事入口</span>
+            <p>管理员默认停留在游戏页，需要调整玩家、行动和全局参数时再进入后台。</p>
+          </div>
+          <button id="open-admin-panel" type="button" class="ghost">打开斗破后台</button>
+        </div>
+        <div class="hero-metrics">
+          <article>
+            <span>斗气</span>
+            <strong id="hero-douqi">0 / 0</strong>
+          </article>
+          <article>
+            <span>金币</span>
+            <strong id="hero-gold">0</strong>
+          </article>
+          <article>
+            <span>异火</span>
+            <strong id="hero-fire">未收服</strong>
+          </article>
+          <article>
+            <span>Emby碎片</span>
+            <strong id="hero-coin">0</strong>
+          </article>
+        </div>
+        <div class="hero-actions">
+          <button id="focus-actions" type="button">进入修炼</button>
+          <button id="focus-exchange" type="button" class="ghost">货币互通</button>
+          <button id="open-account-center" type="button" class="ghost">账号中心</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="fold-toolbar" class="card fold-toolbar hidden">
+      <div class="fold-toolbar-head">
+        <p class="eyebrow">快捷跳转 <span id="fold-count" class="muted">(0)</span></p>
+        <div class="fold-toolbar-actions">
+          <button type="button" class="ghost mini" data-fold-open-all>展</button>
+          <button type="button" class="ghost mini" data-fold-close-all>收</button>
+        </div>
+      </div>
+      <div id="fold-shortcuts" class="fold-shortcuts" aria-label="模块快捷跳转"></div>
+    </section>
+
+    <div class="board-grid">
+      <details id="profile-card" class="card fold-card span-2" open>
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">角色信息</p>
+            <h2>萧族档案</h2>
+          </div>
+          <span class="summary-tip">境界、星级、战力与成长进度</span>
+        </summary>
+        <div class="fold-body">
+          <div id="profile-grid" class="profile-grid"></div>
+          <div class="progress-panel">
+            <div class="progress-head">
+              <strong id="growth-title">斗气进度</strong>
+              <span id="growth-percent">0%</span>
+            </div>
+            <div class="progress-track"><div id="growth-bar" class="progress-fill"></div></div>
+            <p id="growth-note" class="section-copy">-</p>
+          </div>
+        </div>
+      </details>
+
+      <details id="resource-card" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">资源</p>
+            <h2>资源账本</h2>
+          </div>
+          <span class="summary-tip">金币、贡献、火候与每日产出</span>
+        </summary>
+        <div class="fold-body">
+          <div id="resource-grid" class="profile-grid"></div>
+        </div>
+      </details>
+
+      <details id="inventory-card" class="card fold-card span-2">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">纳戒</p>
+            <h2>分类背包</h2>
+          </div>
+          <span class="summary-tip">丹药、药材、魔核、异火、斗技、功法与装备</span>
+        </summary>
+        <div class="fold-body">
+          <div id="equipment-summary" class="equipment-summary"></div>
+          <div id="inventory-summary" class="inventory-summary"></div>
+          <div id="inventory-groups" class="inventory-groups"></div>
+        </div>
+      </details>
+
+      <details id="feature-card" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">进度</p>
+            <h2>玩法进度</h2>
+          </div>
+          <span class="summary-tip">宗门、炼药、异火、斗技与挑战</span>
+        </summary>
+        <div class="fold-body">
+          <div id="feature-overview" class="stack-list"></div>
+        </div>
+      </details>
+
+      <details id="sect-choice-card" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">宗门</p>
+            <h2>选择势力</h2>
+          </div>
+          <span class="summary-tip">玩家自行加入宗门后开启宗门委托与斗技阁</span>
+        </summary>
+        <div class="fold-body">
+          <div id="sect-choice" class="sect-choice"></div>
+        </div>
+      </details>
+
+      <details id="expedition-card" class="card fold-card span-2" open>
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">游历</p>
+            <h2>斗气大陆游历</h2>
+          </div>
+          <span class="summary-tip">连续事件、路线抉择与撤离结算</span>
+        </summary>
+        <div class="fold-body">
+          <div id="expedition-root" class="expedition-root"></div>
+        </div>
+      </details>
+
+      <details id="action-card-train" class="card fold-card" open>
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">修炼</p>
+            <h2>静室修炼</h2>
+          </div>
+          <span class="summary-tip">每日次数由后台配置，主产出斗气</span>
+        </summary>
+        <div class="fold-body">
+          <div id="actions-train" class="action-section-grid"></div>
+        </div>
+      </details>
+
+      <details id="action-card-adventure" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">历练</p>
+            <h2>外出历练</h2>
+          </div>
+          <span class="summary-tip">山脉、采药、切磋等材料与事件路线</span>
+        </summary>
+        <div class="fold-body">
+          <div id="actions-adventure" class="action-section-grid"></div>
+        </div>
+      </details>
+
+      <details id="action-card-growth" class="card fold-card span-2">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">进阶</p>
+            <h2>炼药与突破</h2>
+          </div>
+          <span class="summary-tip">炼药、服丹与冲击瓶颈</span>
+        </summary>
+        <div class="fold-body">
+          <div id="actions-growth" class="action-section-grid"></div>
+        </div>
+      </details>
+
+      <details id="action-card-craft" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">炼器</p>
+            <h2>炼器工坊</h2>
+          </div>
+          <span class="summary-tip">矿材、皮骨与金币打造长期收藏</span>
+        </summary>
+        <div class="fold-body">
+          <div id="actions-craft" class="action-section-grid"></div>
+        </div>
+      </details>
+
+      <details id="action-card-sect" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">宗门</p>
+            <h2>宗门斗技</h2>
+          </div>
+          <span class="summary-tip">入宗后开启委托、贡献与斗技阁</span>
+        </summary>
+        <div class="fold-body">
+          <div id="actions-sect" class="action-section-grid"></div>
+        </div>
+      </details>
+
+      <details id="action-card-fire" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">异火</p>
+            <h2>异火塔修</h2>
+          </div>
+          <span class="summary-tip">异火线索、心火淬炼与塔修闭关</span>
+        </summary>
+        <div class="fold-body">
+          <div id="actions-fire" class="action-section-grid"></div>
+        </div>
+      </details>
+
+      <details id="action-card-market" class="card fold-card span-2">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">挑战</p>
+            <h2>拍卖讨伐</h2>
+          </div>
+          <span class="summary-tip">金币回收、商队护送与 Boss 讨伐</span>
+        </summary>
+        <div class="fold-body">
+          <div id="actions-market" class="action-section-grid"></div>
+        </div>
+      </details>
+
+      <details id="action-card-other" class="card fold-card span-2 hidden">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">拓展</p>
+            <h2>其他行动</h2>
+          </div>
+          <span class="summary-tip">后台新增但尚未归类的玩法</span>
+        </summary>
+        <div class="fold-body">
+          <div id="actions-other" class="action-section-grid"></div>
+        </div>
+      </details>
+
+      <details id="exchange-card" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">货币</p>
+            <h2>货币互通</h2>
+          </div>
+          <span class="summary-tip">Emby碎片与金币兑换</span>
+        </summary>
+        <div class="fold-body">
+          <p id="exchange-hint" class="section-copy">-</p>
+          <form id="exchange-form" class="mini-form">
+            <label>
+              数量
+              <input id="exchange-amount" type="number" min="1" inputmode="numeric" value="100">
+            </label>
+            <div class="exchange-actions">
+              <button id="coin-to-gold-btn" type="button">碎片换金币</button>
+              <button id="gold-to-coin-btn" type="button" class="ghost">金币换碎片</button>
+            </div>
+          </form>
+        </div>
+      </details>
+
+      <details id="playbook-card" class="card fold-card">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">图鉴</p>
+            <h2>玩法模块</h2>
+          </div>
+          <span class="summary-tip">斗气大陆开放模块</span>
+        </summary>
+        <div class="fold-body">
+          <div id="playbook" class="module-grid"></div>
+        </div>
+      </details>
+
+      <details id="journal-card" class="card fold-card span-2">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">记录</p>
+            <h2>最近记录</h2>
+          </div>
+          <span class="summary-tip">行动与兑换结果</span>
+        </summary>
+        <div class="fold-body">
+          <div id="journal-list" class="stack-list"></div>
+        </div>
+      </details>
+    </div>
+  </main>
+
+  <div class="fab-container">
+    <button id="fab-admin" class="fab admin-fab hidden" type="button" title="斗破管理后台" aria-label="打开斗破管理后台">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14,12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.1 7.1 0 0 0-1.62-.94l-.36-2.54A.49.49 0 0 0 13.89,2h-3.84a.49.49 0 0 0-.49.41L9.2,4.95c-.59.24-1.13.56-1.62.94l-2.39-.96a.49.49 0 0 0-.61.22L2.66,8.47a.5.5 0 0 0 .12.64l2.03,1.58c-.05.3-.09.65-.09.97s.03.64.08.94l-2.03,1.58a.5.5 0 0 0-.12.64l1.92,3.32c.12.22.38.29.61.22l2.39-.96c.49.38 1.03.7 1.62.94l.36,2.54c.05.24.25.41.49.41h3.84c.24 0 .45-.17.49-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.23.08.49 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.02-1.58ZM12,15.5A3.5,3.5 0 1,1 12,8a3.5,3.5 0 0,1 0,7.5Z"/></svg>
+    </button>
+  </div>
+
+  <nav id="bottom-nav" class="bottom-nav"></nav>
+
+  <script async src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script defer src="/plugins/doupo/static/app.js"></script>
+</body>
+</html>

@@ -1,16 +1,16 @@
 :root {
-  --bg: #f5efe5;
-  --panel: rgba(255, 250, 244, 0.92);
-  --panel-strong: #fff7ef;
-  --text: #2f241b;
-  --muted: #7a6857;
-  --line: rgba(107, 81, 58, 0.16);
-  --brand: #b75f2a;
-  --brand-deep: #8a3f18;
-  --accent: #ecd6b4;
+  --bg: #101010;
+  --panel: rgba(26, 26, 26, 0.92);
+  --panel-strong: #222222;
+  --text: #f2f2f2;
+  --muted: #a3a3a3;
+  --line: rgba(255, 255, 255, 0.1);
+  --brand: #52B54B;
+  --brand-deep: #3D8738;
+  --accent: #52B54B;
   --success: #1b7f5b;
   --danger: #aa3f38;
-  --shadow: 0 18px 48px rgba(79, 51, 31, 0.12);
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.6);
   --radius: 24px;
 }
 
@@ -21,12 +21,13 @@
 body {
   margin: 0;
   min-height: 100vh;
+  padding-bottom: calc(92px + env(safe-area-inset-bottom));
   font-family: "PingFang SC", "Noto Serif SC", "Microsoft YaHei", sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at top right, rgba(255, 218, 185, 0.72), transparent 28%),
-    radial-gradient(circle at left 20%, rgba(230, 193, 129, 0.38), transparent 25%),
-    linear-gradient(180deg, #f8f4ed 0%, var(--bg) 100%);
+    radial-gradient(circle at top right, rgba(82, 181, 75, 0.15), transparent 28%),
+    radial-gradient(circle at left 20%, rgba(82, 181, 75, 0.08), transparent 25%),
+    linear-gradient(180deg, #141414 0%, var(--bg) 100%);
 }
 
 a {
@@ -35,6 +36,7 @@ a {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -58,8 +60,8 @@ button:hover,
 
 button.secondary,
 .button-link.secondary {
-  background: rgba(255, 255, 255, 0.7);
-  color: var(--brand-deep);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
   border: 1px solid var(--line);
 }
 
@@ -70,11 +72,12 @@ button:disabled {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   border-radius: 18px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(0, 0, 0, 0.4);
   color: var(--text);
   padding: 12px 14px;
 }
@@ -102,22 +105,22 @@ textarea {
   gap: 6px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(183, 95, 42, 0.1);
-  color: var(--brand-deep);
+  background: rgba(82, 181, 75, 0.15);
+  color: var(--brand);
   font-size: 12px;
 }
 
 .shop-shell {
-  width: min(1180px, calc(100vw - 28px));
+  width: min(1180px, calc(100vw - 16px));
   margin: 0 auto;
-  padding: 26px 0 48px;
+  padding: 12px 0 24px;
 }
 
 .hero,
 .card {
   background: var(--panel);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
@@ -125,9 +128,9 @@ textarea {
 .hero {
   position: relative;
   overflow: hidden;
-  padding: 28px;
+  padding: 18px;
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .hero::after {
@@ -137,7 +140,7 @@ textarea {
   width: 280px;
   height: 280px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 197, 135, 0.42), transparent 68%);
+  background: radial-gradient(circle, rgba(82, 181, 75, 0.2), transparent 68%);
 }
 
 .hero-topbar,
@@ -149,11 +152,12 @@ textarea {
 }
 
 .eyebrow {
-  margin: 0 0 8px;
-  font-size: 12px;
-  letter-spacing: 0.12em;
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--brand);
+  font-weight: 700;
 }
 
 h1,
@@ -194,9 +198,9 @@ h2 {
 }
 
 .metric {
-  padding: 18px;
+  padding: 14px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--line);
 }
 
@@ -213,8 +217,8 @@ h2 {
 }
 
 .section {
-  margin-top: 18px;
-  padding: 24px;
+  margin-top: 10px;
+  padding: 18px;
 }
 
 .products-grid {
@@ -224,11 +228,11 @@ h2 {
 .product-card,
 .stack-item {
   display: grid;
-  gap: 12px;
-  padding: 18px;
+  gap: 10px;
+  padding: 14px;
   border-radius: 22px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .product-media {
@@ -236,7 +240,7 @@ h2 {
   aspect-ratio: 4 / 3;
   border-radius: 18px;
   object-fit: cover;
-  background: linear-gradient(135deg, #f3e2cc 0%, #ead6b5 100%);
+  background: linear-gradient(135deg, #1f1f1f 0%, #0d0d0d 100%);
 }
 
 .product-meta {
@@ -248,7 +252,7 @@ h2 {
 .product-price {
   font-size: 22px;
   font-weight: 700;
-  color: var(--brand-deep);
+  color: var(--brand);
 }
 
 .grid-form {
@@ -290,7 +294,7 @@ h2 {
   border-radius: 18px;
   border: 1px dashed var(--line);
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.54);
+  background: rgba(255, 255, 255, 0.02);
   text-align: center;
 }
 
@@ -321,5 +325,338 @@ h2 {
 
   .grid-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 底部导航栏 */
+.bottom-nav {
+  position: fixed;
+  left: 20px;
+  right: 20px;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 100;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.36);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  scrollbar-width: none;
+}
+
+.bottom-nav.hidden {
+  display: none !important;
+}
+
+.bottom-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.bottom-nav a {
+  flex: 0 0 auto;
+  min-width: 110px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  color: var(--muted);
+  text-decoration: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.bottom-nav a.is-active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand-deep), var(--brand));
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 16px -4px rgba(82, 181, 75, 0.36);
+}
+
+.bottom-nav a:hover:not(.is-active) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+/* Plugin theme: cinema screen, media posters and restrained Emby neon. */
+body.shop-app,
+body.shop-admin {
+  --bg: #070911;
+  --panel: rgba(13, 17, 29, 0.94);
+  --panel-strong: #171d30;
+  --text: #f3f7ff;
+  --muted: #9daac0;
+  --line: rgba(143, 157, 181, 0.18);
+  --brand: #57c96b;
+  --brand-deep: #289148;
+  --accent: #8d6cf2;
+  --success: #57c96b;
+  --danger: #ef6f68;
+  --shadow: 0 22px 56px rgba(0, 0, 0, 0.5);
+  --radius: 20px;
+  position: relative;
+  isolation: isolate;
+  overflow-x: hidden;
+  color-scheme: dark;
+  font-family: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(87, 201, 107, 0.15), transparent 29%),
+    radial-gradient(ellipse at 92% 12%, rgba(141, 108, 242, 0.17), transparent 30%),
+    linear-gradient(180deg, #101522 0%, #090c16 48%, #05070d 100%);
+}
+
+body.shop-app::before,
+body.shop-app::after,
+body.shop-admin::before,
+body.shop-admin::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+body.shop-app::before,
+body.shop-admin::before {
+  opacity: 0.55;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 62px, rgba(255, 255, 255, 0.025) 63px 64px),
+    linear-gradient(112deg, rgba(87, 201, 107, 0.07), transparent 28%),
+    linear-gradient(248deg, rgba(141, 108, 242, 0.08), transparent 30%);
+}
+
+body.shop-app::after,
+body.shop-admin::after {
+  inset: auto 0 0;
+  height: 28vh;
+  opacity: 0.25;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 52px, rgba(143, 157, 181, 0.08) 53px 54px),
+    linear-gradient(180deg, transparent, rgba(2, 4, 9, 0.72));
+  mask-image: linear-gradient(180deg, transparent, #000 54%);
+}
+
+.shop-app .shop-shell,
+.shop-admin .shop-shell {
+  position: relative;
+  z-index: 1;
+}
+
+.shop-app .hero,
+.shop-admin .hero,
+.shop-app .card,
+.shop-admin .card {
+  border-color: rgba(143, 157, 181, 0.2);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent 38%),
+    var(--panel);
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.shop-app .hero,
+.shop-admin .hero {
+  min-height: 220px;
+  align-items: center;
+  border-color: rgba(87, 201, 107, 0.28);
+  background:
+    linear-gradient(104deg, rgba(24, 44, 39, 0.98), rgba(13, 17, 29, 0.96) 52%, rgba(35, 26, 66, 0.92)),
+    var(--panel);
+}
+
+.shop-app .hero::before,
+.shop-admin .hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(105deg, rgba(110, 255, 144, 0.09), transparent 28%),
+    linear-gradient(255deg, rgba(165, 133, 255, 0.11), transparent 30%);
+  clip-path: polygon(0 0, 100% 0, 85% 100%, 15% 100%);
+}
+
+.shop-app .hero::after,
+.shop-admin .hero::after {
+  inset: auto -64px -74px auto;
+  width: 250px;
+  height: 250px;
+  border: 1px solid rgba(141, 108, 242, 0.18);
+  background:
+    radial-gradient(circle, transparent 0 29%, rgba(141, 108, 242, 0.1) 30% 31%, transparent 32% 47%, rgba(87, 201, 107, 0.1) 48% 49%, transparent 50%),
+    radial-gradient(circle, rgba(141, 108, 242, 0.14), transparent 68%);
+}
+
+.shop-app .hero > *,
+.shop-admin .hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.shop-app h1,
+.shop-admin h1 {
+  width: fit-content;
+  color: #f5fbff;
+  letter-spacing: -0.025em;
+  text-shadow: 0 8px 32px rgba(87, 201, 107, 0.16);
+}
+
+.shop-app .eyebrow,
+.shop-admin .eyebrow {
+  color: #75dd85;
+  letter-spacing: 0.24em;
+}
+
+.shop-app button,
+.shop-app .button-link,
+.shop-admin button,
+.shop-admin .button-link {
+  min-height: 42px;
+  border: 1px solid rgba(111, 226, 128, 0.18);
+  background: linear-gradient(135deg, #38a958, #3e8d72 56%, #684fc0);
+  box-shadow: 0 8px 22px rgba(37, 138, 73, 0.18);
+}
+
+.shop-app button.secondary,
+.shop-app .button-link.secondary,
+.shop-admin button.secondary,
+.shop-admin .button-link.secondary {
+  border-color: rgba(143, 157, 181, 0.22);
+  background: rgba(22, 29, 47, 0.88);
+  box-shadow: none;
+}
+
+.shop-app input,
+.shop-app select,
+.shop-app textarea,
+.shop-admin input,
+.shop-admin select,
+.shop-admin textarea {
+  border-color: rgba(143, 157, 181, 0.22);
+  background: rgba(5, 8, 16, 0.76);
+}
+
+.shop-app input:focus,
+.shop-app select:focus,
+.shop-app textarea:focus,
+.shop-admin input:focus,
+.shop-admin select:focus,
+.shop-admin textarea:focus {
+  border-color: rgba(87, 201, 107, 0.72);
+  outline: 3px solid rgba(87, 201, 107, 0.1);
+}
+
+.shop-app .metric,
+.shop-admin .metric {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  background: rgba(8, 13, 24, 0.58);
+}
+
+.shop-app .metric::before,
+.shop-admin .metric::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--brand), var(--accent));
+}
+
+.shop-app .metric strong,
+.shop-admin .metric strong,
+.shop-app .product-price,
+.shop-admin .product-price {
+  color: #72df83;
+}
+
+.shop-app .product-card,
+.shop-admin .product-card,
+.shop-app .stack-item,
+.shop-admin .stack-item {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  border-color: rgba(143, 157, 181, 0.19);
+  background:
+    linear-gradient(145deg, rgba(87, 201, 107, 0.055), transparent 44%),
+    rgba(13, 18, 31, 0.88);
+}
+
+.shop-app .product-card::before,
+.shop-admin .product-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, var(--brand), var(--accent), transparent 82%);
+}
+
+.shop-app .product-media,
+.shop-admin .product-media {
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  border: 1px solid rgba(143, 157, 181, 0.14);
+  background:
+    radial-gradient(circle at center, rgba(141, 108, 242, 0.18), transparent 32%),
+    linear-gradient(135deg, #151c2d, #070a12);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.26);
+}
+
+.shop-app .tag,
+.shop-admin .tag {
+  border: 1px solid rgba(87, 201, 107, 0.22);
+  background: rgba(87, 201, 107, 0.1);
+  color: #74dc84;
+}
+
+.shop-app .bottom-nav {
+  border-color: rgba(143, 157, 181, 0.22);
+  background: rgba(10, 14, 25, 0.94);
+}
+
+.shop-app .bottom-nav a.is-active {
+  background: linear-gradient(135deg, #29924a, #6550b7);
+  box-shadow: 0 8px 20px rgba(79, 181, 100, 0.22);
+}
+
+body.shop-admin {
+  --panel: rgba(14, 18, 30, 0.97);
+}
+
+.shop-admin .hero {
+  min-height: 190px;
+  background:
+    linear-gradient(104deg, rgba(20, 38, 35, 0.98), rgba(13, 17, 29, 0.98) 55%, rgba(30, 24, 53, 0.96)),
+    var(--panel);
+}
+
+.shop-admin .section {
+  border-left: 3px solid rgba(87, 201, 107, 0.3);
+}
+
+@media (max-width: 640px) {
+  .shop-app .hero,
+  .shop-admin .hero {
+    min-height: 0;
+  }
+
+  .shop-app .hero::after,
+  .shop-admin .hero::after {
+    opacity: 0.5;
+  }
+
+  .shop-app .products-grid {
+    grid-template-columns: 1fr;
   }
 }

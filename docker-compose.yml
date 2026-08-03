@@ -1,11 +1,9 @@
-name: pivkeyu_emby
+name: echo
 
 services:
-  mysql:
-    image: mysql:5.7
-    platform: linux/amd64
-    container_name: mysql
-    command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+  postgres:
+    image: ${PIVKEYU_POSTGRES_IMAGE:-postgres:16-alpine}
+    container_name: postgres
     restart: always
     network_mode: host
     ulimits:
@@ -13,47 +11,104 @@ services:
         soft: 131072
         hard: 131072
     environment:
-      MYSQL_ROOT_PASSWORD: pivkeyu
-      MYSQL_USER: pivkeyu
-      MYSQL_DATABASE: pivkeyu
-      MYSQL_PASSWORD: pivkeyu
-      MYSQL_ROOT_HOST: "%"
+      POSTGRES_USER: echo
+      POSTGRES_DB: echo
+      POSTGRES_PASSWORD: echo
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-      - ./db:/var/lib/mysql
-      - ./mysql/conf.d/zz-pivkeyu-tuning.cnf:/etc/mysql/conf.d/zz-pivkeyu-tuning.cnf:ro
+      - ./db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 20
       start_period: 30s
 
-  pivkeyu_emby:
-    image: pivkeyu/pivkeyu_emby:latest
-    container_name: pivkeyu_emby
+  redis:
+    image: ${PIVKEYU_REDIS_IMAGE:-redis:7-alpine}
+    container_name: redis
+    command: redis-server --bind 127.0.0.1 --protected-mode yes --appendonly no --save "" --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: always
+    network_mode: host
+    healthcheck:
+      test: ["CMD", "redis-cli", "-h", "127.0.0.1", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  echo:
+    build:
+      context: .
+    image: ${PIVKEYU_APP_IMAGE:-echo/echo:latest}
+    container_name: echo
     restart: always
     network_mode: host
     depends_on:
-      mysql:
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
+      PIVKEYU_BOT_TOKEN: ${PIVKEYU_BOT_TOKEN:-}
+      PIVKEYU_OWNER_API: ${PIVKEYU_OWNER_API:-}
+      PIVKEYU_OWNER_HASH: ${PIVKEYU_OWNER_HASH:-}
+      BOT_TOKEN: ${BOT_TOKEN:-}
+      OWNER_API: ${OWNER_API:-}
+      OWNER_HASH: ${OWNER_HASH:-}
+      API_ID: ${API_ID:-}
+      API_HASH: ${API_HASH:-}
       PIVKEYU_NOFILE_SOFT: 131072
-      PIVKEYU_DB_STARTUP_MAX_RETRIES: 20
-      PIVKEYU_DB_STARTUP_RETRY_DELAY: 3
+      PIVKEYU_DB_STARTUP_MAX_RETRIES: ${PIVKEYU_DB_STARTUP_MAX_RETRIES:-30}
+      PIVKEYU_DB_STARTUP_RETRY_DELAY: ${PIVKEYU_DB_STARTUP_RETRY_DELAY:-3}
       PIVKEYU_DB_CONNECT_TIMEOUT: 5
-      PIVKEYU_DB_POOL_SIZE: 64
-      PIVKEYU_DB_MAX_OVERFLOW: 64
-      PIVKEYU_DB_POOL_TIMEOUT: 60
+      PIVKEYU_DB_POOL_SIZE: ${PIVKEYU_DB_POOL_SIZE:-32}
+      PIVKEYU_DB_MAX_OVERFLOW: ${PIVKEYU_DB_MAX_OVERFLOW:-16}
+      PIVKEYU_DB_POOL_TIMEOUT: ${PIVKEYU_DB_POOL_TIMEOUT:-30}
       PIVKEYU_DB_POOL_RECYCLE: 1800
       PIVKEYU_DB_POOL_PRE_PING: "true"
       PIVKEYU_DB_POOL_USE_LIFO: "true"
       PIVKEYU_DB_POOL_RESET_ON_RETURN: rollback
-      PIVKEYU_PYROGRAM_WORKERS: 256
-      PIVKEYU_PYROGRAM_MAX_CONCURRENT_TRANSMISSIONS: 1024
+      PIVKEYU_DB_SYNC_SEQUENCES_ON_STARTUP: ${PIVKEYU_DB_SYNC_SEQUENCES_ON_STARTUP:-false}
+      PIVKEYU_WEB_THREADPOOL_TOKENS: ${PIVKEYU_WEB_THREADPOOL_TOKENS:-96}
+      PIVKEYU_WEB_SLOW_REQUEST_MS: ${PIVKEYU_WEB_SLOW_REQUEST_MS:-2000}
+      PIVKEYU_WEB_LOGIN_FAILURE_LIMIT: ${PIVKEYU_WEB_LOGIN_FAILURE_LIMIT:-6}
+      PIVKEYU_WEB_LOGIN_FAILURE_WINDOW: ${PIVKEYU_WEB_LOGIN_FAILURE_WINDOW:-300}
+      PIVKEYU_WEB_LOGIN_MAX_CONCURRENCY: ${PIVKEYU_WEB_LOGIN_MAX_CONCURRENCY:-4}
+      PIVKEYU_PYROGRAM_WORKERS: ${PIVKEYU_PYROGRAM_WORKERS:-16}
+      PIVKEYU_PYROGRAM_MAX_CONCURRENT_TRANSMISSIONS: ${PIVKEYU_PYROGRAM_MAX_CONCURRENT_TRANSMISSIONS:-48}
+      PIVKEYU_BOT_WATCHDOG_ENABLED: ${PIVKEYU_BOT_WATCHDOG_ENABLED:-true}
+      PIVKEYU_BOT_WATCHDOG_STARTUP_GRACE: ${PIVKEYU_BOT_WATCHDOG_STARTUP_GRACE:-180}
+      PIVKEYU_BOT_WATCHDOG_INTERVAL: ${PIVKEYU_BOT_WATCHDOG_INTERVAL:-60}
+      PIVKEYU_BOT_WATCHDOG_TIMEOUT: ${PIVKEYU_BOT_WATCHDOG_TIMEOUT:-8}
+      PIVKEYU_BOT_WATCHDOG_FAILURES: ${PIVKEYU_BOT_WATCHDOG_FAILURES:-3}
+      PIVKEYU_BOT_WATCHDOG_COMPARE_BOT_API: ${PIVKEYU_BOT_WATCHDOG_COMPARE_BOT_API:-true}
+      PIVKEYU_XIUXIAN_API_MAX_CONCURRENCY: ${PIVKEYU_XIUXIAN_API_MAX_CONCURRENCY:-48}
+      PIVKEYU_XIUXIAN_HEAVY_API_MAX_CONCURRENCY: ${PIVKEYU_XIUXIAN_HEAVY_API_MAX_CONCURRENCY:-16}
+      PIVKEYU_XIUXIAN_VIEW_API_MAX_CONCURRENCY: ${PIVKEYU_XIUXIAN_VIEW_API_MAX_CONCURRENCY:-32}
+      PIVKEYU_XIUXIAN_ACTION_API_MAX_CONCURRENCY: ${PIVKEYU_XIUXIAN_ACTION_API_MAX_CONCURRENCY:-32}
+      PIVKEYU_XIUXIAN_API_ACQUIRE_TIMEOUT: ${PIVKEYU_XIUXIAN_API_ACQUIRE_TIMEOUT:-5}
+      PIVKEYU_XIUXIAN_ACTION_API_ACQUIRE_TIMEOUT: ${PIVKEYU_XIUXIAN_ACTION_API_ACQUIRE_TIMEOUT:-10}
+      PIVKEYU_REDIS_XIUXIAN_USER_VIEW_TTL: ${PIVKEYU_REDIS_XIUXIAN_USER_VIEW_TTL:-45}
       PIVKEYU_EMBY_HTTP_LIMIT: 192
       PIVKEYU_EMBY_HTTP_LIMIT_PER_HOST: 64
       PIVKEYU_EMBY_HTTP_KEEPALIVE_TIMEOUT: 90
       PIVKEYU_EMBY_HTTP_DNS_CACHE_TTL: 600
+      PIVKEYU_REDIS_ENABLED: "true"
+      PIVKEYU_REDIS_HOST: 127.0.0.1
+      PIVKEYU_REDIS_PORT: 6379
+      PIVKEYU_REDIS_DB: 0
+      PIVKEYU_REDIS_PREFIX: echo
+      PIVKEYU_REDIS_EMBY_TTL: 300
+      PIVKEYU_REDIS_EMBY_MISS_TTL: 60
+      PIVKEYU_REDIS_XIUXIAN_SETTINGS_TTL: 300
+      PIVKEYU_REDIS_XIUXIAN_CATALOG_TTL: 300
+      PIVKEYU_REGISTER_QUEUE_WORKERS: 2
+      PIVKEYU_REGISTER_QUEUE_MAXSIZE: 64
+      # 凭据加密密钥（可选）：不配置时从 bot secret 派生；配置后便于轮换
+      PIVKEYU_CREDENTIAL_KEY: ${PIVKEYU_CREDENTIAL_KEY:-}
+      # Webhook 签名密钥与其它安全参数（与 config.json 中的 webhook_secret 二选一）
+      PIVKEYU_WEBHOOK_SECRET: ${PIVKEYU_WEBHOOK_SECRET:-}
     ulimits:
       nofile:
         soft: 131072
@@ -63,13 +118,13 @@ services:
       - ./log:/app/log
       - /var/run/docker.sock:/var/run/docker.sock
 
-  pivkeyu-caddy:
-    image: caddy:2-alpine
-    container_name: pivkeyu-caddy
+  echo-caddy:
+    image: ${PIVKEYU_CADDY_IMAGE:-caddy:2-alpine}
+    container_name: echo-caddy
     restart: always
     network_mode: host
     depends_on:
-      - pivkeyu_emby
+      - echo
     environment:
       PIVKEYU_PUBLIC_DOMAIN: ${PIVKEYU_PUBLIC_DOMAIN:-localhost}
       PIVKEYU_UPSTREAM: ${PIVKEYU_UPSTREAM:-127.0.0.1:8838}

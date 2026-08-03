@@ -13,7 +13,7 @@ from bot.func_helper.emby import emby
 route = APIRouter()
 
 
-@route.get("/ban_playlist")
+@route.post("/ban_playlist")
 async def ban_playlist(eid: str):
     """
     获取传入的embyid，然后执行查询，删除，发送消息至tg群组
@@ -47,7 +47,7 @@ async def ban_playlist(eid: str):
             await out.forward(user.tg)
             sql_update_emby(Emby.tg == info["user_id"], lv='c')
         except Exception as e:
-            text += e
+            text += f"\n通知发送失败：{e}"
 
     else:
         info = {"user_id": user.tg, "emby_name": user.name, "embyid": eid, "is_baned": False,
@@ -59,6 +59,6 @@ async def ban_playlist(eid: str):
         try:
             await bot.send_message(group[0], text)
         except Exception as e:
-            text += e
+            text += f"\n通知发送失败：{e}"
     LOGGER.info(text)
     return info

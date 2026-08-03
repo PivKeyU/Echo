@@ -9,13 +9,11 @@
   ];
   const ARTIFACT_SLOT_OPTIONS = [
     { value: "weapon", label: "武器" },
-    { value: "chest", label: "胸甲" },
-    { value: "legs", label: "护腿" },
-    { value: "boots", label: "靴子" },
-    { value: "necklace", label: "项链" },
-    { value: "ring", label: "戒指" },
     { value: "helmet", label: "头冠" },
-    { value: "bracelet", label: "护腕" },
+    { value: "clothes", label: "衣服" },
+    { value: "boots", label: "鞋" },
+    { value: "shield", label: "盾" },
+    { value: "accessory", label: "饰品" },
   ];
   const SECT_CAMP_OPTIONS = [
     { value: "orthodox", label: "正道" },
@@ -106,7 +104,11 @@
     if (!form) return;
     const card = form.closest(".fold-card");
     if (card) card.open = true;
-    form.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (typeof window.scrollAdminTargetIntoView === "function") {
+      window.scrollAdminTargetIntoView(form);
+    } else {
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
     pulseTarget(form);
   }
 
@@ -670,6 +672,7 @@
       cultivation_bonus: Number($("sect-cultivation")?.value || 0),
       fortune_bonus: Number($("sect-fortune-bonus")?.value || 0),
       body_movement_bonus: Number($("sect-body-movement")?.value || 0),
+      salary_min_stay_days: Number($("sect-salary-stay-days")?.value || 30),
       entry_hint: $("sect-entry-hint")?.value?.trim() || "",
       roles: collectSectRoles(),
     };
@@ -790,6 +793,9 @@
   function resetSectForm() {
     $("sect-form")?.reset();
     clearFormEditMode("sect-form");
+    if ($("sect-salary-stay-days")) {
+      $("sect-salary-stay-days").value = state.bundle?.settings?.sect_salary_min_stay_days ?? 30;
+    }
     syncSelects();
     resetSectRoles();
   }
@@ -806,6 +812,7 @@
     $("title-form")?.reset();
     clearFormEditMode("title-form");
     $("title-enabled").checked = true;
+    window.refreshTitleColorEditor?.("solid");
   }
 
   function resetAchievementForm() {
@@ -885,7 +892,7 @@
           <span class="badge badge--normal">${escapeHtml(item.required_count || 2)} 件生效</span>
         </div>
         <p>${escapeHtml(item.description || "暂无套装说明")}</p>
-        <p>${escapeHtml(affixSummary(item))}</p>
+        <p>套装加成：${escapeHtml(affixSummary(item))}</p>
         <div class="inline-action-buttons">${editButton("artifact-set", item.id)}${deleteButton("artifact-set", item.id)}</div>
       </article>
     `).join("") || `<article class="stack-item"><strong>暂无套装</strong></article>`);
@@ -928,9 +935,9 @@
       <article class="stack-item">
         <div class="stack-item-head">
           <strong>${escapeHtml(item.name)}</strong>
-          <span class="badge badge--normal">${escapeHtml(item.equip_slot_label || item.equip_slot || "武器")}</span>
+          <span class="badge badge--normal">${escapeHtml(item.equip_category_label || item.equip_slot_label || item.equip_slot || "武器")}</span>
         </div>
-        <p class="quality-line">${qualityBadgeHtml(item.rarity || "凡品", item.quality_color)}<span class="builder-chip">${escapeHtml(item.artifact_role_label || item.artifact_role || "攻伐")}</span>${item.artifact_set?.name ? `<span class="builder-chip">${escapeHtml(item.artifact_set.name)}</span>` : ""}</p>
+        <p class="quality-line">${qualityBadgeHtml(item.rarity || "凡品", item.quality_color)}<span class="builder-chip">${escapeHtml(item.equip_slot_label || item.equip_slot || "未知槽位")}</span><span class="builder-chip">${escapeHtml(item.artifact_role_label || item.artifact_role || "攻伐")}</span>${item.artifact_set?.name ? `<span class="builder-chip">${escapeHtml(item.artifact_set.name)}</span>` : ""}</p>
         <p>${escapeHtml(affixSummary(item))}</p>
         <p>${escapeHtml(combatConfigSummary(item.combat_config || {}))}</p>
         <div class="inline-action-buttons">${editButton("artifact", item.id)}${deleteButton("artifact", item.id)}</div>
@@ -993,11 +1000,12 @@
     renderStack("title-list", safeRows("titles").map((item) => `
       <article class="stack-item">
         <div class="stack-item-head">
-          <strong>${escapeHtml(item.name)}</strong>
+          <strong>${titleColoredNameHtml(item.name, item.color)}</strong>
           <span class="badge badge--normal">${item.enabled ? "启用中" : "已停用"}</span>
         </div>
         <p>${escapeHtml(item.description || "暂无称号描述")}</p>
         <p>${escapeHtml(adminTitleEffectSummary(item))}</p>
+        <p class="quality-line">${titleColorBadgeHtml(item.color ? "称号预览" : "默认配色", item.color || "")}<span class="field-note">颜色 ${escapeHtml(summarizeDecorColor(item.color))} · ID ${escapeHtml(item.id)}</span></p>
         <div class="inline-action-buttons">${editButton("title", item.id)}${deleteButton("title", item.id)}</div>
       </article>
     `).join("") || `<article class="stack-item"><strong>暂无称号</strong></article>`);
@@ -1045,7 +1053,7 @@
           <span class="badge badge--normal">最多 ${escapeHtml(item.max_minutes)} 分钟</span>
         </div>
         <p>${escapeHtml(item.description || "暂无描述")}</p>
-        <p>掉落 ${(item.drops || []).length} 项 · 事件 ${(item.event_pool || []).length} 条</p>
+        <p>掉落 ${(item.drops || []).length} 项 · 事件 ${(item.event_pool || []).length} 条 · ${escapeHtml(sceneEventOddsSummary(item))}</p>
         <div class="inline-action-buttons">${editButton("scene", item.id)}${deleteButton("scene", item.id)}</div>
       </article>
     `).join("") || `<article class="stack-item"><strong>暂无场景</strong></article>`);
@@ -1072,7 +1080,7 @@
     $("artifact-role").value = item.artifact_role || "battle";
     $("artifact-slot").value = item.equip_slot || "weapon";
     $("artifact-set-id").value = String(item.artifact_set_id || "");
-    $("artifact-image").value = item.image_url || "";
+    window.setAdminInputValue?.("artifact-image", item.image_url || "");
     $("artifact-description").value = item.description || "";
     $("artifact-duel").value = item.duel_rate_bonus || 0;
     $("artifact-cultivation").value = item.cultivation_bonus || 0;
@@ -1116,7 +1124,7 @@
     if (!item) return;
     $("talisman-name").value = item.name || "";
     $("talisman-rarity").value = item.rarity || "凡品";
-    $("talisman-image").value = item.image_url || "";
+    window.setAdminInputValue?.("talisman-image", item.image_url || "");
     $("talisman-description").value = item.description || "";
     $("talisman-duel").value = item.duel_rate_bonus || 0;
     $("talisman-effect-uses").value = item.effect_uses || 1;
@@ -1138,7 +1146,7 @@
     $("pill-name").value = item.name || "";
     $("pill-rarity").value = item.rarity || "凡品";
     $("pill-type").value = item.pill_type || "foundation";
-    $("pill-image").value = item.image_url || "";
+    window.setAdminInputValue?.("pill-image", item.image_url || "");
     $("pill-description").value = item.description || "";
     $("pill-effect").value = item.effect_value || 0;
     $("pill-poison").value = item.poison_delta || 0;
@@ -1160,7 +1168,7 @@
     $("technique-name").value = item.name || "";
     $("technique-rarity").value = item.rarity || "凡品";
     $("technique-type").value = item.technique_type || "balanced";
-    $("technique-image").value = item.image_url || "";
+    window.setAdminInputValue?.("technique-image", item.image_url || "");
     $("technique-description").value = item.description || "";
     $("technique-duel").value = item.duel_rate_bonus || 0;
     $("technique-cultivation").value = item.cultivation_bonus || 0;
@@ -1194,7 +1202,7 @@
     $("sect-karma").value = item.min_karma || 0;
     $("sect-min-body-movement").value = item.min_body_movement || 0;
     $("sect-min-combat-power").value = item.min_combat_power || 0;
-    $("sect-image").value = item.image_url || "";
+    window.setAdminInputValue?.("sect-image", item.image_url || "");
     $("sect-description").value = item.description || "";
     $("sect-attack").value = item.attack_bonus || 0;
     $("sect-defense").value = item.defense_bonus || 0;
@@ -1202,6 +1210,7 @@
     $("sect-cultivation").value = item.cultivation_bonus || 0;
     $("sect-fortune-bonus").value = item.fortune_bonus || 0;
     $("sect-body-movement").value = item.body_movement_bonus || 0;
+    $("sect-salary-stay-days").value = item.salary_min_stay_days || (state.bundle?.settings?.sect_salary_min_stay_days ?? 30);
     $("sect-entry-hint").value = item.entry_hint || "";
     $("sect-role-rows").innerHTML = "";
     (item.roles || []).forEach((role) => addSectRoleRow(role));
@@ -1214,7 +1223,7 @@
     if (!item) return;
     $("title-name").value = item.name || "";
     $("title-color").value = item.color || "";
-    $("title-image").value = item.image_url || "";
+    window.setAdminInputValue?.("title-image", item.image_url || "");
     $("title-enabled").checked = item.enabled !== false;
     $("title-description").value = item.description || "";
     $("title-attack").value = item.attack_bonus || 0;
@@ -1229,6 +1238,7 @@
     $("title-duel").value = item.duel_rate_bonus || 0;
     $("title-cultivation").value = item.cultivation_bonus || 0;
     $("title-breakthrough").value = item.breakthrough_bonus || 0;
+    window.refreshTitleColorEditor?.();
     setFormEditMode("title-form", item);
     focusForm("title-form");
   }
@@ -1255,7 +1265,7 @@
     if (!item) return;
     $("material-name").value = item.name || "";
     $("material-quality").value = item.quality_label || item.quality_level || "凡品";
-    $("material-image").value = item.image_url || "";
+    window.setAdminInputValue?.("material-image", item.image_url || "");
     $("material-description").value = item.description || "";
     $("material-enabled").checked = item.enabled !== false;
     setFormEditMode("material-form", item);
@@ -1290,7 +1300,7 @@
     if (!item) return;
     $("scene-name").value = item.name || "";
     $("scene-max-minutes").value = item.max_minutes || 60;
-    $("scene-image").value = item.image_url || "";
+    window.setAdminInputValue?.("scene-image", item.image_url || "");
     $("scene-description").value = item.description || "";
     $("scene-event-rows").innerHTML = "";
     $("scene-drop-rows").innerHTML = "";
@@ -1307,7 +1317,7 @@
     if (!item) return;
     $("encounter-name").value = item.name || "";
     $("encounter-description").value = item.description || "";
-    $("encounter-image").value = item.image_url || "";
+    window.setAdminInputValue?.("encounter-image", item.image_url || "");
     $("encounter-button-text").value = item.button_text || "争抢机缘";
     $("encounter-success-text").value = item.success_text || "";
     $("encounter-broadcast-text").value = item.broadcast_text || "";
@@ -1325,9 +1335,6 @@
     $("encounter-item-id").value = item.reward_item_ref_id || "";
     $("encounter-item-quantity-min").value = item.reward_item_quantity_min || 1;
     $("encounter-item-quantity-max").value = item.reward_item_quantity_max || 1;
-    $("encounter-willpower").value = item.reward_willpower || 0;
-    $("encounter-charisma").value = item.reward_charisma || 0;
-    $("encounter-karma").value = item.reward_karma || 0;
     $("encounter-enabled").checked = item.enabled !== false;
     setFormEditMode("encounter-form", item);
     focusForm("encounter-form");
@@ -1426,4 +1433,92 @@
   bindArtifactSetSubmit();
   installAdvancedUi();
   bootstrapAdmin().catch(() => {});
+})();
+
+(() => {
+  function accountMetric(label, value) {
+    return `<article><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`;
+  }
+
+  function renderGameAccountSummary(summary = {}) {
+    const root = $("game-account-summary");
+    if (!root) return;
+    root.innerHTML = [
+      accountMetric("账号总数", Number(summary.total || 0)),
+      accountMetric("已绑定 TG", Number(summary.bound || 0)),
+      accountMetric("待绑定", Number(summary.unbound || 0)),
+      accountMetric("已停用", Number(summary.disabled || 0)),
+    ].join("");
+  }
+
+  function renderGameAccounts(data = {}) {
+    renderGameAccountSummary(data.summary || {});
+    const root = $("game-account-list");
+    if (!root) return;
+    const rows = Array.isArray(data.items) ? data.items : [];
+    root.innerHTML = rows.map((account) => `
+      <article class="stack-item game-account-item ${account.enabled === false ? "is-disabled" : ""}">
+        <div class="stack-item-head">
+          <div>
+            <strong>${escapeHtml(account.display_name || account.username)}</strong>
+            <p>账号 ${escapeHtml(account.username)} · ${escapeHtml(account.telegram_label || "未绑定 Telegram")}${account.tg ? ` · TG ${escapeHtml(account.tg)}` : ""}</p>
+          </div>
+          <span class="tag">${account.enabled === false ? "已停用" : account.bound ? "已绑定" : "待绑定"}</span>
+        </div>
+        <div class="inline-action-buttons">
+          <button type="button" class="secondary" data-game-account-action="state" data-account-id="${account.id}" data-enabled="${account.enabled === false ? "true" : "false"}">${account.enabled === false ? "启用账号" : "停用账号"}</button>
+          <button type="button" class="secondary" data-game-account-action="revoke" data-account-id="${account.id}">强制下线</button>
+          ${account.bound ? `<button type="button" class="secondary danger-account-action" data-game-account-action="unbind" data-account-id="${account.id}">解绑 TG</button>` : ""}
+        </div>
+      </article>
+    `).join("") || `<article class="stack-item"><strong>没有符合条件的游戏账号</strong></article>`;
+    root.querySelectorAll("[data-game-account-action]").forEach((button) => {
+      button.addEventListener("click", () => handleGameAccountAction(button));
+    });
+  }
+
+  async function loadGameAccounts() {
+    const params = new URLSearchParams({
+      q: $("game-account-search-q")?.value || "",
+      bound: $("game-account-bound-filter")?.value || "",
+      enabled: $("game-account-enabled-filter")?.value || "",
+      page: "1",
+      page_size: "30",
+    });
+    const data = await request("GET", `/plugins/xiuxian/admin-api/accounts?${params}`);
+    renderGameAccounts(data);
+    return data;
+  }
+
+  async function handleGameAccountAction(button) {
+    const accountId = Number(button?.dataset.accountId || 0);
+    const action = String(button?.dataset.gameAccountAction || "");
+    if (!accountId || !action) return;
+    try {
+      if (action === "state") {
+        const enabled = button.dataset.enabled === "true";
+        if (!window.confirm(`确认${enabled ? "启用" : "停用"}这个统一游戏账号？`)) return;
+        await request("POST", `/plugins/xiuxian/admin-api/accounts/${accountId}/state`, { enabled });
+      } else if (action === "unbind") {
+        if (!window.confirm("确认解绑 Telegram？账号会被强制下线，重新绑定后才能进入游戏。")) return;
+        await request("POST", `/plugins/xiuxian/admin-api/accounts/${accountId}/unbind`, {});
+      } else if (action === "revoke") {
+        if (!window.confirm("确认让该账号的所有网页登录会话立即失效？")) return;
+        await request("POST", `/plugins/xiuxian/admin-api/accounts/${accountId}/sessions/revoke`, {});
+      }
+      await loadGameAccounts();
+      await popup("账号操作完成", "统一游戏账号状态已更新。", "success");
+    } catch (error) {
+      await popup("账号操作失败", String(error.message || error), "error");
+    }
+  }
+
+  $("game-account-search-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    loadGameAccounts().catch((error) => popup("查询失败", String(error.message || error), "error"));
+  });
+  $("token-form")?.addEventListener("submit", () => {
+    window.setTimeout(() => loadGameAccounts().catch(() => {}), 500);
+  });
+  loadGameAccounts().catch(() => {});
 })();

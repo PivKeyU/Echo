@@ -2,11 +2,17 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#071a18">
   <title>修仙后台</title>
+  <link rel="preconnect" href="https://telegram.org" crossorigin>
+  <link rel="preload" href="https://telegram.org/js/telegram-web-app.js" as="script" crossorigin>
+  <link rel="preload" href="/plugins/xiuxian/static/admin.css" as="style">
+  <link rel="preload" href="/plugins/xiuxian/static/admin.js" as="script">
+  <link rel="preload" href="/plugins/xiuxian/static/admin-advanced.js" as="script">
   <link rel="stylesheet" href="/plugins/xiuxian/static/admin.css">
 </head>
-<body>
+<body class="xiuxian-admin">
   <main class="admin-shell">
     <section class="card hero-card">
       <div>
@@ -35,6 +41,126 @@
       </details>
     </section>
 
+    <details id="admin-accounts" class="card fold-card" open>
+      <summary class="fold-summary">
+        <div>
+          <p class="eyebrow" data-section-key="accounts">统一账号</p>
+          <h2>游戏账号与 TG 绑定</h2>
+        </div>
+        <span class="summary-tip">修仙、斗破共用账号；支持停用、解绑与强制下线</span>
+      </summary>
+      <div class="fold-body">
+        <form id="game-account-search-form" class="grid-form account-filter-form">
+          <label>
+            搜索账号
+            <input id="game-account-search-q" type="search" placeholder="账号、昵称、TG ID 或 @username">
+          </label>
+          <label>
+            绑定状态
+            <select id="game-account-bound-filter">
+              <option value="">全部</option>
+              <option value="true">已绑定 TG</option>
+              <option value="false">待绑定</option>
+            </select>
+          </label>
+          <label>
+            账号状态
+            <select id="game-account-enabled-filter">
+              <option value="">全部</option>
+              <option value="true">正常</option>
+              <option value="false">已停用</option>
+            </select>
+          </label>
+          <div class="form-actions"><button type="submit">查询账号</button></div>
+        </form>
+        <div id="game-account-summary" class="account-summary-grid"></div>
+        <div id="game-account-list" class="stack-list"></div>
+      </div>
+    </details>
+
+    <details class="card fold-card" open>
+      <summary class="fold-summary">
+        <div>
+          <p class="eyebrow" data-section-key="system">调试工具</p>
+          <h2>清档工具</h2>
+        </div>
+        <span class="summary-tip">支持一键清空所有修仙玩家数据，方便内测结束后回档</span>
+      </summary>
+      <div class="fold-body">
+        <div class="stack-item">
+          <strong>测试清档</strong>
+          <p>一键清空所有玩家的修仙档案、背包、日志、拍卖、任务与动态进度，方便测试结束后回到干净状态。</p>
+          <div class="inline-action-buttons">
+            <button id="system-reset-player-data" type="button" class="secondary">清空所有玩家修仙数据</button>
+          </div>
+        </div>
+        <div id="system-op-summary" class="stack-item">
+          <strong>最近一次系统操作</strong>
+          <p class="muted">尚未执行。</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="card fold-card">
+      <summary class="fold-summary">
+        <div>
+          <p class="eyebrow" data-section-key="mentorships">师徒</p>
+          <h2>师徒关系管理</h2>
+        </div>
+        <span class="summary-tip">查看师徒关系、缘分值、传道问道次数和待处理拜帖</span>
+      </summary>
+      <div class="fold-body">
+        <div class="setting-panel setting-panel--full">
+          <div class="setting-panel-head">
+            <div>
+              <strong>师徒关系</strong>
+              <span class="summary-tip">可手动标记出师、解除或恢复在籍</span>
+            </div>
+          </div>
+          <div id="mentorship-list" class="stack-list"></div>
+        </div>
+        <div class="setting-panel setting-panel--full">
+          <div class="setting-panel-head">
+            <div>
+              <strong>师徒请求</strong>
+              <span class="summary-tip">管理待处理、已接受、已拒绝或已过期的拜帖</span>
+            </div>
+          </div>
+          <div id="mentorship-request-list" class="stack-list"></div>
+        </div>
+      </div>
+    </details>
+
+    <details class="card fold-card">
+      <summary class="fold-summary">
+        <div>
+          <p class="eyebrow" data-section-key="marriages">姻缘</p>
+          <h2>姻缘关系管理</h2>
+        </div>
+        <span class="summary-tip">查看道侣关系、情缘值、双修次数和结缘信物</span>
+      </summary>
+      <div class="fold-body">
+        <div class="setting-panel setting-panel--full">
+          <div class="setting-panel-head">
+            <div>
+              <strong>道侣关系</strong>
+              <span class="summary-tip">可手动和离或恢复关系</span>
+            </div>
+          </div>
+          <div id="marriage-list" class="stack-list"></div>
+        </div>
+        <div class="setting-panel setting-panel--full">
+          <div class="setting-panel-head">
+            <div>
+              <strong>结缘信物</strong>
+              <span class="summary-tip">管理待处理、已接受、已拒绝或已过期的姻缘请求</span>
+            </div>
+          </div>
+          <div id="marriage-request-list" class="stack-list"></div>
+        </div>
+      </div>
+    </details>
+
     <details class="card fold-card">
       <summary class="fold-summary">
         <div>
@@ -44,12 +170,18 @@
         <span class="summary-tip">兑换、广播、聊天成长、掉落倍率与上传权限</span>
       </summary>
       <div class="fold-body">
+        <div class="settings-toolbar">
+          <label>
+            搜索基础设定
+            <input id="settings-search" type="search" placeholder="搜索兑换、广播、掉落、奇石、垂钓或上传权限">
+          </label>
+        </div>
         <form id="settings-form" class="grid-form settings-layout">
           <section class="setting-panel">
             <div class="setting-panel-head">
               <div>
-                <strong>货币与消息</strong>
-                <p>兑换比例、手续费、商店广播和消息清理。</p>
+                <strong>灵石互兑与交易通告</strong>
+                <p>兑换比例、商店广播和消息清理。</p>
               </div>
             </div>
             <div class="setting-panel-grid">
@@ -57,13 +189,10 @@
                 1 片刻碎片可兑换灵石
                 <input id="setting-rate" type="number" min="1" value="100">
               </label>
-              <label>
-                兑换手续费（%）
-                <input id="setting-fee" type="number" min="0" value="1">
-              </label>
-              <label>
-                灵石兑换碎片最低灵石
-                <input id="setting-min" type="number" min="1" value="1">
+              <p id="setting-exchange-rate-note" class="muted wide-field">当前比例示例：1 片刻碎片 = 100 灵石；100 灵石 = 1 片刻碎片。兑换不收手续费，灵石兑换碎片只按整份结算。</p>
+              <label class="inline-check">
+                <input id="setting-exchange-enabled" type="checkbox" checked>
+                开启灵石互兑
               </label>
               <label>
                 消息自动删除秒数（0 关闭）
@@ -78,8 +207,47 @@
                 <input id="setting-shop-name" type="text" value="官方商店">
               </label>
               <label>
+                拍卖成交手续费（%）
+                <input id="setting-auction-fee" type="number" min="0" max="100" value="5">
+              </label>
+              <label>
+                拍卖持续时间（分钟）
+                <input id="setting-auction-duration" type="number" min="1" max="10080" value="60">
+              </label>
+              <label>
+                小铺通知群地址 / ID
+                <input id="setting-shop-notice-group" type="text" placeholder="支持 -100xxxxxxxxxx、@groupname、t.me/groupname">
+              </label>
+              <label>
+                拍卖通知群地址 / ID
+                <input id="setting-auction-notice-group" type="text" placeholder="支持 -100xxxxxxxxxx、@groupname、t.me/groupname">
+              </label>
+              <label>
+                擂台通知群地址 / ID
+                <input id="setting-arena-notice-group" type="text" placeholder="支持 -100xxxxxxxxxx、@groupname、t.me/groupname">
+              </label>
+              <p class="muted wide-field">通知群支持填写群 ID、公开群 `@username`、`t.me/群地址`，也支持 `t.me/c/...` 消息链接；留空表示关闭。若公开地址暂时无法解析，会先保存原值，并在首次群播时再次解析。</p>
+              <label>
+                事件汇总间隔（分钟，0 关闭）
+                <input id="setting-event-summary-interval" type="number" min="0" max="1440" value="10">
+              </label>
+              <div class="wide-field">
+                <label>
+                  手动补发仙界汇总（选填目标群）
+                  <input id="setting-event-summary-target" type="text" placeholder="留空则使用已配置通知群；支持 -100xxxxxxxxxx、@groupname、t.me/...">
+                </label>
+                <div class="inline-action-buttons">
+                  <button id="event-summary-refresh-btn" type="button" class="ghost">手动发送 / 刷新仙界汇总</button>
+                </div>
+                <p class="muted">镜像更新、重启或手动修改通知群后，可在这里立即补发并重新置顶仙界汇总。</p>
+              </div>
+              <label>
                 玩家发布任务消耗
                 <input id="setting-task-publish-cost" type="number" min="0" value="20">
+              </label>
+              <label>
+                玩家每日发布任务上限（0 不限制）
+                <input id="setting-user-task-daily-limit" type="number" min="0" value="3">
               </label>
               <label class="inline-check">
                 <input id="setting-allow-user-task-publish" type="checkbox" checked>
@@ -91,7 +259,7 @@
           <section class="setting-panel">
             <div class="setting-panel-head">
               <div>
-                <strong>聊天与日常事件</strong>
+                <strong>日常修炼与群内事件</strong>
                 <p>群聊修炼、抢劫和红包奖励统一管理。</p>
               </div>
             </div>
@@ -102,7 +270,7 @@
               </label>
               <label>
                 群聊涨修为概率（%）
-                <input id="setting-chat-chance" type="number" min="0" max="100" value="8">
+                <input id="setting-chat-chance" type="number" min="0" max="100" value="6">
               </label>
               <label>
                 群聊最少涨修为
@@ -110,7 +278,7 @@
               </label>
               <label>
                 群聊最多涨修为
-                <input id="setting-chat-max" type="number" min="1" value="3">
+                <input id="setting-chat-max" type="number" min="1" value="2">
               </label>
               <label>
                 每日抢劫上限
@@ -120,13 +288,41 @@
                 单次抢劫最高灵石
                 <input id="setting-robbery-max" type="number" min="0" value="180">
               </label>
+              <label>
+                每日探索上限
+                <input id="setting-exploration-limit" type="number" min="0" value="10">
+              </label>
+              <label>
+                每日钓鱼上限
+                <input id="setting-fishing-limit" type="number" min="0" value="30">
+              </label>
+              <label>
+                每日奇遇领取上限
+                <input id="setting-encounter-limit" type="number" min="0" value="5">
+              </label>
+              <label class="inline-check">
+                <input id="setting-encounter-auto-enabled" type="checkbox" checked>
+                每日自动投放群内奇遇（当天已投放则跳过）
+              </label>
+              <label>
+                奇遇投放小时
+                <input id="setting-encounter-auto-hour" type="number" min="0" max="23" value="12">
+              </label>
+              <label>
+                奇遇投放分钟
+                <input id="setting-encounter-auto-minute" type="number" min="0" max="59" value="0">
+              </label>
+              <label>
+                避世修为效率（%）
+                <input id="setting-seclusion-efficiency" type="number" min="0" max="100" value="60">
+              </label>
             </div>
           </section>
 
           <section class="setting-panel setting-panel--full">
             <div class="setting-panel-head">
               <div>
-                <strong>倍率与掉落规则</strong>
+                <strong>灵根、品阶与掉落公式</strong>
                 <p>灵根、品质与探索掉落的数值规则集中管理。</p>
               </div>
             </div>
@@ -144,12 +340,86 @@
               </div>
               <div id="setting-item-quality-rows" class="builder-list"></div>
             </div>
+              <div class="builder-section wide-field">
+                <div class="builder-head">
+                  <strong>探索掉落权重修正</strong>
+                  <span class="summary-tip">神识、机缘与高品质灵根额外加权</span>
+                </div>
+                <div id="setting-drop-weight-rows" class="builder-list"></div>
+              </div>
+              <div class="builder-section wide-field">
+                <div class="builder-head">
+                  <strong>玩法属性小成长</strong>
+                  <span class="summary-tip">修炼、打工、秘境与斗法结算时的概率和单次增幅</span>
+                </div>
+                <div id="setting-activity-growth-rows" class="builder-list"></div>
+              </div>
+          </section>
+
+          <section class="setting-panel setting-panel--full">
+            <div class="setting-panel-head">
+              <div>
+                <strong>奇石、垂钓与共享奖池</strong>
+                <p>奇石和垂钓共用一套奖池，可分别调权重、开关与高品压制规则，手机端也能直接改。</p>
+              </div>
+            </div>
+            <div class="setting-panel-grid">
+              <label>
+                每枚奇石兑换消耗
+                <input id="setting-gambling-exchange-cost" type="number" min="1" value="120">
+              </label>
+              <label>
+                单次最多兑换
+                <input id="setting-gambling-exchange-max" type="number" min="1" value="20">
+              </label>
+              <label>
+                单次最多开启
+                <input id="setting-gambling-open-max" type="number" min="1" value="100">
+              </label>
+              <label>
+                赌坊群播阈值
+                <input id="setting-gambling-broadcast-quality" type="number" min="6" max="7" value="6">
+              </label>
+              <label>
+                机缘加成除数
+                <input id="setting-gambling-fortune-divisor" type="number" min="1" value="6">
+              </label>
+              <label>
+                每阶机缘加成（%）
+                <input id="setting-gambling-fortune-bonus" type="number" min="0" value="8">
+              </label>
+            </div>
             <div class="builder-section wide-field">
               <div class="builder-head">
-                <strong>探索掉落权重修正</strong>
-                <span class="summary-tip">神识、机缘与高品质灵根额外加权</span>
+                <strong>赌坊品阶权重修正</strong>
+                <span class="summary-tip">品阶越高，通常倍率越低；机缘会在此基础上继续抬高高品权重</span>
               </div>
-              <div id="setting-drop-weight-rows" class="builder-list"></div>
+              <div id="setting-gambling-quality-rows" class="builder-list"></div>
+            </div>
+            <div class="builder-section wide-field">
+              <div class="builder-head">
+                <strong>垂钓品阶权重修正</strong>
+                <span class="summary-tip">单独压低高品阶垂钓产出，不影响仙界奇石。</span>
+              </div>
+              <div id="setting-fishing-quality-rows" class="builder-list"></div>
+            </div>
+            <div class="builder-section wide-field">
+              <div class="builder-head">
+                <strong>奇石 / 钓鱼共享奖池</strong>
+                <span class="summary-tip">自动纳入除破境丹、破境丹丹方、唯一法宝与仙界奇石本体外的全部奖项，并支持按名称、ID、类别、品质筛选。</span>
+              </div>
+              <div class="reward-pool-toolbar">
+                <label class="reward-pool-search">
+                  奖项搜索
+                  <input id="setting-gambling-pool-search" type="search" placeholder="搜索名称、ID、类别、品质">
+                </label>
+                <div class="inline-action-buttons reward-pool-actions">
+                  <button id="setting-gambling-pool-expand" type="button" class="secondary">展开全部</button>
+                  <button id="setting-gambling-pool-collapse" type="button" class="ghost">收起全部</button>
+                </div>
+              </div>
+              <div id="setting-gambling-pool-summary" class="compact-hint reward-pool-summary"></div>
+              <div id="setting-gambling-pool-rows" class="builder-list reward-pool-list"></div>
             </div>
           </section>
 
@@ -190,26 +460,66 @@
           <p class="eyebrow" data-section-key="duel-settings">斗法设定</p>
           <h2>斗法与装备规则</h2>
         </div>
-        <span class="summary-tip">把斗法倒计时、掠夺比例、法宝位和解绑成本独立管理</span>
+        <span class="summary-tip">把斗法倒计时、擂台手续费、掠夺比例、法宝位和解绑成本独立管理</span>
       </summary>
       <div class="fold-body">
+        <div class="settings-toolbar">
+          <label>
+            搜索斗法设定
+            <input id="duel-settings-search" type="search" placeholder="搜索下注、擂台、掠夺、装备、炉鼎、重修或宗门">
+          </label>
+        </div>
         <form id="duel-settings-form" class="grid-form settings-layout">
           <section class="setting-panel setting-panel--full">
             <div class="setting-panel-head">
               <div>
-                <strong>斗法核心参数</strong>
-                <p>影响赌斗节奏、法宝掠夺和装备管理成本。</p>
+                <strong>下注与擂台节奏</strong>
+                <p>赌斗开关、下注挡位、邀请时限和擂台收费。</p>
               </div>
             </div>
             <div class="setting-panel-grid">
+              <label class="inline-check">
+                <input id="setting-duel-bet-enabled" type="checkbox" checked>
+                开启赌斗下注功能
+              </label>
               <label>
-                赌斗下注倒计时（分钟）
-                <input id="setting-duel-minutes" type="number" min="1" max="15" value="2">
+                赌斗下注倒计时（秒）
+                <input id="setting-duel-seconds" type="number" min="10" max="3600" value="120">
+              </label>
+              <label>
+                最低下注灵石
+                <input id="setting-duel-bet-min" type="number" min="1" value="10">
+              </label>
+              <label>
+                最高下注灵石
+                <input id="setting-duel-bet-max" type="number" min="1" value="100">
+              </label>
+              <label class="wide-field">
+                下注挡位列表
+                <input id="setting-duel-bet-options" type="text" value="10,50,100" placeholder="例如：10,50,100,200">
               </label>
               <label>
                 邀请自动撤销时限（秒）
                 <input id="setting-duel-invite-timeout" type="number" min="10" max="1800" value="90">
               </label>
+              <label>
+                开擂手续费（灵石）
+                <input id="setting-arena-open-fee" type="number" min="0" value="0">
+              </label>
+              <label>
+                攻擂手续费（灵石）
+                <input id="setting-arena-challenge-fee" type="number" min="0" value="0">
+              </label>
+            </div>
+          </section>
+          <section class="setting-panel setting-panel--full">
+            <div class="setting-panel-head">
+              <div>
+                <strong>掠夺与装备管理</strong>
+                <p>胜者掠夺、法宝掉落概率、装备位、解绑费用和高品质群播。</p>
+              </div>
+            </div>
+            <div class="setting-panel-grid">
               <label>
                 胜者额外掠夺比例（%）
                 <input id="setting-duel-steal" type="number" min="0" max="100" value="25">
@@ -220,7 +530,7 @@
               </label>
               <label>
                 法宝装备上限
-                <input id="setting-artifact-limit" type="number" min="1" max="12" value="3">
+                <input id="setting-artifact-limit" type="number" min="1" max="12" value="6">
               </label>
               <label>
                 装备解绑费用（每件/张）
@@ -228,16 +538,52 @@
               </label>
               <label>
                 高品质群播阈值
-                <input id="setting-quality-broadcast" type="number" min="1" value="4">
+                <input id="setting-quality-broadcast" type="number" min="6" max="7" value="6">
               </label>
+            </div>
+          </section>
+          <section class="setting-panel setting-panel--full">
+            <div class="setting-panel-head">
+              <div>
+                <strong>炉鼎与转世重修</strong>
+                <p>炉鼎上供、采补、脱离挑战冷却和转世冷却递增。</p>
+              </div>
+            </div>
+            <div class="setting-panel-grid">
               <label>
-                奴仆上供比例（%）
+                炉鼎上供比例（%）
                 <input id="setting-slave-tribute" type="number" min="0" max="100" value="20">
               </label>
               <label>
-                赎身挑战冷却（小时）
+                炉鼎采补比例（%）
+                <input id="setting-furnace-harvest" type="number" min="0" max="100" value="10">
+              </label>
+              <label>
+                脱离挑战冷却（小时）
                 <input id="setting-slave-cooldown" type="number" min="1" max="720" value="24">
               </label>
+              <label class="inline-check">
+                <input id="setting-rebirth-cooldown-enabled" type="checkbox">
+                开启转世重修冷却
+              </label>
+              <label>
+                首次重修冷却（小时）
+                <input id="setting-rebirth-cooldown-base" type="number" min="0" max="8760" value="12">
+              </label>
+              <label>
+                每次重修递增（小时）
+                <input id="setting-rebirth-cooldown-increment" type="number" min="0" max="8760" value="6">
+              </label>
+            </div>
+          </section>
+          <section class="setting-panel setting-panel--full">
+            <div class="setting-panel-head">
+              <div>
+                <strong>宗门供奉规则</strong>
+                <p>宗门月俸考察期、叛宗冷却和叛宗供奉上下限。</p>
+              </div>
+            </div>
+            <div class="setting-panel-grid">
               <label>
                 宗门月俸考察期（天）
                 <input id="setting-sect-salary-stay" type="number" min="1" max="3650" value="30">
@@ -245,6 +591,10 @@
               <label>
                 叛宗冷却（天）
                 <input id="setting-sect-betrayal-cooldown" type="number" min="1" max="3650" value="7">
+              </label>
+              <label>
+                离婚冷却（天）
+                <input id="setting-divorce-cooldown" type="number" min="1" max="365" value="7">
               </label>
               <label>
                 叛宗供奉比例（%）
@@ -258,6 +608,21 @@
                 叛宗供奉上限
                 <input id="setting-sect-betrayal-max" type="number" min="0" value="300">
               </label>
+            </div>
+          </section>
+          <section class="setting-panel setting-panel--full">
+            <div class="setting-panel-head">
+              <div>
+                <strong>分境界擂台</strong>
+                <p>同一时间每个大境界只允许存在一座擂台，持续时间和单场实战修为上限都在这里独立配置。</p>
+              </div>
+            </div>
+            <div class="builder-section wide-field">
+              <div class="builder-head">
+                <strong>擂台规则表</strong>
+                <span class="summary-tip">炼气、筑基、金丹等大境界分别生效</span>
+              </div>
+              <div id="setting-arena-stage-rows" class="builder-list"></div>
             </div>
           </section>
           <div class="form-actions wide-field">
@@ -306,18 +671,20 @@
             装备部位
             <select id="artifact-slot">
               <option value="weapon">武器</option>
-              <option value="chest">胸甲</option>
-              <option value="legs">护腿</option>
-              <option value="boots">靴子</option>
-              <option value="necklace">项链</option>
-              <option value="ring">戒指</option>
               <option value="helmet">头冠</option>
-              <option value="bracelet">护腕</option>
+              <option value="clothes">衣服</option>
+              <option value="boots">鞋</option>
+              <option value="shield">盾</option>
+              <option value="accessory">饰品</option>
             </select>
           </label>
           <label>
             所属套装
             <select id="artifact-set-id"></select>
+          </label>
+          <label class="inline-check">
+            <input id="artifact-unique" type="checkbox">
+            唯一法宝
           </label>
           <label>
             图片地址
@@ -393,6 +760,7 @@
           </label>
           <div class="form-actions">
             <button type="submit">新增法宝</button>
+            <button id="artifact-reset-btn" type="button" class="ghost">重置表单</button>
           </div>
         </form>
         <div id="artifact-list" class="stack-list"></div>
@@ -409,7 +777,7 @@
       </summary>
       <div class="fold-body">
         <form id="artifact-set-form" class="grid-form">
-          <input id="artifact-set-id" type="hidden">
+          <input id="artifact-set-record-id" type="hidden">
           <label>
             套装名称
             <input id="artifact-set-name" type="text" placeholder="例如：青霄巡天套">
@@ -438,8 +806,9 @@
           <label>斗法加成（%） <input id="artifact-set-duel" type="number" value="0"></label>
           <label>修炼加成 <input id="artifact-set-cultivation" type="number" value="0"></label>
           <label>突破加成 <input id="artifact-set-breakthrough" type="number" value="0"></label>
-          <div class="form-actions">
+          <div class="form-actions form-actions--split">
             <button type="submit">新增套装</button>
+            <button id="artifact-set-reset-btn" type="button" class="ghost">重置表单</button>
           </div>
         </form>
         <div id="artifact-set-list" class="stack-list"></div>
@@ -452,7 +821,7 @@
           <p class="eyebrow" data-section-key="talismans">符箓</p>
           <h2>符箓管理</h2>
         </div>
-        <span class="summary-tip">斗法一次性增益，支持攻击、防御与胜率</span>
+        <span class="summary-tip">探索与垂钓持续护持，斗法、Boss、炼制与吐纳后消耗</span>
       </summary>
       <div class="fold-body">
         <form id="talisman-form" class="grid-form">
@@ -509,8 +878,9 @@
             <input id="talisman-enabled" type="checkbox" checked>
             启用符箓
           </label>
-          <div class="form-actions">
+          <div class="form-actions form-actions--split">
             <button type="submit">新增符箓</button>
+            <button id="talisman-reset-btn" type="button" class="ghost">重置表单</button>
           </div>
         </form>
         <div id="talisman-list" class="stack-list"></div>
@@ -542,7 +912,6 @@
               <option value="foundation">突破加成</option>
               <option value="clear_poison">解毒</option>
               <option value="cultivation">提升修为</option>
-              <option value="stone">补给灵石</option>
               <option value="bone">提升根骨</option>
               <option value="comprehension">提升悟性</option>
               <option value="divine_sense">提升神识</option>
@@ -593,8 +962,9 @@
             <input id="pill-enabled" type="checkbox" checked>
             启用丹药
           </label>
-          <div class="form-actions">
+          <div class="form-actions form-actions--split">
             <button type="submit">新增丹药</button>
+            <button id="pill-reset-btn" type="button" class="ghost">重置表单</button>
           </div>
         </form>
         <div id="pill-list" class="stack-list"></div>
@@ -689,6 +1059,10 @@
           <label>全宗修炼加成 <input id="sect-cultivation" type="number" value="0"></label>
           <label>全宗机缘加成 <input id="sect-fortune-bonus" type="number" value="0"></label>
           <label>全宗身法加成 <input id="sect-body-movement" type="number" value="0"></label>
+          <label>
+            宗门考察期（天）
+            <input id="sect-salary-stay-days" type="number" min="1" max="3650" value="30">
+          </label>
           <label class="wide-field">
             入门提示
             <textarea id="sect-entry-hint" rows="2" placeholder="例如：只收心性沉稳、愿护苍生之人"></textarea>
@@ -700,8 +1074,9 @@
             </div>
             <div id="sect-role-rows" class="builder-list"></div>
           </div>
-          <div class="form-actions">
+          <div class="form-actions form-actions--split">
             <button type="submit">创建宗门</button>
+            <button id="sect-reset-btn" type="button" class="ghost">重置表单</button>
           </div>
         </form>
         <form id="sect-assign-form" class="grid-form">
@@ -722,6 +1097,49 @@
           </div>
         </form>
         <div id="sect-list" class="stack-list"></div>
+      </div>
+    </details>
+
+    <details class="card fold-card">
+      <summary class="fold-summary">
+        <div>
+          <p class="eyebrow" data-section-key="errors">错误日志</p>
+          <h2>错误日志</h2>
+        </div>
+        <span class="summary-tip">查看修仙用户操作失败记录，并配置保留条数</span>
+      </summary>
+      <div class="fold-body">
+        <form id="error-log-form" class="grid-form">
+          <label>
+            保留条数
+            <input id="setting-error-log-retention" type="number" min="1" max="10000" value="500">
+          </label>
+          <label>
+            TG ID
+            <input id="error-log-tg" type="number" min="1" placeholder="留空则不过滤">
+          </label>
+          <label>
+            级别
+            <select id="error-log-level">
+              <option value="">全部</option>
+              <option value="WARNING">WARNING</option>
+              <option value="ERROR">ERROR</option>
+            </select>
+          </label>
+          <label>
+            关键字
+            <input id="error-log-keyword" type="search" placeholder="路径、昵称、报错内容">
+          </label>
+          <label>
+            查询条数
+            <input id="error-log-limit" type="number" min="1" max="500" value="100">
+          </label>
+          <div class="form-actions wide-field">
+            <button type="submit">保存并查询</button>
+            <button id="error-log-refresh" type="button" class="secondary">刷新日志</button>
+          </div>
+        </form>
+        <div id="error-log-list" class="stack-list"></div>
       </div>
     </details>
 
@@ -797,8 +1215,9 @@
             <input id="technique-enabled" type="checkbox" checked>
             启用功法
           </label>
-          <div class="form-actions">
+          <div class="form-actions form-actions--split">
             <button type="submit">新增功法</button>
+            <button id="technique-reset-btn" type="button" class="ghost">重置表单</button>
           </div>
         </form>
         <div id="technique-list" class="stack-list"></div>
@@ -820,9 +1239,55 @@
             称号名称
             <input id="title-name" type="text" placeholder="例如：斗战真君">
           </label>
-          <label>
+          <label class="wide-field">
             展示颜色
-            <input id="title-color" type="text" placeholder="#0f766e">
+            <input id="title-color" type="text" placeholder="#0f766e 或 linear-gradient(135deg, #0f766e 0%, #38bdf8 100%)">
+            <div class="field-note">支持直接填写纯色或渐变值，也可以用下面的可视化调色盘快速生成。</div>
+            <div id="title-color-editor" class="title-color-editor">
+              <div class="title-color-toolbar">
+                <button type="button" class="secondary" data-title-color-mode="solid">纯色</button>
+                <button type="button" class="secondary" data-title-color-mode="gradient">渐变</button>
+                <button type="button" class="secondary" data-title-color-mode="rainbow">炫彩</button>
+                <button type="button" class="secondary" id="title-color-clear">恢复默认</button>
+              </div>
+              <div class="title-color-preview-card">
+                <span class="field-note">实时预览</span>
+                <div class="title-color-preview-row">
+                  <strong id="title-color-preview-name">斗战真君</strong>
+                  <span id="title-color-preview-badge" class="badge badge--normal">称号预览</span>
+                </div>
+                <p id="title-color-preview-code" class="field-note">当前值：默认</p>
+              </div>
+              <div class="title-color-panel" data-title-color-panel="solid">
+                <div class="title-color-control-grid">
+                  <div class="title-color-control">
+                    <span>主色</span>
+                    <input id="title-solid-color" type="color" value="#0f766e">
+                  </div>
+                </div>
+                <div id="title-solid-swatches" class="title-color-swatches"></div>
+              </div>
+              <div class="title-color-panel is-hidden" data-title-color-panel="gradient">
+                <div class="title-color-control-grid title-color-control-grid--gradient">
+                  <div class="title-color-control">
+                    <span>起始色</span>
+                    <input id="title-gradient-start" type="color" value="#0f766e">
+                  </div>
+                  <div class="title-color-control">
+                    <span>结束色</span>
+                    <input id="title-gradient-end" type="color" value="#38bdf8">
+                  </div>
+                  <div class="title-color-control title-color-control--range">
+                    <span>角度 <strong id="title-gradient-angle-value">135°</strong></span>
+                    <input id="title-gradient-angle" type="range" min="0" max="360" step="5" value="135">
+                  </div>
+                </div>
+                <div id="title-gradient-presets" class="title-color-swatches title-color-swatches--wide"></div>
+              </div>
+              <div class="title-color-panel is-hidden" data-title-color-panel="rainbow">
+                <div id="title-rainbow-presets" class="title-color-swatches title-color-swatches--wide"></div>
+              </div>
+            </div>
           </label>
           <label>
             图片地址
@@ -852,8 +1317,9 @@
           <label>斗法加成（%） <input id="title-duel" type="number" value="0"></label>
           <label>修炼加成 <input id="title-cultivation" type="number" value="0"></label>
           <label>突破加成 <input id="title-breakthrough" type="number" value="0"></label>
-          <div class="form-actions">
+          <div class="form-actions form-actions--split">
             <button type="submit">创建称号</button>
+            <button id="title-reset-btn" type="button" class="ghost">重置表单</button>
           </div>
         </form>
         <form id="title-grant-form" class="grid-form">
@@ -929,8 +1395,9 @@
             奖励配置 JSON
             <textarea id="achievement-reward-config" rows="6" placeholder='{"spiritual_stone":100,"cultivation":50,"titles":[1],"items":[{"kind":"pill","ref_id":1,"quantity":2}]}'></textarea>
           </label>
-          <div class="form-actions">
+          <div class="form-actions form-actions--split">
             <button type="submit">创建成就</button>
+            <button id="achievement-reset-btn" type="button" class="ghost">重置表单</button>
           </div>
         </form>
         <form id="achievement-progress-form" class="grid-form">
@@ -993,8 +1460,9 @@
             <input id="material-enabled" type="checkbox" checked>
             启用材料
           </label>
-          <div class="form-actions">
+          <div class="form-actions form-actions--split">
             <button type="submit">新增材料</button>
+            <button id="material-reset-btn" type="button" class="ghost">重置表单</button>
           </div>
         </form>
         <div id="material-list" class="stack-list"></div>
@@ -1055,8 +1523,9 @@
             </div>
             <div id="recipe-ingredient-rows" class="builder-list"></div>
           </div>
-          <div class="form-actions">
+          <div class="form-actions form-actions--split">
             <button type="submit">新增配方</button>
+            <button id="recipe-reset-btn" type="button" class="ghost">重置表单</button>
           </div>
         </form>
         <div id="recipe-list" class="stack-list"></div>
@@ -1121,8 +1590,9 @@
             </div>
             <div id="scene-drop-rows" class="builder-list"></div>
           </div>
-          <div class="form-actions">
+          <div class="form-actions form-actions--split">
             <button type="submit">新增场景</button>
+            <button id="scene-reset-btn" type="button" class="ghost">重置表单</button>
           </div>
         </form>
         <div id="scene-list" class="stack-list"></div>
@@ -1156,6 +1626,7 @@
             <select id="admin-task-type">
               <option value="custom">普通任务</option>
               <option value="quiz">答题任务</option>
+              <option value="metric">计数任务</option>
             </select>
           </label>
           <label>
@@ -1165,6 +1636,17 @@
           <label>
             奖励灵石
             <input id="admin-task-stone" type="number" min="0" value="0">
+          </label>
+          <label>
+            奖励修为
+            <input id="admin-task-cultivation" type="number" min="0" value="0">
+          </label>
+          <label>
+            奖励缩放
+            <select id="admin-task-reward-scale-mode">
+              <option value="fixed">固定奖励</option>
+              <option value="realm">按领取者境界缩放</option>
+            </select>
           </label>
           <label>
             奖励物品类型
@@ -1203,6 +1685,14 @@
           <label>
             需提交数量
             <input id="admin-task-required-quantity" type="number" min="0" value="0">
+          </label>
+          <label>
+            计数指标
+            <select id="admin-task-metric-key"></select>
+          </label>
+          <label>
+            目标次数
+            <input id="admin-task-metric-target" type="number" min="0" value="0">
           </label>
           <label>
             领取上限
@@ -1290,18 +1780,102 @@
           <label>奖励物品 <select id="encounter-item-id"></select></label>
           <label>物品最小数量 <input id="encounter-item-quantity-min" type="number" min="1" value="1"></label>
           <label>物品最大数量 <input id="encounter-item-quantity-max" type="number" min="1" value="1"></label>
-          <label>心志奖励 <input id="encounter-willpower" type="number" value="0"></label>
-          <label>魅力奖励 <input id="encounter-charisma" type="number" value="0"></label>
-          <label>因果奖励 <input id="encounter-karma" type="number" value="0"></label>
           <label class="inline-check">
             <input id="encounter-enabled" type="checkbox" checked>
             启用奇遇
           </label>
-          <div class="form-actions">
+          <div class="form-actions form-actions--split">
             <button type="submit">新增奇遇</button>
+            <button id="encounter-reset-btn" type="button" class="ghost">重置表单</button>
           </div>
         </form>
         <div id="encounter-list" class="stack-list"></div>
+      </div>
+    </details>
+
+    <details class="card fold-card">
+      <summary class="fold-summary">
+        <div>
+          <p class="eyebrow" data-section-key="bosses">Boss</p>
+          <h2>Boss 讨伐配置</h2>
+        </div>
+        <span class="summary-tip">配置个人 Boss、世界 Boss、战斗属性和掉落奖励</span>
+      </summary>
+      <div class="fold-body">
+        <form id="boss-form" class="grid-form">
+          <input id="boss-id" type="hidden">
+          <label>Boss 名称 <input id="boss-name" type="text" placeholder="例如：黑水玄蛇"></label>
+          <label>
+            Boss 类型
+            <select id="boss-type">
+              <option value="personal">个人 Boss</option>
+              <option value="world">世界 Boss</option>
+            </select>
+          </label>
+          <label>
+            境界门槛
+            <select id="boss-stage"></select>
+          </label>
+          <label>排序 <input id="boss-sort" type="number" value="0"></label>
+          <label>世界血量基数 <input id="boss-hp" type="number" min="1" value="500"></label>
+          <label>攻击 <input id="boss-attack" type="number" min="0" value="30"></label>
+          <label>防御 <input id="boss-defense" type="number" min="0" value="15"></label>
+          <label>身法 <input id="boss-body-movement" type="number" min="0" value="10"></label>
+          <label>神识 <input id="boss-divine-sense" type="number" min="0" value="10"></label>
+          <label>机缘 <input id="boss-fortune" type="number" min="0" value="10"></label>
+          <label>个人战斗气血 <input id="boss-qi-blood" type="number" min="1" value="500"></label>
+          <label>真元 <input id="boss-true-yuan" type="number" min="0" value="200"></label>
+          <label>主动技能 <input id="boss-skill-name" type="text" placeholder="例如：毒雾噬体"></label>
+          <label>技能倍率 % <input id="boss-skill-ratio" type="number" min="0" value="30"></label>
+          <label>技能命中加成 <input id="boss-skill-hit" type="number" value="0"></label>
+          <label>被动名称 <input id="boss-passive-name" type="text" placeholder="例如：玄鳞甲"></label>
+          <label>
+            被动类型
+            <select id="boss-passive-kind">
+              <option value="">无</option>
+              <option value="guard">减伤</option>
+              <option value="heal">回复</option>
+              <option value="dodge">闪避</option>
+              <option value="armor_break">破甲</option>
+            </select>
+          </label>
+          <label>被动倍率 % <input id="boss-passive-ratio" type="number" min="0" value="0"></label>
+          <label>被动触发率 % <input id="boss-passive-chance" type="number" min="0" max="100" value="25"></label>
+          <label>灵石奖励最小值 <input id="boss-stone-min" type="number" min="0" value="0"></label>
+          <label>灵石奖励最大值 <input id="boss-stone-max" type="number" min="0" value="0"></label>
+          <label>修为奖励 <input id="boss-cultivation" type="number" min="0" value="0"></label>
+          <label>每日挑战次数 <input id="boss-daily-limit" type="number" min="0" value="3"></label>
+          <label>门票灵石 <input id="boss-ticket-cost" type="number" min="0" value="100"></label>
+          <label>
+            图片地址
+            <input id="boss-image" type="url" placeholder="https://...">
+            <div class="upload-inline">
+              <input id="boss-image-file" type="file" accept="image/*">
+              <button type="button" data-upload-file="boss-image-file" data-upload-target="boss-image" data-upload-folder="bosses">上传图片</button>
+            </div>
+          </label>
+          <label class="wide-field">Boss 描述 <textarea id="boss-description" rows="2" placeholder="前台展示的 Boss 背景说明"></textarea></label>
+          <label class="wide-field">胜利文案 <textarea id="boss-flavor" rows="2" placeholder="击败后展示的氛围文案"></textarea></label>
+          <section class="wide-field builder-section">
+            <div class="builder-head">
+              <div>
+                <strong>掉落奖励</strong>
+                <span class="summary-tip">选择奖励类型和具体物品，填写掉率与数量范围</span>
+              </div>
+              <button id="boss-loot-add" type="button" class="secondary">新增掉落</button>
+            </div>
+            <div id="boss-loot-rows" class="builder-list"></div>
+          </section>
+          <label class="inline-check">
+            <input id="boss-enabled" type="checkbox" checked>
+            启用 Boss
+          </label>
+          <div class="form-actions form-actions--split">
+            <button type="submit">保存 Boss</button>
+            <button id="boss-reset-btn" type="button" class="ghost">清空表单</button>
+          </div>
+        </form>
+        <div id="boss-list" class="stack-list"></div>
       </div>
     </details>
 
@@ -1316,6 +1890,15 @@
       <div class="fold-body">
         <form id="grant-form" class="grid-form">
           <label>
+            搜索用户
+            <input id="grant-user-search" type="search" placeholder="输入 TG 昵称、@username、Emby 账号名或 TG ID">
+            <span id="grant-user-search-tip" class="field-note">支持按用户名搜索，选中候选后会自动写入 TG ID。</span>
+          </label>
+          <label>
+            匹配用户
+            <select id="grant-user-match"></select>
+          </label>
+          <label>
             目标 TG ID
             <input id="grant-tg" type="number" placeholder="输入目标用户 TG ID">
           </label>
@@ -1329,6 +1912,11 @@
               <option value="recipe">配方</option>
               <option value="technique">功法</option>
             </select>
+          </label>
+          <label>
+            搜索物品
+            <input id="grant-item-search" type="search" placeholder="输入物品 ID 或名称筛选">
+            <span id="grant-item-search-tip" class="field-note">按物品名称或 ID 缩小下拉列表。</span>
           </label>
           <label>
             物品
@@ -1351,7 +1939,7 @@
           <p class="eyebrow" data-section-key="official shop">官方商店</p>
           <h2>官方商店</h2>
         </div>
-        <span class="summary-tip">单独维护官方供给，不与发放系统混用</span>
+        <span class="summary-tip">售价按品阶与属性自动估价</span>
       </summary>
       <div class="fold-body">
         <form id="official-shop-form" class="grid-form">
@@ -1373,8 +1961,8 @@
             <input id="official-quantity" type="number" min="1" value="1">
           </label>
           <label>
-            售价（灵石）
-            <input id="official-price" type="number" min="0" value="10">
+            售价（灵石，自动估价）
+            <input id="official-price" type="number" min="0" value="0" readonly>
           </label>
           <label class="wide-field">
             店铺名称（自动跟随基础规则）
@@ -1385,6 +1973,19 @@
           </div>
         </form>
         <div id="official-shop-list" class="stack-list"></div>
+      </div>
+    </details>
+
+    <details class="card fold-card">
+      <summary class="fold-summary">
+        <div>
+          <p class="eyebrow" data-section-key="auctions">拍卖行</p>
+          <h2>群拍卖监控</h2>
+        </div>
+        <span class="summary-tip">查看玩家拍卖进度、成交结果与群消息状态</span>
+      </summary>
+      <div class="fold-body">
+        <div id="auction-list" class="stack-list"></div>
       </div>
     </details>
 
@@ -1406,6 +2007,55 @@
             <button type="submit">搜索</button>
           </div>
         </form>
+        <details class="stack-item player-resource-card" open style="margin-bottom:12px;">
+          <summary class="player-resource-summary">
+            <div>
+              <strong>全玩家批量物资</strong>
+              <p>对全体已入道玩家统一发放或扣除物品，背包里没有对应道具时自动跳过</p>
+            </div>
+          </summary>
+          <form id="player-batch-resource-form" class="grid-form">
+            <label>
+              操作类型
+              <select id="player-batch-operation">
+                <option value="grant">全体发放</option>
+                <option value="deduct">全体扣除</option>
+              </select>
+            </label>
+            <label>
+              资源类型
+              <select id="player-batch-kind">
+                <option value="artifact">法宝</option>
+                <option value="pill">丹药</option>
+                <option value="talisman">符箓</option>
+                <option value="material">材料</option>
+                <option value="title">称号</option>
+                <option value="technique">功法</option>
+                <option value="recipe">配方</option>
+              </select>
+            </label>
+            <label>
+              目标条目
+              <select id="player-batch-ref-id"></select>
+            </label>
+            <label>
+              数量
+              <input id="player-batch-quantity" type="number" min="1" value="1">
+            </label>
+            <label class="inline-check">
+              <input id="player-batch-equip" type="checkbox">
+              发放后立即设为当前
+            </label>
+            <label class="inline-check">
+              <input id="player-batch-announce" type="checkbox">
+              在群组内播报本次批量操作
+            </label>
+            <div class="form-actions">
+              <button type="submit">执行批量操作</button>
+            </div>
+          </form>
+          <div id="player-batch-resource-summary" class="stack-list"></div>
+        </details>
         <div class="player-workspace">
           <section class="player-search-pane">
             <div id="player-search-summary" class="muted player-search-summary"></div>
@@ -1437,15 +2087,24 @@
               <label>
                 境界
                 <select id="pe-realm_stage">
-                  <option value="凡人">凡人</option>
                   <option value="炼气">炼气</option>
                   <option value="筑基">筑基</option>
-                  <option value="结丹">结丹</option>
+                  <option value="金丹">金丹</option>
                   <option value="元婴">元婴</option>
                   <option value="化神">化神</option>
-                  <option value="须弥">须弥</option>
-                  <option value="芥子">芥子</option>
-                  <option value="混元一体">混元一体</option>
+                  <option value="炼虚">炼虚</option>
+                  <option value="合体">合体</option>
+                  <option value="大乘">大乘</option>
+                  <option value="渡劫">渡劫</option>
+                  <option value="人仙">人仙</option>
+                  <option value="地仙">地仙</option>
+                  <option value="天仙">天仙</option>
+                  <option value="金仙">金仙</option>
+                  <option value="大罗金仙">大罗金仙</option>
+                  <option value="仙君">仙君</option>
+                  <option value="仙王">仙王</option>
+                  <option value="仙尊">仙尊</option>
+                  <option value="仙帝">仙帝</option>
                 </select>
               </label>
               <label>层数 <input id="pe-realm_layer" type="number" min="1" max="9"></label>
@@ -1618,8 +2277,8 @@
     </details>
   </main>
 
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/plugins/xiuxian/static/admin.js"></script>
-  <script src="/plugins/xiuxian/static/admin-advanced.js"></script>
+  <script defer src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script defer src="/plugins/xiuxian/static/admin.js"></script>
+  <script defer src="/plugins/xiuxian/static/admin-advanced.js"></script>
 </body>
 </html>

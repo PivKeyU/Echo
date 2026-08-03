@@ -41,12 +41,24 @@ ACHIEVEMENT_METRIC_PRESETS: list[dict[str, str]] = [
     {"key": "rob_stone_total", "label": "偷窃得手灵石总量", "description": "累计通过偷窃获得的灵石总量。"},
     {"key": "gift_sent_count", "label": "赠送灵石次数", "description": "累计赠送灵石给其他道友的次数。"},
     {"key": "gift_sent_stone", "label": "赠送灵石总量", "description": "累计赠送给他人的灵石总量。"},
+    {"key": "mentor_accept_count", "label": "收徒成功次数", "description": "累计成功收下徒弟的次数。"},
+    {"key": "mentor_teach_count", "label": "传道次数", "description": "累计亲自为门下弟子传道授业的次数。"},
+    {"key": "disciple_consult_count", "label": "问道次数", "description": "累计向师尊请教并完成问道的次数。"},
+    {"key": "mentor_graduate_count", "label": "带徒出师次数", "description": "累计培养弟子顺利出师的次数。"},
+    {"key": "disciple_graduate_count", "label": "出师次数", "description": "累计自身完成出师的次数。"},
     {"key": "craft_attempt_count", "label": "炼制尝试次数", "description": "累计尝试炼制装备、丹药或符箓的次数。"},
     {"key": "craft_success_count", "label": "炼制成功次数", "description": "累计炼制成功的次数。"},
     {"key": "repair_success_count", "label": "法宝修复成功次数", "description": "累计成功修复破损法宝的次数。"},
     {"key": "exploration_count", "label": "秘境探索次数", "description": "累计完成秘境探索并结算奖励的次数。"},
     {"key": "exploration_danger_count", "label": "危险遭遇次数", "description": "累计在秘境中遭遇危险事件并活着归来的次数。"},
     {"key": "exploration_recipe_drop_count", "label": "配方残页获得次数", "description": "累计在秘境中得到配方残页或图录的次数。"},
+    {"key": "arena_open_count", "label": "开启擂台次数", "description": "累计在群内开启擂台、向所有人发起守擂邀请的次数。"},
+    {"key": "arena_crowned_count", "label": "成为擂主次数", "description": "累计登上擂台并成为当期擂主的次数。"},
+    {"key": "arena_defend_win_count", "label": "守擂成功次数", "description": "累计在擂台中成功击退挑战者的次数。"},
+    {"key": "arena_final_win_count", "label": "终局夺魁次数", "description": "累计在擂台结束时以最终擂主身份完成结算的次数。"},
+    {"key": "boss_kill_count", "label": "Boss击杀次数", "description": "累计击败个人Boss的次数。"},
+    {"key": "boss_world_damage_total", "label": "世界Boss伤害总量", "description": "累计对世界Boss造成的总伤害值。"},
+    {"key": "boss_world_mvp_count", "label": "世界Boss MVP次数", "description": "累计在世界Boss讨伐中获得伤害排名第一的次数。"},
 ]
 ACHIEVEMENT_METRIC_LABELS = {item["key"]: item["label"] for item in ACHIEVEMENT_METRIC_PRESETS}
 
@@ -351,4 +363,44 @@ def record_exploration_metrics(
         },
         source="exploration",
     )
+    return result["unlocks"]
+
+
+def record_boss_metrics(
+    tg: int,
+    *,
+    kill: int = 0,
+    world_damage: int = 0,
+    world_mvp: int = 0,
+) -> list[dict[str, Any]]:
+    increments = {
+        "boss_kill_count": max(int(kill or 0), 0),
+        "boss_world_damage_total": max(int(world_damage or 0), 0),
+        "boss_world_mvp_count": max(int(world_mvp or 0), 0),
+    }
+    increments = {key: value for key, value in increments.items() if value > 0}
+    if not increments:
+        return []
+    result = record_achievement_progress(tg, increments, source="boss")
+    return result["unlocks"]
+
+
+def record_arena_metrics(
+    tg: int,
+    *,
+    opened: int = 0,
+    crowned: int = 0,
+    defended: int = 0,
+    final_win: int = 0,
+) -> list[dict[str, Any]]:
+    increments = {
+        "arena_open_count": max(int(opened or 0), 0),
+        "arena_crowned_count": max(int(crowned or 0), 0),
+        "arena_defend_win_count": max(int(defended or 0), 0),
+        "arena_final_win_count": max(int(final_win or 0), 0),
+    }
+    increments = {key: value for key, value in increments.items() if value > 0}
+    if not increments:
+        return []
+    result = record_achievement_progress(tg, increments, source="arena")
     return result["unlocks"]

@@ -2,11 +2,16 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#071a18">
   <title>修仙面板</title>
+  <link rel="preconnect" href="https://telegram.org" crossorigin>
+  <link rel="preload" href="https://telegram.org/js/telegram-web-app.js" as="script" crossorigin>
+  <link rel="preload" href="/plugins/xiuxian/static/app.css" as="style">
+  <link rel="preload" href="/plugins/xiuxian/static/app.js" as="script">
   <link rel="stylesheet" href="/plugins/xiuxian/static/app.css">
 </head>
-<body>
+<body class="xiuxian-app auth-locked">
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
   <div id="modal-layer" class="modal-layer hidden" aria-hidden="true">
@@ -25,6 +30,69 @@
   </div>
 
   <main class="app-shell">
+    <section id="auth-card" class="auth-card card hidden">
+      <div class="auth-head">
+        <div>
+          <p class="eyebrow">统一游戏账号</p>
+          <h2>登录并绑定 Telegram</h2>
+        </div>
+        <p id="auth-status" class="section-copy">修仙与斗破共用账号，完成 TG 绑定后才可进入游戏。</p>
+      </div>
+      <ol class="auth-steps" aria-label="进入游戏步骤">
+        <li><span>1</span><div><strong>登录或注册</strong><small>修仙与斗破共用同一个游戏账号</small></div></li>
+        <li><span>2</span><div><strong>绑定 Telegram</strong><small>一个账号只能绑定一个 TG 身份</small></div></li>
+        <li><span>3</span><div><strong>进入游戏</strong><small>网页与 Telegram Mini App 进度同步</small></div></li>
+      </ol>
+      <div class="auth-tabs" role="tablist" aria-label="账号操作">
+        <button type="button" class="ghost is-active" data-auth-mode="login">登录</button>
+        <button type="button" class="ghost" data-auth-mode="register">注册</button>
+      </div>
+      <form id="auth-login-form" class="mini-form auth-form">
+        <label>
+          账号
+          <input id="auth-login-username" type="text" autocomplete="username" maxlength="64" required>
+        </label>
+        <label>
+          密码
+          <input id="auth-login-password" type="password" autocomplete="current-password" maxlength="128" required>
+        </label>
+        <button type="submit">登录</button>
+      </form>
+      <form id="auth-register-form" class="mini-form auth-form hidden">
+        <label>
+          账号
+          <input id="auth-register-username" type="text" autocomplete="username" maxlength="64" required>
+        </label>
+        <label>
+          昵称
+          <input id="auth-register-display" type="text" autocomplete="nickname" maxlength="80">
+        </label>
+        <label>
+          密码
+          <input id="auth-register-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required>
+        </label>
+        <label>
+          确认密码
+          <input id="auth-register-confirm" type="password" autocomplete="new-password" minlength="8" maxlength="128" required>
+        </label>
+        <button type="submit">注册并登录</button>
+      </form>
+      <div id="auth-bind-panel" class="auth-bind-panel hidden">
+        <article class="stack-item">
+          <div class="stack-item-head">
+            <strong id="auth-account-name">未登录</strong>
+            <span id="auth-bind-state" class="tag">待绑定</span>
+          </div>
+          <p id="auth-bind-hint">请从 Telegram Mini App 打开此页完成绑定。</p>
+        </article>
+        <div class="auth-actions">
+          <button id="auth-bind-telegram" type="button">绑定当前 Telegram</button>
+          <button id="auth-close" type="button" class="ghost hidden">返回游戏</button>
+          <button id="auth-logout" type="button" class="ghost">退出账号</button>
+        </div>
+      </div>
+    </section>
+
     <section class="hero-panel card">
       <div class="hero-main">
         <p class="eyebrow">修仙界</p>
@@ -46,22 +114,86 @@
           </div>
           <button id="open-admin-panel" type="button" class="ghost">打开后台</button>
         </div>
+        <button id="open-account-center" type="button" class="ghost account-center-button">账号中心</button>
       </div>
     </section>
 
     <section id="fold-toolbar" class="card fold-toolbar hidden">
-      <div class="fold-toolbar-copy">
-        <p class="eyebrow">区块折叠</p>
-        <p id="fold-count" class="section-copy">当前显示 0 个模块</p>
-      </div>
-      <div class="fold-toolbar-actions">
-        <button type="button" class="ghost" data-fold-open-all>全部展开</button>
-        <button type="button" class="ghost" data-fold-close-all>全部收起</button>
+      <div class="fold-toolbar-head">
+        <p class="eyebrow">快捷跳转 <span id="fold-count" class="muted">(0)</span></p>
+        <div class="fold-toolbar-actions">
+          <button type="button" class="ghost mini" data-fold-open-all>展</button>
+          <button type="button" class="ghost mini" data-fold-close-all>收</button>
+        </div>
       </div>
       <div id="fold-shortcuts" class="fold-shortcuts" aria-label="模块快捷跳转"></div>
     </section>
 
-    <details id="enter-card" class="card fold-card hidden" open>
+    <details id="wiki-card" class="card fold-card">
+      <summary class="fold-summary">
+        <div>
+          <p class="eyebrow">修仙 Wiki</p>
+          <h2>玩法手册与掉落检索</h2>
+        </div>
+        <span class="summary-tip">首页随时可查教程、属性、材料、法宝、丹药、符箓、功法、称号、成就与配方来源</span>
+      </summary>
+      <div class="fold-body">
+        <article class="stack-item">
+          <div class="stack-item-head">
+            <strong>搜索修仙玩法</strong>
+            <span id="wiki-counts" class="summary-tip">正在整理词条...</span>
+          </div>
+          <label>
+            关键词
+            <input id="wiki-search" type="search" placeholder="可搜：真元、心志、闭关、补天丹、玄龟盾炼制图、长青诀、承道出山">
+          </label>
+          <p id="wiki-search-hint" class="section-copy">可搜索属性说明、玩法教程、秘境、奇遇、Boss、灵田、垂钓、赌坊、材料来源与配方获取方式，也可按入门、探索、炼制、战斗、任务、社交、宗门筛选。</p>
+          <div id="wiki-filter-row" class="wiki-filter-row">
+            <button type="button" class="ghost is-active" data-wiki-filter="all">全部</button>
+            <button type="button" class="ghost" data-wiki-filter="tutorial">玩法</button>
+            <button type="button" class="ghost" data-wiki-filter="attribute">属性</button>
+            <button type="button" class="ghost" data-wiki-filter="starter">入门</button>
+            <button type="button" class="ghost" data-wiki-filter="explore">探索</button>
+            <button type="button" class="ghost" data-wiki-filter="crafting">炼制</button>
+            <button type="button" class="ghost" data-wiki-filter="combat">战斗</button>
+            <button type="button" class="ghost" data-wiki-filter="task">任务</button>
+            <button type="button" class="ghost" data-wiki-filter="social">社交</button>
+            <button type="button" class="ghost" data-wiki-filter="sect">宗门</button>
+            <button type="button" class="ghost" data-wiki-filter="activity">活动</button>
+            <button type="button" class="ghost" data-wiki-filter="material">材料</button>
+            <button type="button" class="ghost" data-wiki-filter="artifact">法宝</button>
+            <button type="button" class="ghost" data-wiki-filter="pill">丹药</button>
+            <button type="button" class="ghost" data-wiki-filter="talisman">符箓</button>
+            <button type="button" class="ghost" data-wiki-filter="technique">功法</button>
+            <button type="button" class="ghost" data-wiki-filter="title">称号</button>
+            <button type="button" class="ghost" data-wiki-filter="recipe">配方</button>
+            <button type="button" class="ghost" data-wiki-filter="achievement">成就</button>
+          </div>
+        </article>
+
+        <details class="mini-fold">
+          <summary class="mini-fold-summary">
+            <h3>新手必看</h3>
+            <span class="summary-tip">先看节奏，再看路线与指令</span>
+          </summary>
+          <div class="mini-fold-body">
+            <div id="wiki-featured-list" class="stack-list"></div>
+          </div>
+        </details>
+
+        <details class="mini-fold">
+          <summary class="mini-fold-summary">
+            <h3>搜索结果</h3>
+            <span class="summary-tip">点击词条可展开完整说明</span>
+          </summary>
+          <div class="mini-fold-body">
+            <div id="wiki-result-list" class="stack-list"></div>
+          </div>
+        </details>
+      </div>
+    </details>
+
+    <details id="enter-card" class="card fold-card hidden">
       <summary class="fold-summary">
         <div>
           <p class="eyebrow">新手引导</p>
@@ -98,20 +230,20 @@
           <span class="summary-tip">切换佩戴称号，查看成就进度</span>
         </summary>
         <div class="fold-body">
-          <details class="mini-fold" open>
+          <details class="mini-fold">
             <summary class="mini-fold-summary">
               <h3>当前佩戴</h3>
-              <span class="summary-tip">展示中的称号与群头衔同步</span>
+              <span class="summary-tip">展示中的称号与群成员标签同步</span>
             </summary>
             <div class="mini-fold-body">
               <div class="inline-action-buttons">
-                <p id="title-sync-hint" class="section-copy">佩戴称号后，可尝试同步到群组头衔。</p>
-                <button id="title-group-sync-btn" type="button" class="ghost">同步到群头衔</button>
+                <p id="title-sync-hint" class="section-copy">佩戴称号后，可同步到群成员标签。</p>
+                <button id="title-group-sync-btn" type="button" class="ghost">同步到群标签</button>
               </div>
               <div id="current-title-summary" class="stack-list"></div>
             </div>
           </details>
-          <details class="mini-fold" open>
+          <details class="mini-fold">
             <summary class="mini-fold-summary">
               <h3>已拥有称号</h3>
               <span class="summary-tip">切换当前展示称号</span>
@@ -135,7 +267,7 @@
       <details id="action-card" class="card fold-card hidden">
         <summary class="fold-summary">
           <div>
-            <p class="eyebrow">日常修行</p>
+            <p class="eyebrow">洞府清修</p>
             <h2>修炼操作</h2>
           </div>
           <span class="summary-tip">吐纳、突破、闭关</span>
@@ -145,7 +277,7 @@
           <div class="action-grid">
             <button id="train-btn" type="button">吐纳修炼</button>
             <button id="break-btn" type="button">尝试突破</button>
-            <button id="break-pill-btn" type="button" class="ghost">服用筑基丹突破</button>
+            <button id="break-pill-btn" type="button" class="ghost">服用破境丹突破</button>
           </div>
           <div class="retreat-row">
             <label>
@@ -160,6 +292,199 @@
             <button id="retreat-start-btn" type="button">开始闭关</button>
             <button id="retreat-finish-btn" type="button" class="ghost">出关结算</button>
           </div>
+          <p id="retreat-time-hint" class="section-copy">开始闭关后，这里会显示本次闭关开始时间、预计出关时间和剩余时长。</p>
+          <article class="stack-item">
+            <div class="stack-item-head">
+              <strong>入世 / 避世</strong>
+              <button id="social-mode-btn" type="button" class="ghost">切换状态</button>
+            </div>
+            <p id="social-mode-summary" class="muted">当前默认入世，可与其他道友正常互动。</p>
+          </article>
+        </div>
+      </details>
+
+      <details id="furnace-card" class="card fold-card span-2 hidden">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">炉鼎因果</p>
+            <h2>炉鼎与采补</h2>
+          </div>
+          <span class="summary-tip">查看归属、脱离冷却与今日采补</span>
+        </summary>
+        <div class="fold-body">
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>当前因果</h3>
+              <span class="summary-tip">展示主人、炉鼎与当前状态</span>
+            </summary>
+            <div class="mini-fold-body">
+              <div id="furnace-self-summary" class="stack-list"></div>
+            </div>
+          </details>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>采补名册</h3>
+              <span class="summary-tip">主人可每天对每名炉鼎采补一次</span>
+            </summary>
+            <div class="mini-fold-body">
+              <div id="furnace-roster-list" class="stack-list"></div>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details id="marriage-card" class="card fold-card span-2 hidden">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">姻缘因果</p>
+            <h2>道侣姻缘</h2>
+          </div>
+          <span class="summary-tip">设置性别、缔结道侣、双修与和离分家</span>
+        </summary>
+        <div class="fold-body">
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>当前姻缘</h3>
+              <span class="summary-tip">查看性别、道侣状态与共享资产</span>
+            </summary>
+            <div class="mini-fold-body">
+              <div id="marriage-self-summary" class="stack-list"></div>
+              <div id="marriage-current-summary" class="stack-list"></div>
+            </div>
+          </details>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>设置性别</h3>
+              <span class="summary-tip">踏入仙途后必须先设定性别</span>
+            </summary>
+            <div class="mini-fold-body">
+              <form id="gender-set-form" class="mini-form">
+                <label>
+                  当前设定
+                  <select id="gender-select">
+                    <option value="male">男</option>
+                    <option value="female">女</option>
+                  </select>
+                </label>
+                <button type="submit">确认性别</button>
+              </form>
+              <p id="gender-set-hint" class="section-copy">未设置性别前，其他修仙玩法会被锁定。</p>
+            </div>
+          </details>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>递上结缘信物</h3>
+              <span class="summary-tip">搜索异性道友并发起道侣请求</span>
+            </summary>
+            <div class="mini-fold-body">
+              <form id="marriage-search-form" class="mini-form">
+                <label>
+                  搜索道友
+                  <input id="marriage-player-query" type="search" placeholder="输入昵称、@用户名或 TG ID">
+                </label>
+                <button id="marriage-player-search" type="submit" class="ghost">搜索道友</button>
+              </form>
+              <div id="marriage-target-selected" class="stack-list"></div>
+              <div id="marriage-player-search-results" class="stack-list"></div>
+              <form id="marriage-request-form" class="mini-form">
+                <label>
+                  留信内容
+                  <textarea id="marriage-request-message" rows="3" placeholder="可选：写下结缘之意、来意或约定"></textarea>
+                </label>
+                <button type="submit">送出结缘信物</button>
+              </form>
+              <p id="marriage-request-hint" class="section-copy">先设置性别并选中目标，才可递上结缘信物。</p>
+            </div>
+          </details>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>待处理信物</h3>
+              <span class="summary-tip">收到的可同意或婉拒，你送出的可撤回</span>
+            </summary>
+            <div class="mini-fold-body">
+              <div id="marriage-incoming-list" class="stack-list"></div>
+              <div id="marriage-outgoing-list" class="stack-list"></div>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details id="mentorship-card" class="card fold-card span-2 hidden">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">师承因果</p>
+            <h2>师徒传承</h2>
+          </div>
+          <span class="summary-tip">拜师、收徒、传道、问道与出师</span>
+        </summary>
+        <div class="fold-body">
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>当前师承</h3>
+              <span class="summary-tip">查看师尊、弟子与可用名额</span>
+            </summary>
+            <div class="mini-fold-body">
+              <div id="mentorship-self-summary" class="stack-list"></div>
+              <div id="mentorship-mentor-current" class="stack-list"></div>
+              <div id="mentorship-disciple-list" class="stack-list"></div>
+            </div>
+          </details>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>递上拜帖</h3>
+              <span class="summary-tip">先搜索道友，再选择拜师或收徒</span>
+            </summary>
+            <div class="mini-fold-body">
+              <form id="mentorship-search-form" class="mini-form">
+                <label>
+                  搜索道友
+                  <input id="mentorship-player-query" type="search" placeholder="输入昵称、@用户名或 TG ID">
+                </label>
+                <button id="mentorship-player-search" type="submit" class="ghost">搜索道友</button>
+              </form>
+              <div id="mentorship-target-selected" class="stack-list"></div>
+              <div id="mentorship-player-search-results" class="stack-list"></div>
+              <form id="mentorship-request-form" class="mini-form">
+                <label>
+                  发起方式
+                  <select id="mentorship-request-role">
+                    <option value="disciple">向对方拜师</option>
+                    <option value="mentor">邀请对方拜入门下</option>
+                  </select>
+                </label>
+                <label>
+                  留帖内容
+                  <textarea id="mentorship-request-message" rows="3" placeholder="可选：说明来意、传承方向或想学的路数"></textarea>
+                </label>
+                <button type="submit">递上师徒拜帖</button>
+              </form>
+              <p id="mentorship-request-hint" class="section-copy">完成搜索并选中目标后，才可递上拜帖。</p>
+            </div>
+          </details>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>待处理名帖</h3>
+              <span class="summary-tip">收到的可直接同意或婉拒</span>
+            </summary>
+            <div class="mini-fold-body">
+              <div id="mentorship-incoming-list" class="stack-list"></div>
+              <div id="mentorship-outgoing-list" class="stack-list"></div>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details id="commission-card" class="card fold-card hidden">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">坊市委托</p>
+            <h2>灵石差事</h2>
+          </div>
+          <span class="summary-tip">打工、抓灵兽、修灵剑，按境界逐步开放</span>
+        </summary>
+        <div class="fold-body">
+          <p class="section-copy">每日修行之外，还可以接坊市委托赚取灵石与修为。委托会受境界、闭关状态与冷却影响。</p>
+          <div id="commission-list" class="stack-list"></div>
         </div>
       </details>
 
@@ -192,32 +517,81 @@
         </div>
       </details>
 
+      <details id="gambling-card" class="card fold-card span-2 hidden">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">赌坊奇缘</p>
+            <h2>仙界奇石</h2>
+          </div>
+          <span class="summary-tip">灵石兑换奇石，开启随机宝物</span>
+        </summary>
+        <div class="fold-body">
+          <div id="gambling-summary" class="info-grid"></div>
+          <div class="compact-grid">
+            <form id="gambling-exchange-form" class="mini-form">
+              <label>
+                兑换数量
+                <input id="gambling-exchange-count" type="number" min="1" value="1">
+              </label>
+              <button type="submit">兑换仙界奇石</button>
+            </form>
+            <form id="gambling-open-form" class="mini-form">
+              <label>
+                开启数量
+                <input id="gambling-open-count" type="number" min="1" value="1">
+              </label>
+              <button type="submit">开启奇石</button>
+            </form>
+          </div>
+          <p id="gambling-note" class="section-copy">高品阶奖励基础概率更低，机缘越高越容易抬升稀有奖励权重。</p>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>当前奖池预览</h3>
+              <span class="summary-tip">按机缘修正后的实时概率展示</span>
+            </summary>
+            <div class="mini-fold-body">
+              <div id="gambling-pool-list" class="stack-list"></div>
+            </div>
+          </details>
+        </div>
+      </details>
+
       <details id="inventory-card" class="card fold-card span-2 hidden">
         <summary class="fold-summary">
           <div>
-            <p class="eyebrow">仓储整理</p>
+            <p class="eyebrow">纳戒须弥</p>
             <h2>背包与装备</h2>
           </div>
-          <span class="summary-tip">法宝、符箓、丹药分栏展示</span>
+          <span class="summary-tip">法宝、符箓、丹药、材料分栏展示</span>
         </summary>
         <div class="fold-body">
           <div class="inventory-columns">
-            <details class="mini-fold" open>
+            <details class="mini-fold">
               <summary class="mini-fold-summary"><h3>法宝</h3><span class="summary-tip">装备、绑定与套装</span></summary>
               <div class="mini-fold-body">
+                <input id="artifact-search" type="search" placeholder="搜索法宝名称、词缀或套装">
                 <div id="artifact-list" class="stack-list"></div>
               </div>
             </details>
             <details class="mini-fold">
-              <summary class="mini-fold-summary"><h3>符箓</h3><span class="summary-tip">预装待生效符箓</span></summary>
+              <summary class="mini-fold-summary"><h3>符箓</h3><span class="summary-tip">启用生效符箓</span></summary>
               <div class="mini-fold-body">
+                <input id="talisman-search" type="search" placeholder="搜索符箓名称或效果">
                 <div id="talisman-list" class="stack-list"></div>
               </div>
             </details>
             <details class="mini-fold">
               <summary class="mini-fold-summary"><h3>丹药</h3><span class="summary-tip">消耗品与突破辅助</span></summary>
               <div class="mini-fold-body">
+                <input id="pill-search" type="search" placeholder="搜索丹药名称或类型">
                 <div id="pill-list" class="stack-list"></div>
+              </div>
+            </details>
+            <details class="mini-fold">
+              <summary class="mini-fold-summary"><h3>材料</h3><span class="summary-tip">炼制、交易与任务提交</span></summary>
+              <div class="mini-fold-body">
+                <input id="material-inventory-search" type="search" placeholder="搜索材料名称、品质或用途">
+                <div id="material-inventory-list" class="stack-list"></div>
               </div>
             </details>
           </div>
@@ -234,7 +608,7 @@
         </summary>
         <div class="fold-body">
           <p id="technique-discovery-hint" class="section-copy">功法需要通过探索、机缘或后台发放解锁，不会在开局自动获得。</p>
-          <details class="mini-fold" open>
+          <details class="mini-fold">
             <summary class="mini-fold-summary">
               <h3>当前参悟</h3>
               <span class="summary-tip">当前生效的主修功法</span>
@@ -243,7 +617,7 @@
               <div id="technique-current" class="stack-list"></div>
             </div>
           </details>
-          <details class="mini-fold" open>
+          <details class="mini-fold">
             <summary class="mini-fold-summary">
               <h3>已掌握功法</h3>
               <span class="summary-tip">仅展示已解锁内容</span>
@@ -261,9 +635,13 @@
             <p class="eyebrow">官方供给</p>
             <h2 id="official-shop-title">官方商店</h2>
           </div>
-          <span class="summary-tip">官方上架区</span>
+          <span class="summary-tip">官方上架区与归炉入口</span>
         </summary>
         <div class="fold-body">
+          <div class="inline-action-buttons">
+            <p class="section-copy">官方商品购买价会按品阶与属性自动估价，背包里多余的法宝、符箓、丹药、材料、功法与配方也可按同体系投入万宝归炉。</p>
+            <button id="official-recycle-jump-from-shop" type="button" class="ghost">前往万宝归炉</button>
+          </div>
           <div id="official-shop-list" class="stack-list"></div>
           <section>
             <h3 id="official-recycle-title">官方回收</h3>
@@ -295,15 +673,83 @@
         </div>
       </details>
 
+      <details id="official-recycle-card" class="card fold-card hidden">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">炼器归藏</p>
+            <h2>万宝归炉</h2>
+          </div>
+          <span class="summary-tip">万物入炉，折算灵石</span>
+        </summary>
+        <div class="fold-body">
+          <p id="official-recycle-hint" class="section-copy">万宝归炉会按物品品阶与属性自动折价，归炉价会明显低于购买价，避免高价套利。</p>
+          <form id="official-recycle-form" class="mini-form">
+            <div class="compact-grid">
+              <label>
+                归炉类型
+                <select id="official-recycle-kind">
+                  <option value="artifact">法宝</option>
+                  <option value="talisman">符箓</option>
+                  <option value="pill">丹药</option>
+                  <option value="material">材料</option>
+                  <option value="technique">功法</option>
+                  <option value="recipe">配方</option>
+                </select>
+              </label>
+              <label>
+                物品
+                <select id="official-recycle-item-ref"></select>
+              </label>
+              <label>
+                数量
+                <input id="official-recycle-quantity" type="number" min="1" value="1">
+              </label>
+              <label class="wide-field">
+                当前报价
+                <input id="official-recycle-preview" type="text" value="请选择可归炉物品" readonly>
+              </label>
+            </div>
+            <button type="submit">投入万宝炉</button>
+            <p class="section-copy">下方报价卡支持直接勾选并批量归炉，法宝列表也会显示品阶，避免来回切换查看。</p>
+          </form>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>万宝炉报价</h3>
+              <span class="summary-tip">按类型分组，可搜索名称、品阶、类型</span>
+            </summary>
+            <div class="mini-fold-body">
+              <label class="wide-field">
+                搜索报价
+                <input id="official-recycle-search" type="search" placeholder="搜索名称、品阶、类型或说明">
+              </label>
+              <div class="inline-actions recycle-batch-toolbar">
+                <button id="official-recycle-select-visible" type="button" class="ghost">勾选当前筛选</button>
+                <button id="official-recycle-clear-selection" type="button" class="ghost">清空勾选</button>
+                <button id="official-recycle-batch-submit" type="button">一键归炉勾选项</button>
+              </div>
+              <label class="wide-field">
+                批量预估
+                <input id="official-recycle-batch-preview" type="text" value="未勾选归炉物品" readonly>
+              </label>
+              <div id="official-recycle-list" class="stack-list recycle-quote-list"></div>
+            </div>
+          </details>
+        </div>
+      </details>
+
       <details id="market-card" class="card fold-card span-2 hidden">
         <summary class="fold-summary">
           <div>
             <p class="eyebrow">交易往来</p>
             <h2>坊市</h2>
           </div>
-          <span class="summary-tip">个人店铺与群修市集</span>
+          <span class="summary-tip">个人店铺、群修市集与归炉跳转</span>
         </summary>
         <div class="fold-body">
+          <div class="inline-action-buttons">
+            <p class="section-copy">不想上架或卖不动的物品，可直接投入万宝归炉换成灵石。</p>
+            <button id="official-recycle-jump-from-market" type="button" class="ghost">去万宝归炉</button>
+          </div>
           <form id="personal-shop-form" class="mini-form">
             <div class="compact-grid">
               <label class="wide-field">
@@ -352,19 +798,83 @@
         </div>
       </details>
 
+      <details id="auction-card" class="card fold-card span-2 hidden">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">竞价流转</p>
+            <h2>拍卖行</h2>
+          </div>
+          <span class="summary-tip">群内推送、置顶竞拍、结束自动结算</span>
+        </summary>
+        <div class="fold-body">
+          <form id="personal-auction-form" class="mini-form">
+            <div class="compact-grid">
+              <label>
+                拍卖类型
+                <select id="auction-item-kind">
+                  <option value="artifact">法宝</option>
+                  <option value="talisman">符箓</option>
+                  <option value="pill">丹药</option>
+                  <option value="material">材料</option>
+                  <option value="technique">功法</option>
+                </select>
+              </label>
+              <label>
+                拍品
+                <select id="auction-item-ref"></select>
+              </label>
+              <label>
+                数量
+                <input id="auction-quantity" type="number" min="1" value="1">
+              </label>
+              <label>
+                起拍价
+                <input id="auction-opening-price" type="number" min="0" value="10">
+              </label>
+              <label>
+                每次加价
+                <input id="auction-bid-increment" type="number" min="1" value="1">
+              </label>
+              <label>
+                一口价
+                <input id="auction-buyout-price" type="number" min="0" placeholder="不填则不启用">
+              </label>
+              <label>
+                成交手续费
+                <input id="auction-fee-display" type="text" value="-" readonly>
+              </label>
+              <label>
+                拍卖时长
+                <input id="auction-duration-display" type="text" value="-" readonly>
+              </label>
+            </div>
+            <p class="section-copy">成交手续费由后台统一设定。拍卖发起后会自动推送到群里并置顶，竞拍请在群消息上点击按钮完成。</p>
+            <button type="submit">发起群内拍卖</button>
+          </form>
+          <section>
+            <h3>我的拍卖</h3>
+            <div id="personal-auction-list" class="stack-list"></div>
+          </section>
+          <section>
+            <h3>群内拍卖</h3>
+            <div id="community-auction-list" class="stack-list"></div>
+          </section>
+        </div>
+      </details>
+
       <details id="sect-card" class="card fold-card span-2 hidden">
         <summary class="fold-summary">
           <div>
             <p class="eyebrow">仙门势力</p>
             <h2>宗门</h2>
           </div>
-          <span class="summary-tip">加入宗门、领取俸禄、叛出宗门</span>
+          <span class="summary-tip">加入宗门、点卯、宝库、贡献晋升与俸禄</span>
         </summary>
         <div class="fold-body">
-          <details class="mini-fold" open>
+          <details class="mini-fold">
             <summary class="mini-fold-summary">
               <h3>当前宗门</h3>
-              <span class="summary-tip">月俸、职位与宗门加成</span>
+              <span class="summary-tip">月俸、职位、贡献与宗门加成</span>
             </summary>
             <div class="mini-fold-body">
               <div class="inline-action-buttons">
@@ -374,7 +884,63 @@
               <div id="sect-current" class="stack-list"></div>
             </div>
           </details>
-          <details class="mini-fold" open>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>宗门点卯</h3>
+              <span class="summary-tip">每日签到独立计算，传功与捐物另外累积贡献</span>
+            </summary>
+            <div class="mini-fold-body">
+              <p id="sect-attendance-note" class="section-copy">点卯是每日宗门签到；传功与捐物是独立贡献行为，不再占用签到次数。</p>
+              <div class="form-actions">
+                <button id="sect-attendance-btn" type="button">今日点卯签到</button>
+              </div>
+              <form id="sect-teach-form" class="mini-form">
+                <div class="compact-grid">
+                  <label>
+                    传功修为
+                    <input id="sect-teach-amount" type="number" min="1000" step="1000" value="2000" placeholder="至少 1000">
+                  </label>
+                  <div class="form-actions">
+                    <button id="sect-teach-btn" type="submit">传功</button>
+                  </div>
+                </div>
+              </form>
+              <form id="sect-donate-form" class="mini-form">
+                <div class="compact-grid">
+                  <label>
+                    物品类型
+                    <select id="sect-donate-kind">
+                      <option value="material">材料</option>
+                      <option value="artifact">法宝</option>
+                      <option value="pill">丹药</option>
+                      <option value="talisman">符箓</option>
+                    </select>
+                  </label>
+                  <label>
+                    提交物品
+                    <select id="sect-donate-ref"></select>
+                  </label>
+                  <label>
+                    提交数量
+                    <input id="sect-donate-quantity" type="number" min="1" value="1">
+                  </label>
+                  <div class="form-actions">
+                    <button id="sect-donate-btn" type="submit">捐入宗门宝库</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </details>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>宗门宝库</h3>
+              <span class="summary-tip">查看已入库物资与高品捐赠</span>
+            </summary>
+            <div class="mini-fold-body">
+              <div id="sect-treasury" class="stack-list"></div>
+            </div>
+          </details>
+          <details class="mini-fold">
             <summary class="mini-fold-summary">
               <h3>可加入宗门</h3>
               <span class="summary-tip">按门槛与阵营筛选</span>
@@ -408,9 +974,32 @@
                 <select id="task-type">
                   <option value="custom">普通任务</option>
                   <option value="quiz">答题任务</option>
+                  <option value="metric">计数任务</option>
                 </select>
               </label>
-              <label>奖励灵石<input id="task-reward-stone" type="number" min="0" value="0"></label>
+              <label>奖励灵石<input id="task-reward-stone" type="number" min="0" value="10"></label>
+              <label>奖励修为<input id="task-reward-cultivation" type="number" min="0" value="0"></label>
+              <label>奖励物类型
+                <select id="task-reward-kind">
+                  <option value="">无</option>
+                  <option value="material">材料</option>
+                  <option value="artifact">法宝</option>
+                  <option value="pill">丹药</option>
+                  <option value="talisman">符箓</option>
+                  <option value="recipe">配方</option>
+                  <option value="technique">功法</option>
+                </select>
+              </label>
+              <label>奖励物
+                <select id="task-reward-ref"></select>
+              </label>
+              <label>奖励物数量<input id="task-reward-quantity" type="number" min="0" value="0"></label>
+              <label>奖励缩放
+                <select id="task-reward-scale-mode">
+                  <option value="fixed">固定奖励</option>
+                  <option value="realm">按领取者境界缩放</option>
+                </select>
+              </label>
               <label>领取上限<input id="task-max-claimants" type="number" min="1" value="1"></label>
               <label>需提交物类型
                 <select id="task-required-kind">
@@ -425,6 +1014,10 @@
                 <select id="task-required-ref"></select>
               </label>
               <label>需提交数量<input id="task-required-quantity" type="number" min="0" value="0"></label>
+              <label>计数指标
+                <select id="task-metric-key"></select>
+              </label>
+              <label>目标次数<input id="task-metric-target" type="number" min="0" value="0"></label>
               <label class="wide-field">任务描述<textarea id="task-description" rows="3" placeholder="请至少写明 6 个字的目标、要求与额外说明"></textarea></label>
               <label class="wide-field">题目内容<textarea id="task-question" rows="3" placeholder="答题任务请写清题目内容"></textarea></label>
               <label>标准答案<input id="task-answer" type="text" placeholder="仅答题任务使用"></label>
@@ -440,9 +1033,107 @@
               <label class="inline-check"><input id="task-push-group" type="checkbox"> 推送到群内</label>
             </div>
             <button type="submit">发布悬赏</button>
-            <p id="task-compose-note" class="section-copy">发布前请补充清晰信息，信息不足会被拦截。</p>
+            <p id="task-compose-note" class="section-copy">发布前请补充清晰信息，且必须设置奖励。</p>
           </form>
           <div id="task-list" class="stack-list"></div>
+        </div>
+      </details>
+
+      <details id="farm-card" class="card fold-card span-2 hidden">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">药圃经营</p>
+            <h2>灵田种植</h2>
+          </div>
+          <span class="summary-tip">播种、照料、收获丹方材料</span>
+        </summary>
+        <div class="fold-body">
+          <div id="farm-summary" class="info-grid"></div>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>播种与药材目录</h3>
+              <span class="summary-tip">搜索可种灵药并直接选择地块播种</span>
+            </summary>
+            <div class="mini-fold-body">
+              <form id="farm-plant-form" class="mini-form">
+                <div class="compact-grid">
+                  <label>
+                    选择地块
+                    <select id="farm-slot-select"></select>
+                  </label>
+                  <label>
+                    选择灵种
+                    <select id="farm-material-select"></select>
+                  </label>
+                  <label>
+                    搜索药材
+                    <input id="farm-material-search" type="search" placeholder="搜索材料名、丹方、境界要求">
+                  </label>
+                </div>
+                <button type="submit">播种灵药</button>
+                <p id="farm-plant-hint" class="section-copy">成熟后会直接进入材料背包，可用于炼丹。</p>
+              </form>
+              <div id="farm-material-catalog" class="stack-list"></div>
+            </div>
+          </details>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>灵田地块</h3>
+              <span class="summary-tip">浇灌、施肥、除虫与收获都在这里处理</span>
+            </summary>
+            <div class="mini-fold-body">
+              <div id="farm-plot-list" class="stack-list"></div>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details id="fishing-card" class="card fold-card span-2 hidden">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">水脉机缘</p>
+            <h2>灵河垂钓</h2>
+          </div>
+          <span class="summary-tip">不同钓场产出不同，机缘越高越容易出高品</span>
+        </summary>
+        <div class="fold-body">
+          <div id="fishing-summary" class="info-grid"></div>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>钓场一览</h3>
+              <span class="summary-tip">查看门槛、概率预览与可能钓获</span>
+            </summary>
+            <div class="mini-fold-body">
+              <p id="fishing-note" class="section-copy">高品阶物品基础概率更低，机缘会抬升高品掉率。</p>
+              <div id="fishing-spot-list" class="stack-list"></div>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details id="boss-card" class="card fold-card span-2 hidden">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">天地共伐</p>
+            <h2>Boss讨伐</h2>
+          </div>
+          <span class="summary-tip">个人挑战·世界共伐，击败Boss获取稀有掉落</span>
+        </summary>
+        <div class="fold-body">
+          <div id="boss-summary" class="boss-overview"></div>
+          <div id="boss-tabs" class="tab-bar boss-tab-row">
+            <button type="button" class="tab-btn is-active" data-boss-tab="personal">个人Boss</button>
+            <button type="button" class="tab-btn" data-boss-tab="world">世界Boss</button>
+          </div>
+          <div id="boss-personal-panel" class="boss-panel">
+            <p id="boss-personal-note" class="section-copy"></p>
+            <div id="boss-personal-list" class="stack-list boss-list"></div>
+          </div>
+          <div id="boss-world-panel" class="boss-panel hidden">
+            <p id="boss-world-note" class="section-copy"></p>
+            <div id="boss-world-status" class="stack-list boss-world-status"></div>
+            <div id="boss-world-rankings" class="stack-list boss-ranking-wrap"></div>
+          </div>
         </div>
       </details>
 
@@ -456,21 +1147,33 @@
         </summary>
         <div class="fold-body">
           <p id="recipe-discovery-hint" class="section-copy">配方需要先拥有后才能开炉炼制，不会在入道时自动发放。</p>
-          <details class="mini-fold" open>
+          <details class="mini-fold">
             <summary class="mini-fold-summary">
               <h3>材料背包</h3>
               <span class="summary-tip">炼丹、炼器与制符用材</span>
             </summary>
             <div class="mini-fold-body">
+              <input id="material-search" type="search" placeholder="搜索材料名称或品质">
               <div id="material-list" class="stack-list"></div>
             </div>
           </details>
-          <details class="mini-fold" open>
+          <details class="mini-fold">
+            <summary class="mini-fold-summary">
+              <h3>残页参悟</h3>
+              <span class="summary-tip">消耗残页补全缺失配方</span>
+            </summary>
+            <div class="mini-fold-body">
+              <p class="section-copy">残页可先参悟成完整配方，再进入下方炼制列表开炉。</p>
+              <div id="recipe-fragment-synthesis-list" class="stack-list"></div>
+            </div>
+          </details>
+          <details class="mini-fold">
             <summary class="mini-fold-summary">
               <h3>炼制配方</h3>
               <span class="summary-tip">仅展示已探索获得的配方</span>
             </summary>
             <div class="mini-fold-body">
+              <input id="recipe-search" type="search" placeholder="搜索配方、成品、材料或获取路径">
               <div id="recipe-list" class="stack-list"></div>
             </div>
           </details>
@@ -486,7 +1189,7 @@
           <span class="summary-tip">派遣探索与领取奖励</span>
         </summary>
         <div class="fold-body">
-          <details class="mini-fold" open>
+          <details class="mini-fold">
             <summary class="mini-fold-summary">
               <h3>当前探索</h3>
               <span class="summary-tip">查看倒计时与待领取奖励</span>
@@ -495,12 +1198,13 @@
               <div id="exploration-active" class="stack-list"></div>
             </div>
           </details>
-          <details class="mini-fold" open>
+          <details class="mini-fold">
             <summary class="mini-fold-summary">
               <h3>探索场景</h3>
               <span class="summary-tip">查看掉落、机缘与派遣入口</span>
             </summary>
             <div class="mini-fold-body">
+              <input id="scene-search" type="search" placeholder="搜索秘境、掉落、功法或材料">
               <div id="scene-list" class="stack-list"></div>
             </div>
           </details>
@@ -554,20 +1258,83 @@
             <p class="eyebrow">记录中心</p>
             <h2>往来与日志</h2>
           </div>
-          <span class="summary-tip">赠石记录与近 24 小时动态</span>
+          <span class="summary-tip">群聊命令与近 24 小时动态</span>
         </summary>
         <div class="fold-body">
-          <form id="gift-form" class="mini-form">
-            <div class="compact-grid">
-              <label>目标 TG ID<input id="gift-target" type="number" min="1" placeholder="输入对方 TG ID"></label>
-              <label>赠送灵石<input id="gift-amount" type="number" min="1" value="100"></label>
+          <section>
+            <h3>群聊快捷命令</h3>
+            <div class="stack-list">
+              <article class="stack-item">
+                <strong>/train</strong>
+                <p>群里直接完成一次吐纳修炼。</p>
+              </article>
+              <article class="stack-item">
+                <strong>/work [委托名]</strong>
+                <p>群里承接灵石委托，默认会自动挑一项当前最划算的。</p>
+              </article>
+              <article class="stack-item">
+                <strong>/salary</strong>
+                <p>群里直接领取宗门俸禄，不必回到 Mini App。</p>
+              </article>
+              <article class="stack-item">
+                <strong>/gift 100</strong>
+                <p>回复目标消息后直接赠石，老的 TGID 写法也仍可继续使用。</p>
+              </article>
             </div>
-            <button type="submit">赠送灵石</button>
-          </form>
+          </section>
           <section>
             <h3>近 24 小时日志</h3>
             <div id="journal-list" class="stack-list"></div>
           </section>
+        </div>
+      </details>
+
+      <details id="gift-card" class="card fold-card span-2 hidden">
+        <summary class="fold-summary">
+          <div>
+            <p class="eyebrow">同道往来</p>
+            <h2>赠礼系统</h2>
+          </div>
+          <span class="summary-tip">搜索道友、赠送灵石与背包物品</span>
+        </summary>
+        <div class="fold-body">
+          <form id="gift-target-search-form" class="mini-form">
+            <label class="wide-field">
+              搜索目标道友
+              <div class="inline-actions">
+                <input id="gift-player-query" type="search" placeholder="输入 @用户名、TG ID 或昵称">
+                <button id="gift-player-search" type="submit" class="ghost">搜索</button>
+              </div>
+              <span class="section-copy">仅显示昵称和 @用户名，不暴露对方境界与其他面板信息。</span>
+            </label>
+          </form>
+          <div id="gift-target-selected" class="stack-list"></div>
+          <div id="gift-player-search-results" class="stack-list"></div>
+          <form id="gift-form" class="mini-form">
+            <div class="compact-grid">
+              <input id="gift-target" type="hidden">
+              <label>赠送灵石<input id="gift-amount" type="number" min="1" value="100"></label>
+            </div>
+            <button type="submit">赠送灵石</button>
+          </form>
+          <form id="item-gift-form" class="mini-form">
+            <div class="compact-grid">
+              <label>物品类型
+                <select id="item-gift-kind">
+                  <option value="artifact">法宝</option>
+                  <option value="pill">丹药</option>
+                  <option value="talisman">符箓</option>
+                  <option value="material">材料</option>
+                </select>
+              </label>
+              <label>背包物品
+                <select id="item-gift-ref"></select>
+              </label>
+              <label>赠送数量<input id="item-gift-quantity" type="number" min="1" value="1"></label>
+            </div>
+            <p id="item-gift-hint" class="section-copy">先搜索并选中一位道友，再赠送背包物品。</p>
+            <button type="submit">赠送背包物品</button>
+          </form>
         </div>
       </details>
 
@@ -596,9 +1363,18 @@
     </div>
   </main>
 
+  <div class="fab-container">
+    <button id="fab-admin" class="fab admin-fab hidden" title="管理后台">
+      <svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.73,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+    </button>
+    <button id="fab-totop" class="fab hidden" title="返回顶部">
+      <svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg>
+    </button>
+  </div>
+
   <nav id="bottom-nav" class="bottom-nav"></nav>
 
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/plugins/xiuxian/static/app.js"></script>
+  <script defer src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script defer src="/plugins/xiuxian/static/app.js"></script>
 </body>
 </html>

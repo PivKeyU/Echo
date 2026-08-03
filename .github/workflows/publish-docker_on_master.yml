@@ -41,4 +41,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/pivkeyu_emby:latest
+            ${{ secrets.DOCKER_USERNAME }}/echo:latest

@@ -7,6 +7,7 @@ Create Date: 2026-04-15 10:20:00
 
 from alembic import op
 import sqlalchemy as sa
+from datetime import datetime
 
 
 revision = "20260415_28"
@@ -72,21 +73,29 @@ def upgrade() -> None:
             sa.column("updated_at", sa.DateTime()),
         )
         bind = op.get_bind()
-        bind.execute(
-            settings.insert().prefix_with("IGNORE"),
-            [
-                {
-                    "setting_key": "slave_tribute_percent",
-                    "setting_value": 20,
-                    "updated_at": sa.func.now(),
-                },
-                {
-                    "setting_key": "slave_challenge_cooldown_hours",
-                    "setting_value": 24,
-                    "updated_at": sa.func.now(),
-                },
-            ],
-        )
+        default_rows = [
+            {
+                "setting_key": "slave_tribute_percent",
+                "setting_value": 20,
+                "updated_at": datetime.utcnow(),
+            },
+            {
+                "setting_key": "slave_challenge_cooldown_hours",
+                "setting_value": 24,
+                "updated_at": datetime.utcnow(),
+            },
+        ]
+        existing_keys = {
+            row[0]
+            for row in bind.execute(
+                sa.select(settings.c.setting_key).where(
+                    settings.c.setting_key.in_([row["setting_key"] for row in default_rows])
+                )
+            )
+        }
+        missing_rows = [row for row in default_rows if row["setting_key"] not in existing_keys]
+        if missing_rows:
+            bind.execute(settings.insert(), missing_rows)
 
 
 def downgrade() -> None:

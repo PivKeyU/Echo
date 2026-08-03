@@ -1,9 +1,8 @@
 #! /usr/bin/python3
 # -*- coding: utf-8 -*-
 
-from asyncio import sleep
-
 import asyncio
+from asyncio import sleep
 
 from pyrogram import filters, enums
 from pyrogram.errors import FloodWait, Forbidden, BadRequest
@@ -11,6 +10,48 @@ from pyrogram.types import CallbackQuery
 from pyromod.exceptions import ListenerTimeout
 from bot import LOGGER, group, bot
 from typing import Optional
+
+
+_AUTO_DELETE_TASKS: set[asyncio.Task] = set()
+
+
+def _track_background_task(task: asyncio.Task) -> None:
+    _AUTO_DELETE_TASKS.add(task)
+
+    def _cleanup(done_task: asyncio.Task) -> None:
+        _AUTO_DELETE_TASKS.discard(done_task)
+        try:
+            done_task.result()
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            LOGGER.warning(f"后台删除消息任务失败: {exc}")
+
+    task.add_done_callback(_cleanup)
+
+
+def _schedule_delete_message(message, timer) -> None:
+    try:
+        delay = max(float(timer), 0)
+    except (TypeError, ValueError):
+        delay = 0
+    target = message.message if isinstance(message, CallbackQuery) else message
+    task = asyncio.create_task(_delete_message_later(target, delay))
+    _track_background_task(task)
+
+
+def _send_targets(chat_id=None):
+    if chat_id is None:
+        return [group[0]] if group else []
+    if isinstance(chat_id, (list, tuple, set)):
+        return list(chat_id)
+    return [chat_id]
+
+
+async def _delete_message_later(message, delay: float) -> None:
+    if delay > 0:
+        await asyncio.sleep(delay)
+    await deleteMessage(message)
 
 
 # 将来自己要是重写，希望不要把/cancel当关键词，用call.data，省代码还好看，切记。
@@ -22,20 +63,41 @@ async def sendMessage(message, text: str, buttons=None, timer=None, send=False, 
     :param text: 实体
     :param buttons: 按钮
     :param timer: 定时删除
-    :param send: 非reply,发送到第一个主授权群组
+    :param send: 非reply,发送到授权群组
     :return:
     """
     if isinstance(message, CallbackQuery):
         message = message.message
     try:
         if send is True:
-            if chat_id is None:
-                chat_id = group[0]
-            return await bot.send_message(chat_id=chat_id, text=text, reply_markup=buttons, parse_mode=parse_mode)
+            targets = _send_targets(chat_id)
+            sent_messages = []
+            send_errors = []
+            for target in targets:
+                try:
+                    sent_messages.append(
+                        await bot.send_message(chat_id=target, text=text, reply_markup=buttons, parse_mode=parse_mode)
+                    )
+                except FloodWait as f:
+                    LOGGER.warning(str(f))
+                    await sleep(f.value * 1.2)
+                    try:
+                        sent_messages.append(
+                            await bot.send_message(chat_id=target, text=text, reply_markup=buttons, parse_mode=parse_mode)
+                        )
+                    except Exception as e:
+                        LOGGER.error(f"授权群消息发送失败 chat_id={target}: {e}")
+                        send_errors.append(f"{target}: {e}")
+                except Exception as e:
+                    LOGGER.error(f"授权群消息发送失败 chat_id={target}: {e}")
+                    send_errors.append(f"{target}: {e}")
+            if sent_messages:
+                return sent_messages if len(sent_messages) > 1 else sent_messages[0]
+            return "; ".join(send_errors) if send_errors else False
         # 禁用通知 disable_notification=True,
         send = await message.reply(text=text, quote=True, disable_web_page_preview=True, reply_markup=buttons)
         if timer is not None:
-            return await deleteMessage(send, timer)
+            _schedule_delete_message(send, timer)
         return True
     except FloodWait as f:
         LOGGER.warning(str(f))
@@ -59,7 +121,7 @@ async def editMessage(message, text: str, buttons=None, timer=None, parse_mode: 
     try:
         edt = await message.edit(text=text, disable_web_page_preview=True, reply_markup=buttons, parse_mode=parse_mode)
         if timer is not None:
-            return await deleteMessage(edt, timer)
+            _schedule_delete_message(edt, timer)
         return True
     except FloodWait as f:
         LOGGER.warning(str(f))
@@ -128,7 +190,7 @@ async def sendPhoto(message, photo, caption=None, buttons=None, timer=None, send
         send = await message.reply_photo(photo=photo, caption=caption, disable_notification=True,
                                          reply_markup=buttons)
         if timer is not None:
-            return await deleteMessage(send, timer)
+            _schedule_delete_message(send, timer)
         return True
     except FloodWait as f:
         LOGGER.warning(str(f))
@@ -147,7 +209,8 @@ async def deleteMessage(message, timer=None):
     :return:
     """
     if timer is not None:
-        await asyncio.sleep(timer)
+        _schedule_delete_message(message, timer)
+        return True
     if isinstance(message, CallbackQuery):
         try:
             await message.message.delete()
@@ -212,23 +275,6 @@ async def callListen(callbackquery, timer: int = 120, buttons=None):
         return False
 
 
-async def call_dice_listen(callbackquery, timer: int = 120, buttons=None):
-    try:
-        return await callbackquery.message.chat.listen(filters.dice, timeout=timer)
-    except ListenerTimeout:
-        await editMessage(callbackquery, '💦 __没有获取到您的输入__ **会话状态自动取消！**', buttons=buttons)
-        return False
-
-
-async def callAsk(callbackquery, text, timer: int = 120, button=None):
-    # 使用ask方法发送一条消息，并等待用户的回复，最多120秒，只接受文本类型的消息
-    try:
-        txt = await callbackquery.message.chat.ask(text, filters=filters.CallbackQuery, timeout=timer, button=button)
-        return True
-    except:
-        return False
-
-
 async def ask_return(update, text, timer: int = 120, button=None):
     if isinstance(update, CallbackQuery):
         update = update.message
@@ -238,25 +284,3 @@ async def ask_return(update, text, timer: int = 120, button=None):
         await sendMessage(update, '💦 __没有获取到您的输入__ **会话状态自动取消！**', buttons=button)
         return None
 
-
-import re
-import html
-
-
-# 转义特殊字符
-def escape_html_special_chars(text):
-    # 定义一些常用的字符
-    pattern = r"[\\`*_{}[\]()#+-.!|]"
-    # 使用正则表达式替换掉特殊字符
-    text = re.sub(pattern, r"\\\g<0>", text)
-    # 使用html模块转义HTML的特殊字符
-    text = html.escape(text)
-    return text
-
-
-def escape_markdown(text):
-    return (
-        re.sub(r"([_*\[\]()~`>\#\+\-=|{}\.!\\])", r"\\\1", html.unescape(text))
-        if text
-        else str()
-    )

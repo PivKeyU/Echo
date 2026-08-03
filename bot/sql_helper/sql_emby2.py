@@ -1,4 +1,5 @@
 from bot.sql_helper import Base, Session
+from bot.sql_helper.credential_crypto import CredentialType
 from sqlalchemy import Column, String, DateTime, Integer
 from sqlalchemy import or_
 
@@ -10,8 +11,8 @@ class Emby2(Base):
     __tablename__ = 'emby2'
     embyid = Column(String(255), primary_key=True, autoincrement=False)
     name = Column(String(255), nullable=True)
-    pwd = Column(String(255), nullable=True)
-    pwd2 = Column(String(255), nullable=True)
+    pwd = Column(CredentialType(), nullable=True)
+    pwd2 = Column(CredentialType(), nullable=True)
     lv = Column(String(1), default='d')
     cr = Column(DateTime, nullable=True)
     ex = Column(DateTime, nullable=True)

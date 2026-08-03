@@ -20,6 +20,7 @@ RUN apt-get update \
         libffi-dev \
         libjpeg-dev \
         libpq-dev \
+        postgresql-client \
         libssl-dev \
         pkg-config \
         tzdata \

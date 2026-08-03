@@ -5,7 +5,7 @@
 
   "_comment_bot_identity": "Telegram 基础信息：以下字段必须替换成你自己的值。",
   "bot_name": "your_bot_username_without_at",
-  "_comment_bot_name": "BotFather 创建的机器人用户名，不带 @。例如 pivkeyu_emby_bot。",
+  "_comment_bot_name": "BotFather 创建的机器人用户名，不带 @。例如 echo_bot。",
   "bot_token": "1234567890:replace_with_your_bot_token",
   "_comment_bot_token": "BotFather 提供的 bot token，必须完整替换。",
   "owner_api": 12345678,
@@ -31,7 +31,7 @@
   "money": "片刻碎片",
   "_comment_money": "机器人内积分/货币名称。",
   "ranks": {
-    "logo": "pivkeyu_emby",
+    "logo": "Echo",
     "backdrop": false
   },
   "_comment_ranks": "排行榜品牌文案与是否使用带背景榜单图。",
@@ -56,17 +56,21 @@
   "partition_libs": {},
   "_comment_partition_libs": "分区礼包与媒体库映射。例如 {\"成人区\": [\"Movies-18+\"]}。",
 
-  "_comment_database": "数据库配置。使用当前 docker-compose.yml 时，默认值可直接使用。",
+  "_comment_database": "数据库配置。默认 docker-compose 使用 PostgreSQL，也兼容自定义 SQLAlchemy DSN。",
+  "db_backend": "postgresql",
+  "_comment_db_backend": "可选 postgresql / mysql。推荐使用 postgresql。",
+  "db_url": null,
+  "_comment_db_url": "可选。若填写完整 SQLAlchemy DSN，会优先使用它，例如 postgresql+psycopg://echo:echo@127.0.0.1:5432/echo。",
   "db_host": "127.0.0.1",
-  "db_user": "pivkeyu",
-  "db_pwd": "pivkeyu",
-  "db_name": "pivkeyu",
-  "db_port": 3306,
+  "db_user": "echo",
+  "db_pwd": "echo",
+  "db_name": "echo",
+  "db_port": 5432,
   "db_is_docker": true,
-  "db_docker_name": "mysql",
+  "db_docker_name": "postgres",
   "db_backup_dir": "./db_backup",
   "db_backup_maxcount": 7,
-  "_comment_database_2": "如果你改了 docker-compose 中的 MySQL 用户/密码/库名，这里也必须同步修改。",
+  "_comment_database_2": "如果你改了 docker-compose 中的 PostgreSQL 用户/密码/库名，这里也必须同步修改。若继续使用 MySQL，请把 db_backend/db_port/db_docker_name 改回对应值。",
 
   "_comment_open": "开放注册、签到、兑换和邀请开关。",
   "open": {
@@ -175,10 +179,10 @@
   "_comment_update": "自动更新。发布给别人用时建议默认关闭，避免误拉取其他仓库。",
   "auto_update": {
     "status": false,
-    "git_repo": "PivKeyU/Pivkeyu_emby",
-    "docker_image": "pivkeyu/pivkeyu_emby:latest",
-    "container_name": "pivkeyu_emby",
-    "compose_service": "pivkeyu_emby",
+    "git_repo": "PivKeyU/Echo",
+    "docker_image": "echo/echo:latest",
+    "container_name": "echo",
+    "compose_service": "echo",
     "check_interval_minutes": 30,
     "commit_sha": null,
     "image_digest": null,
@@ -203,14 +207,29 @@
     "http_url": "0.0.0.0",
     "http_port": 8838,
     "public_url": "https://bot.example.com",
-    "miniapp_title": "片刻面板",
+    "miniapp_title": "Echo 面板",
+    "access_token": "replace_with_a_separate_api_access_token",
     "admin_token": "replace_with_a_long_random_admin_token",
+    "webhook_secret": "replace_with_a_long_random_webhook_secret",
+    "webhook_replay_window": 300,
     "webapp_auth_max_age": 86400,
     "allow_origins": [
-      "*"
+      "https://bot.example.com"
     ]
   },
-  "_comment_api_2": "public_url 必须改成外网可访问的 HTTPS 地址；admin_token 必须改成你自己的随机字符串。",
+
+  "_comment_emotion": "Emotion 服务端联动（可选）。credential 是 Emotion 管理面板创建的 integration credential，只由本服务持有，通过 HTTPS/私网 Bearer 调用 /integration/v1 控制面，不会返回给前端。",
+  "emotion": {
+    "status": false,
+    "url": "https://emotion.example.com",
+    "credential": "emo_int_xxxxxxxxxxxxxxxx",
+    "timeout": 10,
+    "max_retries": 1,
+    "event_poll_interval": 60,
+    "event_claim_limit": 50,
+    "notify_on_new_episode": true
+  },
+  "_comment_api_2": "public_url 必须改成外网可访问的 HTTPS 地址；access_token、admin_token、webhook_secret 必须使用三个不同的随机字符串；Webhook 还要求签名时间戳和 HMAC；allow_origins 请填写实际站点来源，不要使用 *。",
 
   "plugin_nav": {},
   "_comment_plugin_nav": "插件首页底栏显示开关。例如 {\"xiuxian-game\": true}。",

@@ -7,6 +7,7 @@ Create Date: 2026-03-29 22:30:00
 
 from alembic import op
 import sqlalchemy as sa
+from datetime import datetime
 
 # revision identifiers, used by Alembic.
 revision = "20260329_06"
@@ -31,6 +32,7 @@ def _index_names(table_name: str) -> set[str]:
 
 def upgrade() -> None:
     table_names = _table_names()
+    bind = op.get_bind()
 
     if "xiuxian_profiles" in table_names:
         columns = _column_names("xiuxian_profiles")
@@ -121,7 +123,7 @@ def upgrade() -> None:
             sa.Column("merit_bonus", sa.Integer(), nullable=False, server_default="0"),
             sa.Column("min_realm_stage", sa.String(length=32), nullable=True),
             sa.Column("min_realm_layer", sa.Integer(), nullable=False, server_default="1"),
-            sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+            sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.true()),
             sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
             sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
             sa.PrimaryKeyConstraint("id"),
@@ -160,26 +162,44 @@ def upgrade() -> None:
         if "ix_xiuxian_duel_created_at" not in index_names:
             op.create_index("ix_xiuxian_duel_created_at", "xiuxian_duel_records", ["created_at"], unique=False)
 
-    op.execute(
-        """
-        INSERT INTO `xiuxian_settings` (`setting_key`, `setting_value`, `updated_at`)
-        VALUES
-          ('chat_cultivation_chance', CAST(8 AS JSON), CURRENT_TIMESTAMP),
-          ('chat_cultivation_min_gain', CAST(1 AS JSON), CURRENT_TIMESTAMP),
-          ('chat_cultivation_max_gain', CAST(3 AS JSON), CURRENT_TIMESTAMP)
-        ON DUPLICATE KEY UPDATE
-          `setting_value` = `setting_value`,
-          `updated_at` = `updated_at`;
-        """
+    settings = sa.table(
+        "xiuxian_settings",
+        sa.column("setting_key", sa.String(length=64)),
+        sa.column("setting_value", sa.JSON()),
+        sa.column("updated_at", sa.DateTime()),
     )
-    op.execute(
-        """
-        UPDATE `xiuxian_settings`
-        SET `setting_value` = CAST(1 AS JSON), `updated_at` = CURRENT_TIMESTAMP
-        WHERE `setting_key` = 'min_coin_exchange'
-          AND CAST(JSON_UNQUOTE(`setting_value`) AS UNSIGNED) = 100;
-        """
-    )
+    default_rows = [
+        {"setting_key": "chat_cultivation_chance", "setting_value": 8, "updated_at": datetime.utcnow()},
+        {"setting_key": "chat_cultivation_min_gain", "setting_value": 1, "updated_at": datetime.utcnow()},
+        {"setting_key": "chat_cultivation_max_gain", "setting_value": 3, "updated_at": datetime.utcnow()},
+    ]
+    existing_keys = {
+        row[0]
+        for row in bind.execute(
+            sa.select(settings.c.setting_key).where(
+                settings.c.setting_key.in_([row["setting_key"] for row in default_rows])
+            )
+        )
+    }
+    missing_rows = [row for row in default_rows if row["setting_key"] not in existing_keys]
+    if missing_rows:
+        bind.execute(settings.insert(), missing_rows)
+
+    min_coin_exchange = bind.execute(
+        sa.select(settings.c.setting_value).where(settings.c.setting_key == "min_coin_exchange")
+    ).scalar_one_or_none()
+    normalized_value = min_coin_exchange
+    if isinstance(min_coin_exchange, str):
+        try:
+            normalized_value = int(min_coin_exchange)
+        except ValueError:
+            normalized_value = min_coin_exchange
+    if normalized_value == 100:
+        bind.execute(
+            settings.update()
+            .where(settings.c.setting_key == "min_coin_exchange")
+            .values(setting_value=1, updated_at=datetime.utcnow())
+        )
 
 
 def downgrade() -> None:
@@ -221,13 +241,18 @@ def downgrade() -> None:
                 op.drop_column("xiuxian_profiles", column_name)
 
     if "xiuxian_settings" in table_names:
-        op.execute(
-            """
-            DELETE FROM `xiuxian_settings`
-            WHERE `setting_key` IN (
-              'chat_cultivation_chance',
-              'chat_cultivation_min_gain',
-              'chat_cultivation_max_gain'
-            );
-            """
+        settings = sa.table(
+            "xiuxian_settings",
+            sa.column("setting_key", sa.String(length=64)),
+        )
+        op.get_bind().execute(
+            settings.delete().where(
+                settings.c.setting_key.in_(
+                    [
+                        "chat_cultivation_chance",
+                        "chat_cultivation_min_gain",
+                        "chat_cultivation_max_gain",
+                    ]
+                )
+            )
         )

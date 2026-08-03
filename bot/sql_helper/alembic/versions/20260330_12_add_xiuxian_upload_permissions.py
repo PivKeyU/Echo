@@ -7,6 +7,7 @@ Create Date: 2026-03-30 21:10:00
 
 from alembic import op
 import sqlalchemy as sa
+from datetime import datetime
 
 
 revision = "20260330_12"
@@ -46,16 +47,20 @@ def upgrade() -> None:
         sa.column("setting_value", sa.JSON()),
         sa.column("updated_at", sa.DateTime()),
     )
-    bind.execute(
-        settings.insert().prefix_with("IGNORE"),
-        [
-            {
-                "setting_key": "allow_non_admin_image_upload",
-                "setting_value": False,
-                "updated_at": sa.func.now(),
-            }
-        ],
-    )
+    exists = bind.execute(
+        sa.select(settings.c.setting_key).where(settings.c.setting_key == "allow_non_admin_image_upload")
+    ).scalar_one_or_none()
+    if exists is None:
+        bind.execute(
+            settings.insert(),
+            [
+                {
+                    "setting_key": "allow_non_admin_image_upload",
+                    "setting_value": False,
+                    "updated_at": datetime.utcnow(),
+                }
+            ],
+        )
 
 
 def downgrade() -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -10,6 +11,8 @@ from bot.sql_helper.sql_xiuxian import (
     XiuxianEncounterInstance,
     XiuxianEncounterTemplate,
     XiuxianProfile,
+    apply_spiritual_stone_delta,
+    assert_artifact_receivable_by_user,
     create_encounter_instance,
     create_encounter_template as sql_create_encounter_template,
     delete_encounter_template as sql_delete_encounter_template,
@@ -22,9 +25,15 @@ from bot.sql_helper.sql_xiuxian import (
     patch_encounter_template as sql_patch_encounter_template,
     serialize_encounter_instance,
     serialize_encounter_template,
+    serialize_artifact,
     serialize_profile,
     utcnow,
 )
+
+
+AUTO_ENCOUNTER_PITY_STEP = 6
+AUTO_ENCOUNTER_FORCE_AFTER = 12
+AUTO_ENCOUNTER_STREAKS: dict[int, int] = {}
 
 
 def _legacy_service():
@@ -37,6 +46,26 @@ def _legacy_world_service():
     from bot.plugins.xiuxian_game import world_service as legacy_world_service
 
     return legacy_world_service
+
+
+MARKDOWN_ESCAPE_PATTERN = re.compile(r"([_*\[`])")
+# 群播报卡片分隔线(与斗罗/斗破/修仙播报同款样式)
+_MD_BROADCAST_DIVIDER = "━" * 18
+
+
+def _md_escape(value: Any) -> str:
+    return MARKDOWN_ESCAPE_PATTERN.sub(r"\\\1", str(value or ""))
+
+
+def _format_broadcast_card(title: str, *, emoji: str, lines: list[str], footer: str | None = None) -> str:
+    """带分隔线边框的群播报卡片:图标标题 + 分隔线 + 正文 + 分隔线。"""
+    rows = [f"{emoji} **{_md_escape(title)}** {emoji}", _MD_BROADCAST_DIVIDER]
+    rows.extend(str(line).strip() for line in lines if str(line or "").strip())
+    if footer:
+        rows.extend([_MD_BROADCAST_DIVIDER, str(footer).strip()])
+    else:
+        rows.append(_MD_BROADCAST_DIVIDER)
+    return "\n".join(rows)
 
 
 def list_encounter_templates(enabled_only: bool = False) -> list[dict[str, Any]]:
@@ -82,18 +111,17 @@ def _encounter_reward_payload(template: dict[str, Any]) -> dict[str, Any]:
         "reward_item_kind": template.get("reward_item_kind"),
         "reward_item_ref_id": int(template.get("reward_item_ref_id") or 0) or None,
         "reward_item_quantity": random.randint(quantity_min, quantity_max) if template.get("reward_item_kind") and template.get("reward_item_ref_id") else 0,
-        "reward_willpower": int(template.get("reward_willpower") or 0),
-        "reward_charisma": int(template.get("reward_charisma") or 0),
-        "reward_karma": int(template.get("reward_karma") or 0),
     }
     return payload
 
 
 def maybe_spawn_group_encounter(chat_id: int) -> dict[str, Any] | None:
-    if not int(chat_id or 0):
+    chat_id_value = int(chat_id or 0)
+    if not chat_id_value:
         return None
     _legacy_service().ensure_seed_data()
-    if find_active_group_encounter(int(chat_id)):
+    if find_active_group_encounter(chat_id_value):
+        AUTO_ENCOUNTER_STREAKS.pop(chat_id_value, None)
         return None
 
     settings = get_xiuxian_settings()
@@ -101,16 +129,28 @@ def maybe_spawn_group_encounter(chat_id: int) -> dict[str, Any] | None:
         int(settings.get("encounter_group_cooldown_minutes", DEFAULT_SETTINGS.get("encounter_group_cooldown_minutes", 12)) or 0),
         0,
     )
-    latest_time = get_latest_group_encounter_time(int(chat_id))
+    latest_time = get_latest_group_encounter_time(chat_id_value)
     if latest_time and utcnow() - latest_time < timedelta(minutes=cooldown_minutes):
+        AUTO_ENCOUNTER_STREAKS.pop(chat_id_value, None)
         return None
 
-    chance = max(min(int(settings.get("encounter_spawn_chance", DEFAULT_SETTINGS.get("encounter_spawn_chance", 5)) or 0), 100), 0)
-    if chance <= 0 or random.randint(1, 100) > chance:
+    base_chance = max(
+        min(int(settings.get("encounter_spawn_chance", DEFAULT_SETTINGS.get("encounter_spawn_chance", 5)) or 0), 100),
+        0,
+    )
+    if base_chance <= 0:
+        AUTO_ENCOUNTER_STREAKS.pop(chat_id_value, None)
+        return None
+    streak = max(int(AUTO_ENCOUNTER_STREAKS.get(chat_id_value) or 0), 0) + 1
+    effective_chance = min(base_chance + max(streak - 1, 0) * AUTO_ENCOUNTER_PITY_STEP, 100)
+    force_spawn = streak >= AUTO_ENCOUNTER_FORCE_AFTER
+    if not force_spawn and random.randint(1, 100) > effective_chance:
+        AUTO_ENCOUNTER_STREAKS[chat_id_value] = streak
         return None
 
     template = _weighted_choice(list_encounter_templates(enabled_only=True))
     if not template:
+        AUTO_ENCOUNTER_STREAKS[chat_id_value] = streak
         return None
 
     active_seconds = max(
@@ -120,11 +160,12 @@ def maybe_spawn_group_encounter(chat_id: int) -> dict[str, Any] | None:
     instance = create_encounter_instance(
         template_id=int(template.get("id") or 0) or None,
         template_name=str(template.get("name") or "无名奇遇"),
-        group_chat_id=int(chat_id),
+        group_chat_id=chat_id_value,
         button_text=str(template.get("button_text") or "争抢机缘"),
         reward_payload=_encounter_reward_payload(template),
         expires_at=utcnow() + timedelta(seconds=active_seconds),
     )
+    AUTO_ENCOUNTER_STREAKS.pop(chat_id_value, None)
     return {"template": template, "instance": instance}
 
 
@@ -187,12 +228,6 @@ def _encounter_reward_summary(reward_payload: dict[str, Any]) -> str:
         item = _legacy_world_service()._get_item_payload(reward_item_kind, reward_item_ref_id)
         item_name = (item or {}).get("name") or f"{reward_item_kind}#{reward_item_ref_id}"
         rows.append(f"{reward_item_quantity} 个{item_name}")
-    if int(reward_payload.get("reward_willpower") or 0):
-        rows.append(f"心志 +{int(reward_payload['reward_willpower'])}")
-    if int(reward_payload.get("reward_charisma") or 0):
-        rows.append(f"魅力 +{int(reward_payload['reward_charisma'])}")
-    if int(reward_payload.get("reward_karma") or 0):
-        rows.append(f"因果 +{int(reward_payload['reward_karma'])}")
     return "、".join(rows) if rows else "随机机缘"
 
 
@@ -200,13 +235,25 @@ def render_group_encounter_text(template: dict[str, Any], instance: dict[str, An
     reward_summary = _encounter_reward_summary(instance.get("reward_payload") or {})
     action_text = template.get("broadcast_text") or f"群内忽有异象显化，{template.get('name') or '一桩奇遇'} 出世。"
     expires_at = instance.get("expires_at") or "很快"
+    requirements = []
+    if template.get("min_realm_stage"):
+        requirements.append(f"境界至少 {_claim_requirement_message(template)}")
+    if int(template.get("min_combat_power") or 0) > 0:
+        requirements.append(f"战力至少 {int(template.get('min_combat_power') or 0)}")
+    requirement_text = "；".join(requirements) if requirements else "无门槛，先到先得"
     return (
-        f"🌠 **群机缘降世**\n"
-        f"📜 **{template.get('name') or '未命名奇遇'}**\n"
-        f"{action_text}\n\n"
-        f"🎁 奖励预览：{reward_summary}\n"
-        f"⏳ 截止：{expires_at}\n"
-        "谁先抢到，机缘便归谁。"
+        _format_broadcast_card(
+            "群机缘降世",
+            emoji="🌠",
+            lines=[
+                f"📜 奇遇：**{_md_escape(template.get('name') or '未命名奇遇')}**",
+                f"📝 异象：{_md_escape(action_text)}",
+                f"🎁 奖励预览：{_md_escape(reward_summary)}",
+                f"📌 领取要求：{_md_escape(requirement_text)}",
+                f"⏳ 截止：{_md_escape(expires_at)}",
+            ],
+            footer="⚡ 谁先抢到，机缘便归谁。",
+        )
     )
 
 
@@ -217,12 +264,35 @@ def _claim_requirement_message(template: dict[str, Any]) -> str:
     return "当前修为"
 
 
+def _assert_encounter_reward_receivable(tg: int, reward_payload: dict[str, Any]) -> None:
+    reward_kind = str(reward_payload.get("reward_item_kind") or "")
+    reward_ref_id = int(reward_payload.get("reward_item_ref_id") or 0)
+    reward_quantity = int(reward_payload.get("reward_item_quantity") or 0)
+    if reward_kind != "artifact" or reward_ref_id <= 0 or reward_quantity <= 0:
+        return
+    artifact = serialize_artifact(_legacy_service().get_artifact(reward_ref_id))
+    if not artifact:
+        raise ValueError("未寻得此宝踪迹，或许早已流失于岁月之中。")
+    if bool(artifact.get("unique_item")) and reward_quantity > 1:
+        raise ValueError(f"唯一法宝【{artifact.get('name') or reward_ref_id}】每次只能获得 1 件。")
+    assert_artifact_receivable_by_user(int(tg), reward_ref_id, allow_existing_owner=False)
+
+
 def claim_group_encounter(instance_id: int, tg: int) -> dict[str, Any]:
     legacy_service = _legacy_service()
     bundle = legacy_service.serialize_full_profile(tg)
     profile_data = bundle.get("profile") or {}
     if not profile_data.get("consented"):
-        raise ValueError("你还没有踏入仙途。")
+        raise ValueError("你尚未踏入仙途，道基未立。")
+    if bundle.get("capabilities", {}).get("gender_required"):
+        raise ValueError(str(bundle.get("capabilities", {}).get("gender_lock_reason") or "请先设置性别。"))
+    # Daily encounter claim limit
+    from bot.plugins.xiuxian_game.world_service import _ensure_daily_limit
+    from bot.sql_helper.sql_xiuxian import get_profile as _get_profile
+
+    profile_obj = _get_profile(tg, create=False)
+    if profile_obj is not None:
+        _ensure_daily_limit(profile_obj, "encounter_daily_count", "encounter_day_key", "encounter_claim_daily_limit", "奇遇领取")
 
     with Session() as session:
         instance = (
@@ -263,27 +333,37 @@ def claim_group_encounter(instance_id: int, tg: int) -> dict[str, Any]:
             raise ValueError(f"战力不足，需要至少 {int(template_payload.get('min_combat_power') or 0)} 战力。")
 
         reward_payload = dict(instance.reward_payload or {})
+        _assert_encounter_reward_receivable(tg, reward_payload)
         profile = session.query(XiuxianProfile).filter(XiuxianProfile.tg == tg).with_for_update().first()
         if profile is None or not profile.consented:
-            raise ValueError("你还没有踏入仙途。")
+            raise ValueError("你尚未踏入仙途，道基未立。")
 
         cultivation_gain = max(int(reward_payload.get("cultivation_reward") or 0), 0)
+        raw_cultivation_gain = cultivation_gain
+        cultivation_gain, gain_meta = legacy_service.adjust_cultivation_gain_for_social_mode(
+            profile,
+            cultivation_gain,
+            settings=legacy_service.get_xiuxian_settings(),
+        )
         stone_reward = max(int(reward_payload.get("stone_reward") or 0), 0)
-        willpower_gain = int(reward_payload.get("reward_willpower") or 0)
-        charisma_gain = int(reward_payload.get("reward_charisma") or 0)
-        karma_gain = int(reward_payload.get("reward_karma") or 0)
         layer, cultivation, upgraded_layers, remaining = legacy_service.apply_cultivation_gain(
-            profile.realm_stage or "炼气",
+            legacy_service.normalize_realm_stage(profile.realm_stage or legacy_service.FIRST_REALM_STAGE),
             int(profile.realm_layer or 1),
             int(profile.cultivation or 0),
             cultivation_gain,
         )
-        profile.spiritual_stone = int(profile.spiritual_stone or 0) + stone_reward
+        if stone_reward > 0:
+            apply_spiritual_stone_delta(
+                session,
+                tg,
+                stone_reward,
+                action_text="群内奇遇奖励灵石",
+                enforce_currency_lock=False,
+                allow_dead=False,
+                apply_tribute=True,
+            )
         profile.cultivation = cultivation
         profile.realm_layer = layer
-        profile.willpower = int(profile.willpower or 0) + willpower_gain
-        profile.charisma = int(profile.charisma or 0) + charisma_gain
-        profile.karma = int(profile.karma or 0) + karma_gain
         profile.updated_at = now
 
         instance.status = "claimed"
@@ -302,6 +382,8 @@ def claim_group_encounter(instance_id: int, tg: int) -> dict[str, Any]:
 
     legacy_service._apply_profile_growth_floor(tg)
     final_bundle = legacy_service.serialize_full_profile(tg)
+    from bot.plugins.xiuxian_game.world_service import _bump_daily_counter
+    _bump_daily_counter(tg, "encounter_daily_count")
     legacy_service.create_journal(
         tg,
         "encounter",
@@ -316,6 +398,8 @@ def claim_group_encounter(instance_id: int, tg: int) -> dict[str, Any]:
         "profile": final_bundle,
         "upgraded_layers": upgraded_layers,
         "remaining": remaining,
+        "cultivation_gain_raw": raw_cultivation_gain,
+        "cultivation_efficiency_percent": int(gain_meta.get("efficiency_percent") or 100),
     }
 
 
@@ -352,9 +436,16 @@ def render_group_encounter_success_text(result: dict[str, Any], winner_name: str
     for key, value in mapping.items():
         success_text = success_text.replace(key, value)
     if success_text:
-        return success_text
+        return "\n".join(
+            [
+                "🎉 **奇遇已被夺得**",
+                _md_escape(success_text),
+                f"🎁 收获：{_md_escape(reward_summary)}",
+            ]
+        )
     return (
         f"🎉 **奇遇已被夺得**\n"
-        f"{winner_name} 抢先拿下了 **{template.get('name') or '一桩奇遇'}**。\n"
-        f"🎁 收获：{reward_summary}"
+        f"🏆 夺得者：{_md_escape(winner_name)}\n"
+        f"📜 奇遇：**{_md_escape(template.get('name') or '一桩奇遇')}**\n"
+        f"🎁 收获：{_md_escape(reward_summary)}"
     )

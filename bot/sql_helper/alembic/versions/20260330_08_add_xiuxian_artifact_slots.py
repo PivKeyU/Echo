@@ -7,6 +7,7 @@ Create Date: 2026-03-30 11:30:00
 
 from alembic import op
 import sqlalchemy as sa
+from datetime import datetime
 
 # revision identifiers, used by Alembic.
 revision = "20260330_08"
@@ -67,20 +68,43 @@ def upgrade() -> None:
 
     table_names = _table_names()
     if "xiuxian_equipped_artifacts" in table_names and "xiuxian_profiles" in table_names:
-        op.execute(
-            """
-            INSERT IGNORE INTO `xiuxian_equipped_artifacts`
-              (`tg`, `artifact_id`, `slot`, `created_at`, `updated_at`)
-            SELECT
-              `tg`,
-              `current_artifact_id`,
-              1,
-              CURRENT_TIMESTAMP,
-              CURRENT_TIMESTAMP
-            FROM `xiuxian_profiles`
-            WHERE `current_artifact_id` IS NOT NULL;
-            """
+        bind = op.get_bind()
+        profiles = sa.table(
+            "xiuxian_profiles",
+            sa.column("tg", sa.BigInteger()),
+            sa.column("current_artifact_id", sa.Integer()),
         )
+        equipped = sa.table(
+            "xiuxian_equipped_artifacts",
+            sa.column("tg", sa.BigInteger()),
+            sa.column("artifact_id", sa.Integer()),
+            sa.column("slot", sa.Integer()),
+            sa.column("created_at", sa.DateTime()),
+            sa.column("updated_at", sa.DateTime()),
+        )
+        existing_pairs = {
+            (row[0], row[1])
+            for row in bind.execute(sa.select(equipped.c.tg, equipped.c.artifact_id))
+        }
+        now = datetime.utcnow()
+        rows_to_insert = []
+        for tg, artifact_id in bind.execute(
+            sa.select(profiles.c.tg, profiles.c.current_artifact_id).where(profiles.c.current_artifact_id.is_not(None))
+        ):
+            pair = (tg, artifact_id)
+            if pair in existing_pairs:
+                continue
+            rows_to_insert.append(
+                {
+                    "tg": tg,
+                    "artifact_id": artifact_id,
+                    "slot": 1,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            )
+        if rows_to_insert:
+            bind.execute(equipped.insert(), rows_to_insert)
 
     table_names = _table_names()
     if "xiuxian_equipped_artifacts" in table_names:

@@ -87,14 +87,14 @@ async def pro_user(_, msg):
         if e is not None and e.embyid is not None:
             if sql_update_emby(Emby.name == username, lv='a'):
                 user_display = f'[{e.name}](tg://user?id={e.tg})' if e.tg else e.name
-                result_msg += f"🎉 恭喜：{user_display} 获得 {sign_name} 签出的白名单.\n"
+                result_msg += f"🌸 恭喜小宝贝 {user_display} ~ {sign_name} 为主人献上了一份珍贵的白名单礼物哦！\n"
             else:
                 result_msg += "⚠️ 错误：数据库执行错误\n"
         
         # 更新emby2表
         if e2 is not None:
             if sql_update_emby2(Emby2.name == username, lv='a'):
-                result_msg += f"🎉 恭喜 {e2.name} 获得 {sign_name} 签出的白名单.\n"
+                result_msg += f"🌸 恭喜小宝贝 {e2.name} ~ {sign_name} 为主人献上了一份珍贵的白名单礼物哦！\n"
             else:
                 result_msg += "⚠️ 错误：数据库执行错误\n"
         
@@ -109,7 +109,7 @@ async def pro_user(_, msg):
             sign_name = f'{msg.sender_chat.title}' if msg.sender_chat else f'[{msg.from_user.first_name}](tg://user?id={msg.from_user.id})'
             await asyncio.gather(deleteMessage(msg), sendMessage(msg,
                                                                  f"**{random.choice(Yulv.load_yulv().wh_msg)}**\n\n"
-                                                                 f"🎉 恭喜 [{first.first_name}](tg://user?id={uid}) 获得 {sign_name} 签出的白名单."))
+                                                                 f"🌸 恭喜小宝贝 [{first.first_name}](tg://user?id={uid}) ~ {sign_name} 为主人献上了一份珍贵的白名单礼物哦！"))
         else:
             return await sendMessage(msg, '⚠️ 数据库执行错误')
         LOGGER.info(f"【admin】：{msg.from_user.id} 新增 白名单 {first.first_name}-{uid}")
@@ -182,14 +182,14 @@ async def rev_user(_, msg):
         if e is not None:
             if sql_update_emby(Emby.name == username, lv='b'):
                 user_display = f'[{e.name}](tg://user?id={e.tg})' if e.tg else e.name
-                result_msg += f"🤖 很遗憾 {user_display} 被 {sign_name} 移出白名单.\n"
+                result_msg += f"🥺 呜呜... {user_display} 被 {sign_name} 从白名单除名了...下次再来吧~\n"
             else:
                 result_msg += "⚠️ 错误：数据库执行错误\n"
         
         # 更新emby2表
         if e2 is not None:
             if sql_update_emby2(Emby2.name == username, lv='b'):
-                result_msg += f"🤖  很遗憾 {e2.name} 被 {sign_name} 移出白名单.\n"
+                result_msg += f"🥺 呜呜... {e2.name} 被 {sign_name} 从白名单除名了...下次再来吧~\n"
             else:
                 result_msg += "⚠️ 错误：数据库执行错误\n"
         
@@ -200,7 +200,7 @@ async def rev_user(_, msg):
         if sql_update_emby(Emby.tg == uid, lv='b'):
             sign_name = f'{msg.sender_chat.title}' if msg.sender_chat else f'[{msg.from_user.first_name}](tg://user?id={msg.from_user.id})'
             await asyncio.gather(sendMessage(msg,
-                                             f"🤖 很遗憾 [{first.first_name}](tg://user?id={uid}) 被 {sign_name} 移出白名单."),
+                                             f"🥺 呜呜... [{first.first_name}](tg://user?id={uid}) 被 {sign_name} 从白名单除名了...下次再来吧~"),
                                  deleteMessage(msg))
         else:
             return await sendMessage(msg, '⚠️ 数据库执行错误')

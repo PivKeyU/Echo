@@ -1,0 +1,164 @@
+{
+  "regions": [
+    {
+      "key": "xingdou_outer",
+      "name": "星斗大森林外围",
+      "description": "星斗大森林最外围之地，栖息着十年左右的弱小魂兽，是魂士初试猎杀、感受魂力波动的最佳去处。这里古木参天、兽迹稀疏，危险尚在掌控之中。",
+      "realm_stage_min": "魂士",
+      "recommended_power": 1000,
+      "entry_coin": 500,
+      "max_year_tier": "百年",
+      "beasts": [
+        { "key": "feng_wei_lang", "name": "十年风尾狼", "year_min": 30, "year_max": 100, "weight": 28, "coin_min": 80, "coin_max": 250, "soul_power_min": 15, "soul_power_max": 60 },
+        { "key": "gui_mian_hu", "name": "十年鬼面狐", "year_min": 10, "year_max": 60, "weight": 32, "coin_min": 50, "coin_max": 160, "soul_power_min": 10, "soul_power_max": 40 },
+        { "key": "shi_jia_zhu", "name": "十年石甲猪", "year_min": 50, "year_max": 90, "weight": 22, "coin_min": 100, "coin_max": 220, "soul_power_min": 20, "soul_power_max": 55 },
+        { "key": "qing_yi_die", "name": "十年青翼蝶", "year_min": 10, "year_max": 40, "weight": 14, "coin_min": 40, "coin_max": 130, "soul_power_min": 8, "soul_power_max": 30 },
+        { "key": "an_ying_diao", "name": "十年暗影貂", "year_min": 80, "year_max": 100, "weight": 4, "coin_min": 200, "coin_max": 400, "soul_power_min": 40, "soul_power_max": 80 }
+      ]
+    },
+    {
+      "key": "lie_hun_sen_lin",
+      "name": "猎魂森林",
+      "description": "武魂殿掌控的猎魂胜地，百年魂兽出没其间，是魂师猎取第二魂环、冲击境界的绝佳猎场。林间偶有凤尾鸡冠蛇与幽冥狼出没，须时刻提防。",
+      "realm_stage_min": "魂师",
+      "recommended_power": 5000,
+      "entry_coin": 2000,
+      "max_year_tier": "百年",
+      "beasts": [
+        { "key": "feng_wei_ji_guan_she", "name": "百年凤尾鸡冠蛇", "year_min": 100, "year_max": 250, "weight": 30, "coin_min": 300, "coin_max": 800, "soul_power_min": 100, "soul_power_max": 300 },
+        { "key": "you_ming_lang", "name": "百年幽冥狼", "year_min": 200, "year_max": 400, "weight": 28, "coin_min": 500, "coin_max": 1300, "soul_power_min": 180, "soul_power_max": 450 },
+        { "key": "tie_bei_xi", "name": "百年铁背蜥", "year_min": 150, "year_max": 300, "weight": 24, "coin_min": 400, "coin_max": 1000, "soul_power_min": 140, "soul_power_max": 380 },
+        { "key": "chi_yu_he", "name": "百年赤羽鹤", "year_min": 300, "year_max": 480, "weight": 14, "coin_min": 700, "coin_max": 1600, "soul_power_min": 280, "soul_power_max": 520 },
+        { "key": "man_tuo_luo_she", "name": "四百年曼陀罗蛇", "year_min": 400, "year_max": 500, "weight": 4, "coin_min": 1200, "coin_max": 2500, "soul_power_min": 380, "soul_power_max": 550 }
+      ]
+    },
+    {
+      "key": "luori_outer",
+      "name": "落日森林外围",
+      "description": "落日森林边缘地带，千年魂兽初露峥嵘，紫电貂与大力猿在此盘踞，是大魂师猎取千年魂环、淬炼自身的进阶猎场。",
+      "realm_stage_min": "大魂师",
+      "recommended_power": 12000,
+      "entry_coin": 6000,
+      "max_year_tier": "千年",
+      "beasts": [
+        { "key": "zi_dian_diao", "name": "千年紫电貂", "year_min": 600, "year_max": 1000, "weight": 30, "coin_min": 1500, "coin_max": 3500, "soul_power_min": 650, "soul_power_max": 1500 },
+        { "key": "da_li_yuan", "name": "千年大力猿", "year_min": 700, "year_max": 1200, "weight": 28, "coin_min": 1800, "coin_max": 4200, "soul_power_min": 750, "soul_power_max": 1800 },
+        { "key": "huo_yan_ao", "name": "千年火焰獒", "year_min": 800, "year_max": 1300, "weight": 24, "coin_min": 2000, "coin_max": 4800, "soul_power_min": 850, "soul_power_max": 2000 },
+        { "key": "xuan_bing_ying", "name": "千年玄冰鹰", "year_min": 500, "year_max": 900, "weight": 14, "coin_min": 1400, "coin_max": 3200, "soul_power_min": 550, "soul_power_max": 1400 },
+        { "key": "san_ye_jin_hu", "name": "千年三叶金虎", "year_min": 1200, "year_max": 1500, "weight": 4, "coin_min": 3500, "coin_max": 8000, "soul_power_min": 1300, "soul_power_max": 2400 }
+      ]
+    },
+    {
+      "key": "xingdou_south",
+      "name": "星斗大森林南部",
+      "description": "深入星斗大森林腹地，千年魂兽成群结队，雷鹰于云端长啸，黄金狮于林间巡猎，是魂尊猎取第四魂环的凶险猎场。",
+      "realm_stage_min": "魂尊",
+      "recommended_power": 25000,
+      "entry_coin": 15000,
+      "max_year_tier": "千年",
+      "beasts": [
+        { "key": "lei_ying", "name": "千年雷鹰", "year_min": 1500, "year_max": 2500, "weight": 30, "coin_min": 4000, "coin_max": 9000, "soul_power_min": 1800, "soul_power_max": 4200 },
+        { "key": "huang_jin_shi", "name": "千年黄金狮", "year_min": 2000, "year_max": 3500, "weight": 28, "coin_min": 5000, "coin_max": 12000, "soul_power_min": 2400, "soul_power_max": 5800 },
+        { "key": "cui_yan_qing_niao", "name": "千年翠眼青鸟", "year_min": 1600, "year_max": 2800, "weight": 24, "coin_min": 4200, "coin_max": 10000, "soul_power_min": 1900, "soul_power_max": 4600 },
+        { "key": "xue_jiao_hu", "name": "千年雪角鹿", "year_min": 1800, "year_max": 3200, "weight": 14, "coin_min": 4600, "coin_max": 10500, "soul_power_min": 2200, "soul_power_max": 5200 },
+        { "key": "ren_mian_mo_zhu", "name": "三千年人面魔蛛", "year_min": 3000, "year_max": 5000, "weight": 4, "coin_min": 9000, "coin_max": 20000, "soul_power_min": 4500, "soul_power_max": 8500 }
+      ]
+    },
+    {
+      "key": "luori_deep",
+      "name": "落日森林深处",
+      "description": "落日森林核心地带，近万年凶兽出没，幽冥鬼虎与地穴魔蛛盘踞于此，是魂宗猎取第五魂环的生死试炼之地。",
+      "realm_stage_min": "魂宗",
+      "recommended_power": 45000,
+      "entry_coin": 30000,
+      "max_year_tier": "千年",
+      "beasts": [
+        { "key": "gui_hu", "name": "八千年幽冥鬼虎", "year_min": 6000, "year_max": 8500, "weight": 30, "coin_min": 12000, "coin_max": 28000, "soul_power_min": 7000, "soul_power_max": 16000 },
+        { "key": "di_xue_mo_zhu", "name": "七千年地穴魔蛛", "year_min": 5000, "year_max": 7500, "weight": 28, "coin_min": 11000, "coin_max": 25000, "soul_power_min": 6500, "soul_power_max": 14000 },
+        { "key": "bai_jia_di_long", "name": "六千年白甲地龙", "year_min": 4500, "year_max": 7000, "weight": 24, "coin_min": 10000, "coin_max": 23000, "soul_power_min": 6000, "soul_power_max": 13000 },
+        { "key": "ju_du_ban_mao", "name": "六千年剧毒斑蝥", "year_min": 4200, "year_max": 6500, "weight": 14, "coin_min": 9500, "coin_max": 22000, "soul_power_min": 5500, "soul_power_max": 12000 },
+        { "key": "san_tou_mo_lang", "name": "九千年三头魔狼", "year_min": 8000, "year_max": 9000, "weight": 4, "coin_min": 20000, "coin_max": 45000, "soul_power_min": 15000, "soul_power_max": 21000 }
+      ]
+    },
+    {
+      "key": "xingdou_central",
+      "name": "星斗大森林中央区",
+      "description": "星斗大森林核心前哨，万年魂兽横行无忌，大力金刚熊与暗魔邪神虎出没其间，是魂王猎取第六魂环的进阶猎场。",
+      "realm_stage_min": "魂王",
+      "recommended_power": 80000,
+      "entry_coin": 60000,
+      "max_year_tier": "万年",
+      "beasts": [
+        { "key": "da_li_jin_gang_xiong", "name": "万年大力金刚熊", "year_min": 10000, "year_max": 18000, "weight": 30, "coin_min": 30000, "coin_max": 75000, "soul_power_min": 16000, "soul_power_max": 35000 },
+        { "key": "zi_yi_bian_fu_wang", "name": "万年紫翼蝙蝠王", "year_min": 12000, "year_max": 22000, "weight": 28, "coin_min": 32000, "coin_max": 80000, "soul_power_min": 18000, "soul_power_max": 42000 },
+        { "key": "feng_wei_ji_guan_she_wang", "name": "万年凤尾鸡冠蛇王", "year_min": 10000, "year_max": 20000, "weight": 24, "coin_min": 28000, "coin_max": 70000, "soul_power_min": 15000, "soul_power_max": 38000 },
+        { "key": "yin_yue_lang_wang", "name": "万年银月狼王", "year_min": 15000, "year_max": 25000, "weight": 14, "coin_min": 38000, "coin_max": 90000, "soul_power_min": 22000, "soul_power_max": 48000 },
+        { "key": "an_mo_xie_shen_hu", "name": "三万年暗魔邪神虎", "year_min": 26000, "year_max": 30000, "weight": 4, "coin_min": 80000, "coin_max": 160000, "soul_power_min": 42000, "soul_power_max": 65000 }
+      ]
+    },
+    {
+      "key": "xingdou_core",
+      "name": "星斗大森林核心区",
+      "description": "星斗大森林最深处，十万年凶兽沉睡之地，泰坦巨猿与天青牛蟒镇守其中，非魂帝之境莫入。",
+      "realm_stage_min": "魂帝",
+      "recommended_power": 140000,
+      "entry_coin": 120000,
+      "max_year_tier": "十万年",
+      "beasts": [
+        { "key": "hei_an_mo_hu", "name": "五万年黑暗魔虎", "year_min": 30000, "year_max": 55000, "weight": 26, "coin_min": 90000, "coin_max": 210000, "soul_power_min": 45000, "soul_power_max": 95000 },
+        { "key": "zi_jing_shi_wang", "name": "五万年紫晶狮子王", "year_min": 35000, "year_max": 60000, "weight": 24, "coin_min": 100000, "coin_max": 230000, "soul_power_min": 50000, "soul_power_max": 105000 },
+        { "key": "jin_gang_bao_xiong", "name": "六万年金刚暴熊", "year_min": 40000, "year_max": 65000, "weight": 20, "coin_min": 110000, "coin_max": 250000, "soul_power_min": 55000, "soul_power_max": 115000 },
+        { "key": "xing_dou_lang_wang", "name": "七万年星斗狼王", "year_min": 50000, "year_max": 75000, "weight": 18, "coin_min": 130000, "coin_max": 280000, "soul_power_min": 65000, "soul_power_max": 135000 },
+        { "key": "tian_qing_niu_mang", "name": "十万年天青牛蟒", "year_min": 100000, "year_max": 100000, "weight": 8, "coin_min": 300000, "coin_max": 650000, "soul_power_min": 160000, "soul_power_max": 220000 },
+        { "key": "tai_tan_ju_yuan", "name": "十万年泰坦巨猿", "year_min": 100000, "year_max": 100000, "weight": 4, "coin_min": 350000, "coin_max": 700000, "soul_power_min": 170000, "soul_power_max": 230000 }
+      ]
+    },
+    {
+      "key": "ji_bei_zhi_di",
+      "name": "极北之地",
+      "description": "北境苦寒之地，终年风雪，万年冰系凶兽盘踞，极北寒蛟与泰坦雪魔出没其中，魂圣在此冲击极限。",
+      "realm_stage_min": "魂圣",
+      "recommended_power": 230000,
+      "entry_coin": 200000,
+      "max_year_tier": "十万年",
+      "beasts": [
+        { "key": "bing_jing_gu_hu", "name": "六万年冰晶骨虎", "year_min": 50000, "year_max": 80000, "weight": 28, "coin_min": 150000, "coin_max": 320000, "soul_power_min": 75000, "soul_power_max": 140000 },
+        { "key": "xuan_bing_mo_lang", "name": "七万年玄冰魔狼", "year_min": 55000, "year_max": 85000, "weight": 26, "coin_min": 160000, "coin_max": 340000, "soul_power_min": 80000, "soul_power_max": 150000 },
+        { "key": "ji_bei_han_jiao", "name": "八万年极北寒蛟", "year_min": 60000, "year_max": 90000, "weight": 24, "coin_min": 170000, "coin_max": 360000, "soul_power_min": 85000, "soul_power_max": 160000 },
+        { "key": "tai_tan_xue_mo", "name": "十二万年泰坦雪魔", "year_min": 110000, "year_max": 130000, "weight": 18, "coin_min": 250000, "coin_max": 520000, "soul_power_min": 130000, "soul_power_max": 200000 },
+        { "key": "bing_bi_di_huang_xie", "name": "十万年冰碧帝皇蝎", "year_min": 100000, "year_max": 100000, "weight": 4, "coin_min": 300000, "coin_max": 600000, "soul_power_min": 160000, "soul_power_max": 215000 }
+      ]
+    },
+    {
+      "key": "hai_shen_dao_hai_yu",
+      "name": "海神岛海域",
+      "description": "海神岛外围广袤海域，十万年海兽纵横，魔魂大白鲨出没之处，波谲云诡，魂斗罗方能驰骋。",
+      "realm_stage_min": "魂斗罗",
+      "recommended_power": 360000,
+      "entry_coin": 400000,
+      "max_year_tier": "十万年",
+      "beasts": [
+        { "key": "mo_hun_da_bai_sha", "name": "十万年魔魂大白鲨", "year_min": 100000, "year_max": 150000, "weight": 32, "coin_min": 300000, "coin_max": 650000, "soul_power_min": 160000, "soul_power_max": 260000 },
+        { "key": "zi_jing_ju_xie", "name": "十五万年紫晶巨蟹", "year_min": 120000, "year_max": 180000, "weight": 28, "coin_min": 340000, "coin_max": 720000, "soul_power_min": 180000, "soul_power_max": 290000 },
+        { "key": "hai_sha_wang", "name": "二十万年海鲨王", "year_min": 160000, "year_max": 220000, "weight": 20, "coin_min": 380000, "coin_max": 800000, "soul_power_min": 200000, "soul_power_max": 320000 },
+        { "key": "shen_hai_ju_zhang", "name": "三十万年深海巨章", "year_min": 200000, "year_max": 300000, "weight": 16, "coin_min": 420000, "coin_max": 880000, "soul_power_min": 220000, "soul_power_max": 380000 },
+        { "key": "hai_long_wang", "name": "五十万年海域龙王", "year_min": 400000, "year_max": 500000, "weight": 4, "coin_min": 700000, "coin_max": 1400000, "soul_power_min": 350000, "soul_power_max": 520000 }
+      ]
+    },
+    {
+      "key": "hai_yu_shen_yuan",
+      "name": "神禁·海域深渊",
+      "description": "海神岛之下的深渊秘境，深海魔鲸王沉睡的禁忌之地，冰天雪女于极寒中若隐若现，非封号斗罗莫入。",
+      "realm_stage_min": "封号斗罗",
+      "recommended_power": 550000,
+      "entry_coin": 800000,
+      "max_year_tier": "百万年",
+      "beasts": [
+        { "key": "shen_hai_mo_jing_wang", "name": "百万年深海魔鲸王", "year_min": 900000, "year_max": 1000000, "weight": 40, "coin_min": 1200000, "coin_max": 2500000, "soul_power_min": 650000, "soul_power_max": 900000 },
+        { "key": "bing_tian_xue_nv", "name": "七十万年冰天雪女", "year_min": 600000, "year_max": 750000, "weight": 30, "coin_min": 900000, "coin_max": 1800000, "soul_power_min": 500000, "soul_power_max": 720000 },
+        { "key": "ji_bei_xue_shen", "name": "五十万年极北雪神", "year_min": 450000, "year_max": 550000, "weight": 26, "coin_min": 800000, "coin_max": 1500000, "soul_power_min": 420000, "soul_power_max": 580000 },
+        { "key": "di_tian", "name": "百万年金眼黑龙王·帝天", "year_min": 1000000, "year_max": 1000000, "weight": 4, "coin_min": 2000000, "coin_max": 3000000, "soul_power_min": 800000, "soul_power_max": 1000000 }
+      ]
+    }
+  ]
+}

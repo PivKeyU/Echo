@@ -1,11 +1,61 @@
+import functools
+import hashlib
+import json
+
 import pytz
 
 from bot import bot, _open, save_config, owner, admins, bot_name, ranks, schedall, group, config
 from bot.sql_helper.sql_code import sql_add_code
-from bot.sql_helper.sql_emby import sql_get_emby
+from bot.sql_helper.sql_emby import sql_count_emby, sql_get_emby
 from cacheout import Cache
 
 cache = Cache()
+
+
+def async_memoize(ttl=120):
+    """Async-safe memoization decorator.
+
+    Unlike cacheout.Cache.memoize which caches the coroutine object when
+    applied to async functions, this decorator awaits the coroutine and
+    caches the actual result.
+    """
+
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            key = _memo_key(func, args, kwargs)
+            result = cache.get(key)
+            if result is not None:
+                return result
+            result = await func(*args, **kwargs)
+            if result is not None:
+                cache.set(key, result, ttl=ttl)
+            return result
+
+        def _memo_key(fn, args, kwargs):
+            raw = ":".join([
+                fn.__qualname__,
+                hashlib.md5(json.dumps(args, sort_keys=True, default=str).encode()).hexdigest(),
+                hashlib.md5(json.dumps(kwargs, sort_keys=True, default=str).encode()).hexdigest(),
+            ])
+            return f"async_memoize:{raw}"
+
+        def invalidate(*args, **kwargs):
+            """按相同函数名删除该函数全部缓存条目（结算类逻辑防重复）。
+
+            类方法（classmethod + memoize）经绑定后参数含 cls，调用方难以
+            复现完全一致的 key，因此按函数限定名前缀删除更稳妥。
+            """
+            prefix = f"async_memoize:{func.__qualname__}:"
+            stale = [key for key in cache.keys() if str(key).startswith(prefix)]
+            if stale:
+                cache.delete_many(*stale)
+
+
+        wrapper.invalidate = invalidate
+        return wrapper
+
+    return decorator
 
 
 def judge_admins(uid):
@@ -58,21 +108,30 @@ async def open_check():
     """
     open_stats = _open.stat
     all_user = _open.all_user
-    tem = _open.tem
+    tem = refresh_registration_slots()
     timing = _open.timing
     return open_stats, all_user, tem, timing
 
 
 def tem_adduser():
-    _open.tem = _open.tem + 1
-    if _open.tem >= _open.all_user:
-        _open.stat = False
-    save_config()
+    return refresh_registration_slots()
 
 
 def tem_deluser():
-    _open.tem = _open.tem - 1
-    save_config()
+    return refresh_registration_slots()
+
+
+def refresh_registration_slots() -> int:
+    _, registered_count, _ = sql_count_emby()
+    current_count = int(registered_count or 0)
+    changed = int(_open.tem or 0) != current_count
+    _open.tem = current_count
+    if current_count >= int(_open.all_user or 0) and _open.stat:
+        _open.stat = False
+        changed = True
+    if changed:
+        save_config()
+    return current_count
 
 
 from random import choice
@@ -88,76 +147,6 @@ async def pwd_create(length=8, chars=string.ascii_letters + string.digits):
     :return: 密码
     """
     return ''.join([choice(chars) for i in range(length)])
-
-
-# 创建注册
-async def cr_link_one(tg: int, times, count, days: int, method: str):
-    """
-    创建连接
-    :param tg:
-    :param times:
-    :param count:
-    :param days:
-    :param method:
-    :return:
-    """
-    links = ''
-    code_list = []
-    i = 1
-    if method == 'code':
-        while i <= count:
-            p = await pwd_create(10)
-            uid = f'{ranks.logo}-{times}-Register_{p}'
-            code_list.append(uid)
-            link = f'`{uid}`\n'
-            links += link
-            i += 1
-    elif method == 'link':
-        while i <= count:
-            p = await pwd_create(10)
-            uid = f'{ranks.logo}-{times}-Register_{p}'
-            code_list.append(uid)
-            link = f't.me/{bot_name}?start={uid}\n'
-            links += link
-            i += 1
-    if sql_add_code(code_list, tg, days) is False:
-        return None
-    return links
-
-
-# 创建续期
-async def rn_link_one(tg: int, times, count, days: int, method: str):
-    """
-    创建连接
-    :param tg:
-    :param times:
-    :param count:
-    :param days:
-    :param method:
-    :return:
-    """
-    links = ''
-    code_list = []
-    i = 1
-    if method == 'code':
-        while i <= count:
-            p = await pwd_create(10)
-            uid = f'{ranks.logo}-{times}-Renew_{p}'
-            code_list.append(uid)
-            link = f'`{uid}`\n'
-            links += link
-            i += 1
-    elif method == 'link':
-        while i <= count:
-            p = await pwd_create(10)
-            uid = f'{ranks.logo}-{times}-Renew_{p}'
-            code_list.append(uid)
-            link = f't.me/{bot_name}?start={uid}\n'
-            links += link
-            i += 1
-    if sql_add_code(code_list, tg, days) is False:
-        return None
-    return links
 
 
 _CODE_SUFFIX_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,20}$")
@@ -312,7 +301,7 @@ def convert_to_beijing_time(original_date):
     return dt
 
 
-@cache.memoize(ttl=300)
+@async_memoize(ttl=300)
 async def get_users():
     # 创建一个空字典来存储用户的 first_name 和 id
     members_dict = {}
@@ -323,11 +312,6 @@ async def get_users():
             print(f'{e} 某名bug {member}')
     return members_dict
 
-
-def bytes_to_gb(size_in_bytes):
-    # 1 GB = 1024^3 字节
-    size_in_gb = size_in_bytes / (1024 ** 3)
-    return f"{round(size_in_gb)} G"
 
 def split_long_message(content, max_length=2000):
     """

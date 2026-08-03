@@ -30,6 +30,29 @@ def create_personal_shop_listing(
     )
 
 
+def create_personal_auction_listing(
+    *,
+    tg: int,
+    seller_name: str,
+    item_kind: str,
+    item_ref_id: int,
+    quantity: int,
+    opening_price_stone: int,
+    bid_increment_stone: int,
+    buyout_price_stone: int | None = None,
+) -> dict[str, Any]:
+    return _legacy_service().create_personal_auction_listing(
+        tg=tg,
+        seller_name=seller_name,
+        item_kind=item_kind,
+        item_ref_id=item_ref_id,
+        quantity=quantity,
+        opening_price_stone=opening_price_stone,
+        bid_increment_stone=bid_increment_stone,
+        buyout_price_stone=buyout_price_stone,
+    )
+
+
 def create_official_shop_listing(
     item_kind: str,
     item_ref_id: int,
@@ -51,7 +74,7 @@ def recycle_item_to_official_shop(
     tg: int,
     item_kind: str,
     item_ref_id: int,
-    quantity: int,
+    quantity: int = 1,
 ) -> dict[str, Any]:
     return _legacy_service().recycle_item_to_official_shop(
         tg=tg,
@@ -61,7 +84,18 @@ def recycle_item_to_official_shop(
     )
 
 
-def attach_official_recycle_quotes(bundle: dict[str, Any] | None) -> dict[str, Any]:
+def recycle_items_to_official_shop(
+    *,
+    tg: int,
+    items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return _legacy_service().recycle_items_to_official_shop(
+        tg=tg,
+        items=items,
+    )
+
+
+def attach_official_recycle_quotes(bundle: dict[str, Any]) -> dict[str, Any]:
     return _legacy_service().attach_official_recycle_quotes(bundle)
 
 
@@ -69,8 +103,29 @@ def patch_shop_listing(item_id: int, **fields) -> dict[str, Any] | None:
     return _legacy_service().patch_shop_listing(item_id, **fields)
 
 
+def patch_auction_listing(auction_id: int, **fields) -> dict[str, Any] | None:
+    return _legacy_service().patch_auction_listing(auction_id, **fields)
+
+
 def purchase_shop_item(tg: int, item_id: int, quantity: int = 1) -> dict[str, Any]:
     return _legacy_service().purchase_shop_item(tg, item_id, quantity=quantity)
+
+
+def place_auction_bid(tg: int, auction_id: int, *, bidder_name: str = "", use_buyout: bool = False) -> dict[str, Any]:
+    return _legacy_service().place_auction_bid(
+        tg,
+        auction_id,
+        bidder_name=bidder_name,
+        use_buyout=use_buyout,
+    )
+
+
+def finalize_auction_listing(auction_id: int, *, force: bool = False) -> dict[str, Any] | None:
+    return _legacy_service().finalize_auction_listing(auction_id, force=force)
+
+
+def cancel_personal_auction_listing(tg: int, auction_id: int) -> dict[str, Any] | None:
+    return _legacy_service().cancel_personal_auction_listing(tg, auction_id)
 
 
 def grant_item_to_user(tg: int, item_kind: str, item_ref_id: int, quantity: int) -> dict[str, Any]:
@@ -93,8 +148,14 @@ def search_xiuxian_players(
     query: str | None = None,
     page: int = 1,
     page_size: int = 20,
+    include_secluded: bool = True,
 ) -> dict[str, Any]:
-    return _legacy_service().search_xiuxian_players(query=query, page=page, page_size=page_size)
+    return _legacy_service().search_xiuxian_players(
+        query=query,
+        page=page,
+        page_size=page_size,
+        include_secluded=include_secluded,
+    )
 
 
 def generate_shop_name(first_name: str) -> str:

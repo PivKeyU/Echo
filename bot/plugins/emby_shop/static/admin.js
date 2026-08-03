@@ -1,7 +1,28 @@
 const tg = window.Telegram?.WebApp || null;
 const storageKey = "emby-shop-admin-token";
+
+function readLocalStorage(key) {
+  try {
+    return window.localStorage.getItem(key) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function writeLocalStorage(key, value) {
+  try {
+    if (value) {
+      window.localStorage.setItem(key, value);
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  } catch (error) {
+    setStatus("浏览器阻止了本地保存，仍会使用本次输入的令牌验证。", "warning");
+  }
+}
+
 const state = {
-  token: localStorage.getItem(storageKey) || "",
+  token: readLocalStorage(storageKey),
   initData: tg?.initData || "",
   authMode: null,
   payload: null
@@ -24,7 +45,9 @@ const refs = {
   orderList: document.querySelector("#admin-order-list")
 };
 
-refs.tokenInput.value = state.token;
+if (refs.tokenInput) {
+  refs.tokenInput.value = state.token;
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -36,6 +59,7 @@ function escapeHtml(value) {
 }
 
 function setStatus(text, tone = "info") {
+  if (!refs.status) return;
   refs.status.textContent = text;
   refs.status.dataset.tone = tone;
 }
@@ -51,13 +75,23 @@ function authHeaders() {
 }
 
 async function request(method, url, payload, isForm = false) {
-  const response = await fetch(url, {
-    method,
-    headers: isForm ? authHeaders() : { ...authHeaders(), "Content-Type": "application/json" },
-    body: payload ? (isForm ? payload : JSON.stringify(payload)) : undefined
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: isForm ? authHeaders() : { ...authHeaders(), "Content-Type": "application/json" },
+      body: payload ? (isForm ? payload : JSON.stringify(payload)) : undefined
+    });
+  } catch (error) {
+    throw new Error("网络请求失败，请确认后台服务正在运行。");
+  }
   const raw = await response.text();
-  const data = raw ? JSON.parse(raw) : {};
+  let data = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch (error) {
+    throw new Error(raw || `请求失败（HTTP ${response.status}）`);
+  }
   if (!response.ok || data.code !== 200) {
     throw new Error(data.detail || data.message || `请求失败（HTTP ${response.status}）`);
   }
@@ -83,9 +117,20 @@ function renderOrders(orders = []) {
         <span class="tag">${escapeHtml(order.total_price_iv)}</span>
       </div>
       <p class="muted">买家 TG ${escapeHtml(order.buyer_tg)} · 卖家 ${escapeHtml(order.seller_tg || "官方")}</p>
+      <p class="muted">${inviteItemLabel(order.item_type, order.invite_credit_quantity)}</p>
       <p class="muted">${escapeHtml(order.created_at || "")}</p>
     </article>
   `).join("");
+}
+
+function inviteItemLabel(itemType, quantity = 0) {
+  if (itemType === "invite_credit" || itemType === "group_invite_credit") {
+    return `入群资格 ${escapeHtml(quantity || 1)} 次/份`;
+  }
+  if (itemType === "account_open_credit") {
+    return `注册资格 ${escapeHtml(quantity || 1)} 次/份`;
+  }
+  return "普通数字商品";
 }
 
 function renderItems(items = []) {
@@ -103,10 +148,12 @@ function renderItems(items = []) {
       <div class="product-meta">
         <span class="tag">价格 ${escapeHtml(item.price_iv)}</span>
         <span class="tag">库存 ${escapeHtml(item.stock)}</span>
+        <span class="tag">${inviteItemLabel(item.item_type, item.invite_credit_quantity)}</span>
         <span class="tag">${item.official ? "官方商品" : "用户商品"}</span>
         ${item.notify_group ? `<span class="tag">群通知开启</span>` : ""}
       </div>
       <div class="form-actions">
+        <button type="button" class="secondary" data-edit="${escapeHtml(item.id)}">编辑</button>
         <button type="button" class="secondary" data-toggle="${escapeHtml(item.id)}">${item.enabled ? "下架" : "上架"}</button>
         <button type="button" class="secondary" data-delete="${escapeHtml(item.id)}">删除</button>
       </div>
@@ -130,6 +177,28 @@ function renderItems(items = []) {
     });
   });
 
+  refs.productList.querySelectorAll("[data-edit]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const itemId = Number(button.dataset.edit);
+      const item = items.find((row) => Number(row.id) === itemId);
+      if (!item) return;
+      const patch = promptItemPatch(item);
+      if (!patch) return;
+      try {
+        button.disabled = true;
+        button.textContent = "保存中...";
+        const payload = await request("PATCH", `/plugins/shop/admin-api/item/${itemId}`, patch);
+        applyPayload({ ...state.payload, items: payload.items || [] });
+        setStatus("商品信息已更新。", "success");
+      } catch (error) {
+        setStatus(String(error.message || error), "error");
+      } finally {
+        button.disabled = false;
+        button.textContent = "编辑";
+      }
+    });
+  });
+
   refs.productList.querySelectorAll("[data-delete]").forEach((button) => {
     button.addEventListener("click", async () => {
       const itemId = Number(button.dataset.delete);
@@ -144,6 +213,54 @@ function renderItems(items = []) {
       }
     });
   });
+}
+
+function promptItemPatch(item) {
+  const title = window.prompt("商品标题：", item.title || "");
+  if (title === null) return null;
+  const itemType = window.prompt("商品类型（digital / group_invite_credit / account_open_credit）：", item.item_type || "digital");
+  if (itemType === null) return null;
+  const inviteQuantity = window.prompt("每份资格数量：", item.invite_credit_quantity ?? 0);
+  if (inviteQuantity === null) return null;
+  const priceIv = window.prompt("价格（Emby 货币）：", item.price_iv ?? 0);
+  if (priceIv === null) return null;
+  const stock = window.prompt("库存：", item.stock ?? 0);
+  if (stock === null) return null;
+  const imageUrl = window.prompt("图片地址：", item.image_url || "");
+  if (imageUrl === null) return null;
+  const description = window.prompt("商品描述：", item.description || "");
+  if (description === null) return null;
+  const deliveryText = window.prompt("自动发货内容：", item.delivery_text || "");
+  if (deliveryText === null) return null;
+  const notifyGroup = parseBooleanPrompt("是否通知群组（true/false）", item.notify_group);
+  if (notifyGroup === null) return null;
+  const official = parseBooleanPrompt("是否标记为官方商品（true/false）", item.official);
+  if (official === null) return null;
+  const enabled = parseBooleanPrompt("是否立即上架（true/false）", item.enabled);
+  if (enabled === null) return null;
+  return {
+    title: title.trim(),
+    item_type: itemType.trim(),
+    invite_credit_quantity: Number(inviteQuantity || 0),
+    price_iv: Number(priceIv || 0),
+    stock: Number(stock || 0),
+    image_url: imageUrl.trim(),
+    description: description.trim(),
+    delivery_text: deliveryText.trim(),
+    notify_group: notifyGroup,
+    official,
+    enabled
+  };
+}
+
+function parseBooleanPrompt(message, currentValue) {
+  const raw = window.prompt(message, currentValue ? "true" : "false");
+  if (raw === null) return null;
+  const normalized = raw.trim().toLowerCase();
+  if (["true", "1", "yes", "y", "是", "开", "开启"].includes(normalized)) return true;
+  if (["false", "0", "no", "n", "否", "关", "关闭"].includes(normalized)) return false;
+  window.alert("请输入 true 或 false。");
+  return parseBooleanPrompt(message, currentValue);
 }
 
 function applyPayload(payload = {}) {
@@ -188,12 +305,24 @@ async function bootstrap(forceToken = false) {
 
 refs.tokenForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  state.token = refs.tokenInput.value.trim();
-  localStorage.setItem(storageKey, state.token);
+  const submitButton = document.querySelector("#token-submit");
+  const previousText = submitButton?.textContent || "保存并验证";
+  state.token = refs.tokenInput?.value.trim() || "";
+  writeLocalStorage(storageKey, state.token);
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "验证中...";
+  }
+  setStatus("正在验证后台令牌...", "info");
   try {
     await bootstrap(true);
   } catch (error) {
     setStatus(String(error.message || error), "error");
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = previousText;
+    }
   }
 });
 
@@ -251,6 +380,8 @@ refs.itemForm?.addEventListener("submit", async (event) => {
       description: document.querySelector("#item-description").value.trim(),
       image_url: document.querySelector("#item-image").value.trim(),
       delivery_text: document.querySelector("#item-delivery").value.trim(),
+      item_type: document.querySelector("#item-type").value,
+      invite_credit_quantity: Number(document.querySelector("#item-invite-quantity").value || 0),
       price_iv: Number(document.querySelector("#item-price").value || 0),
       stock: Number(document.querySelector("#item-stock").value || 1),
       notify_group: document.querySelector("#item-notify").checked,

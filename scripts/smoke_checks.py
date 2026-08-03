@@ -215,7 +215,14 @@ def run_plugin_checks() -> dict[str, Any]:
             for node in module_ast.body
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         }
-        if "register_bot" not in defined_functions and "register_web" not in defined_functions:
+        imported_functions = {
+            alias.asname or alias.name
+            for node in module_ast.body
+            if isinstance(node, (ast.Import, ast.ImportFrom))
+            for alias in node.names
+        }
+        entry_functions = defined_functions | imported_functions
+        if "register_bot" not in entry_functions and "register_web" not in entry_functions:
             raise RuntimeError(f"Plugin has no register_bot/register_web entry: {entry_path}")
 
         if record.enabled:

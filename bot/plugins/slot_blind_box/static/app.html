@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
+  <title>老虎机盲盒</title>
+  <link rel="stylesheet" href="/plugins/slot-box/static/slot.css">
+</head>
+<body class="slot-app">
+  <main class="slot-shell">
+    <section class="top-band">
+      <div class="title-block">
+        <p class="eyebrow">Slot Box</p>
+        <h1 id="slot-title">老虎机盲盒</h1>
+        <p id="slot-notice" class="muted">正在同步奖池...</p>
+      </div>
+      <div class="slot-hero-visual" aria-hidden="true">
+        <div class="hero-jackpot">🎰</div>
+        <div class="hero-lights">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+      <div class="toolbar">
+        <a id="slot-admin-entry" class="icon-link hidden" href="/plugins/slot-box/admin" aria-label="后台" title="后台"><span class="icon-symbol">⚙</span></a>
+        <a class="icon-link" href="/plugins/shop/app" aria-label="Emby 商店" title="Emby 商店"><span class="icon-symbol">🛒</span></a>
+        <a class="icon-link" href="/miniapp" aria-label="主页" title="主页"><span class="icon-symbol">⌂</span></a>
+      </div>
+    </section>
+
+    <section class="machine-band">
+      <div class="machine-head">
+        <span id="pity-meter" class="status-pill">保底 -</span>
+        <span id="limit-meter" class="status-pill">次数 -</span>
+      </div>
+      <div class="slot-machine" aria-live="polite">
+        <div class="reel" data-reel="0"><span class="reel-strip"><span>🍒</span><span class="payline-symbol">🎁</span><span>🔔</span></span></div>
+        <div class="reel" data-reel="1"><span class="reel-strip"><span>🍋</span><span class="payline-symbol">🍒</span><span>🎟️</span></span></div>
+        <div class="reel" data-reel="2"><span class="reel-strip"><span>🔔</span><span class="payline-symbol">🎟️</span><span>🍊</span></span></div>
+      </div>
+      <div class="machine-actions">
+        <button id="spin-button" type="button"><span class="button-icon">▶</span><span>开始</span></button>
+        <button id="refresh-button" type="button" class="secondary"><span class="button-icon">↻</span><span>刷新</span></button>
+      </div>
+      <p id="app-status" class="status-line muted">正在加载。</p>
+      <div id="result-panel" class="result-panel hidden"></div>
+    </section>
+
+    <section class="stats-band">
+      <article class="metric">
+        <span>余额</span>
+        <strong id="balance-count">-</strong>
+      </article>
+      <article class="metric">
+        <span>单抽</span>
+        <strong id="spin-cost">-</strong>
+      </article>
+      <article class="metric">
+        <span>赠送</span>
+        <strong id="daily-gift-count">-</strong>
+      </article>
+      <article class="metric">
+        <span>抽奖券</span>
+        <strong id="ticket-count">-</strong>
+      </article>
+      <article class="metric">
+        <span>总次数</span>
+        <strong id="spin-count">-</strong>
+      </article>
+      <article class="metric">
+        <span>中奖</span>
+        <strong id="win-count">-</strong>
+      </article>
+      <article class="metric">
+        <span>未中</span>
+        <strong id="blank-count">-</strong>
+      </article>
+      <article class="metric">
+        <span>奖品</span>
+        <strong id="prize-count">-</strong>
+      </article>
+    </section>
+
+    <section class="content-grid">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>奖池</h2>
+          <span id="blank-rate" class="status-pill">轮空 -</span>
+        </div>
+        <div id="prize-list" class="prize-grid"></div>
+      </div>
+      <details class="panel collapsible-panel" id="record-panel">
+        <summary class="panel-head collapsible-head">
+          <h2>记录</h2>
+          <span id="my-streak" class="status-pill">连续未中 -</span>
+        </summary>
+        <div class="record-tools">
+          <label>
+            类型
+            <select id="record-filter">
+              <option value="all">全部</option>
+              <option value="win">中奖</option>
+              <option value="blank">轮空</option>
+              <option value="emby_currency">Emby 货币</option>
+              <option value="free_spin_ticket">抽奖券</option>
+              <option value="group_invite_credit">邀请资格</option>
+              <option value="account_open_credit">开号资格</option>
+              <option value="manual">普通奖品</option>
+            </select>
+          </label>
+        </div>
+        <div id="record-list" class="record-list"></div>
+        <div class="pager" id="record-pager">
+          <button id="record-prev" type="button" class="secondary"><span class="button-icon">‹</span><span>上一页</span></button>
+          <span id="record-page-info" class="status-pill">1/1</span>
+          <button id="record-next" type="button" class="secondary"><span class="button-icon">›</span><span>下一页</span></button>
+        </div>
+      </details>
+    </section>
+
+    <section class="content-grid">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>背包</h2>
+          <span class="status-pill">虚拟物品</span>
+        </div>
+        <div id="backpack-list" class="prize-grid"></div>
+        <form id="redeem-form" class="grid-form compact-form">
+          <label class="wide">
+            兑换码
+            <input id="redeem-code" type="text" maxlength="40" placeholder="输入兑换码">
+          </label>
+          <div class="form-actions wide">
+            <button id="redeem-submit" type="submit" class="secondary"><span class="button-icon">✦</span><span>兑换</span></button>
+          </div>
+        </form>
+        <form id="transfer-form" class="grid-form compact-form">
+          <label>
+            物品
+            <select id="transfer-type">
+              <option value="free_spin_ticket">抽奖券</option>
+              <option value="group_invite_credit">邀请资格</option>
+              <option value="account_open_credit">开号资格</option>
+            </select>
+          </label>
+          <label>
+            数量
+            <input id="transfer-quantity" type="number" min="1" value="1">
+          </label>
+          <label class="wide">
+            接收方
+            <input id="transfer-target-query" type="search" placeholder="输入 TG 昵称、@username 或 TGID 搜索">
+            <input id="transfer-target" type="hidden">
+          </label>
+          <div id="transfer-target-results" class="target-result-list wide hidden"></div>
+          <p id="transfer-target-selected" class="selected-target wide muted">尚未选择接收方。</p>
+          <div class="form-actions wide">
+            <button id="transfer-submit" type="submit" class="secondary"><span class="button-icon">⇄</span><span>转赠</span></button>
+          </div>
+        </form>
+      </div>
+
+      <div class="panel shop-link-panel">
+        <div class="panel-head">
+          <h2>Emby 商店联动</h2>
+          <span class="status-pill">统一交易</span>
+        </div>
+        <div class="shop-bridge">
+          <div class="bridge-orbit" aria-hidden="true"><span>🛒</span><span>🎰</span><span>💎</span></div>
+          <p class="muted">交易、购买和上架统一进入 Emby 商店插件处理，老虎机只保留抽奖、背包兑换和转赠。</p>
+          <div class="form-actions">
+            <a class="button-link shop-bridge-button" href="/plugins/shop/app"><span class="button-icon">🛒</span><span>进入 Emby 商店</span></a>
+            <a id="shop-admin-link" class="button-link secondary hidden" href="/plugins/shop/admin"><span class="button-icon">◈</span><span>商店后台</span></a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav id="bottom-nav" class="bottom-nav"></nav>
+
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/plugins/slot-box/static/app.js"></script>
+</body>
+</html>

@@ -65,7 +65,7 @@ def upgrade() -> None:
             sa.Column("reward_willpower", sa.Integer(), nullable=False, server_default="0"),
             sa.Column("reward_charisma", sa.Integer(), nullable=False, server_default="0"),
             sa.Column("reward_karma", sa.Integer(), nullable=False, server_default="0"),
-            sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+            sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.true()),
             sa.Column("created_at", sa.DateTime(), nullable=False),
             sa.Column("updated_at", sa.DateTime(), nullable=False),
         )
