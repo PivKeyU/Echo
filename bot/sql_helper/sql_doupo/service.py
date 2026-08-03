@@ -120,6 +120,22 @@ _INT32_MAX = 2_147_483_647
 _PROFILE_INIT_LOCK = threading.Lock()
 _INITIALIZED_PROFILES: set[int] = set()
 
+# Telegram MarkdownV2 特殊字符(作字面量时必须反斜杠转义)
+_MD_V2_SPECIAL_CHARS = r"_*[]()~`>#+-=|{}.!"
+# 播报卡片分隔线
+_MD_BROADCAST_DIVIDER = "━" * 18
+
+
+def _md_escape(value: Any) -> str:
+    """转义 Telegram MarkdownV2 特殊字符,防止动态内容破坏排版。"""
+    text = str(value or "")
+    return "".join(f"\\{ch}" if ch in _MD_V2_SPECIAL_CHARS else ch for ch in text)
+
+
+def _md_broadcast_card(title: str, icon: str, lines: list[str]) -> str:
+    """将标题与内容行拼装为带分隔线的 MarkdownV2 播报卡片。"""
+    return "\n".join([f"{icon} **{title}** {icon}", _MD_BROADCAST_DIVIDER, *lines, _MD_BROADCAST_DIVIDER])
+
 
 def _coerce_int(value: Any, default: int) -> int:
     return clamp_int(value, default)
@@ -2658,32 +2674,67 @@ def _build_broadcast_event(profile: DoupoProfile, result: dict[str, Any], settin
     if not bool(settings.get("broadcast_enabled", True)):
         return None
     display_name = _profile_display_name(profile.display_name, profile.username, int(profile.tg))
+    display_md = _md_escape(display_name)
     realm_text = f"{profile.realm_stage} {int(profile.realm_stars or 1)}星"
     if result.get("breakthrough_success"):
         return {
             "kind": "breakthrough",
-            "title": "⚡ 斗破突破播报",
+            "title": "斗破突破播报",
+            "icon": "⚡",
             "text": f"⚡ {display_name} 冲破瓶颈，当前境界：{realm_text}。",
+            "md": _md_broadcast_card(
+                "斗破突破播报",
+                "⚡",
+                [f"⚡ **{display_md}** 冲破瓶颈，当前境界：**{_md_escape(realm_text)}**。"],
+            ),
         }
     if result.get("captured_fire"):
         return {
             "kind": "fire",
-            "title": "🔥 异火收服播报",
+            "title": "异火收服播报",
+            "icon": "🔥",
             "text": f"🔥 {display_name} 成功收服 {result['captured_fire']}，火候大涨。",
+            "md": _md_broadcast_card(
+                "异火收服播报",
+                "🔥",
+                [
+                    f"🔥 **{display_md}** 成功收服 **【{_md_escape(result['captured_fire'])}】**，火候大涨。",
+                    "✨ *天地异火，尽入我手。*",
+                ],
+            ),
         }
     rare_items = result.get("rare_items") or []
     if rare_items:
         names = "、".join(str(item.get("name") or item.get("item_key")) for item in rare_items[:3])
         return {
             "kind": "rare_item",
-            "title": "💎 纳戒稀有掉落",
+            "title": "纳戒稀有掉落",
+            "icon": "💎",
             "text": f"💎 {display_name} 在 {result.get('action_name') or '行动'} 中获得稀有物品：{names}。",
+            "md": _md_broadcast_card(
+                "纳戒稀有掉落",
+                "💎",
+                [
+                    f"💎 **{display_md}** 在 **{_md_escape(result.get('action_name') or '行动')}** 中获得稀有物品：",
+                    f"🎁 **{_md_escape(names)}**。",
+                    "🌟 *气运加身，福缘不浅。*",
+                ],
+            ),
         }
     if str(result.get("action_type") or "") == "boss" and int(result.get("boss_delta") or 0) >= 60:
         return {
             "kind": "boss",
-            "title": "👹 魔兽讨伐播报",
+            "title": "魔兽讨伐播报",
+            "icon": "👹",
             "text": f"👹 {display_name} 完成高战绩讨伐，Boss 战绩 +{int(result.get('boss_delta') or 0)}。",
+            "md": _md_broadcast_card(
+                "魔兽讨伐播报",
+                "👹",
+                [
+                    f"👹 **{display_md}** 完成高战绩讨伐，Boss 战绩 **\\+{int(result.get('boss_delta') or 0)}**。",
+                    "💪 *强者之路，又进一步。*",
+                ],
+            ),
         }
     return None
 

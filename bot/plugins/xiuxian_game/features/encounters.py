@@ -49,10 +49,23 @@ def _legacy_world_service():
 
 
 MARKDOWN_ESCAPE_PATTERN = re.compile(r"([_*\[`])")
+# 群播报卡片分隔线(与斗罗/斗破/修仙播报同款样式)
+_MD_BROADCAST_DIVIDER = "━" * 18
 
 
 def _md_escape(value: Any) -> str:
     return MARKDOWN_ESCAPE_PATTERN.sub(r"\\\1", str(value or ""))
+
+
+def _format_broadcast_card(title: str, *, emoji: str, lines: list[str], footer: str | None = None) -> str:
+    """带分隔线边框的群播报卡片:图标标题 + 分隔线 + 正文 + 分隔线。"""
+    rows = [f"{emoji} **{_md_escape(title)}** {emoji}", _MD_BROADCAST_DIVIDER]
+    rows.extend(str(line).strip() for line in lines if str(line or "").strip())
+    if footer:
+        rows.extend([_MD_BROADCAST_DIVIDER, str(footer).strip()])
+    else:
+        rows.append(_MD_BROADCAST_DIVIDER)
+    return "\n".join(rows)
 
 
 def list_encounter_templates(enabled_only: bool = False) -> list[dict[str, Any]]:
@@ -229,13 +242,18 @@ def render_group_encounter_text(template: dict[str, Any], instance: dict[str, An
         requirements.append(f"战力至少 {int(template.get('min_combat_power') or 0)}")
     requirement_text = "；".join(requirements) if requirements else "无门槛，先到先得"
     return (
-        f"🌠 **群机缘降世**\n"
-        f"📜 奇遇：**{_md_escape(template.get('name') or '未命名奇遇')}**\n"
-        f"📝 异象：{_md_escape(action_text)}\n"
-        f"🎁 奖励预览：{_md_escape(reward_summary)}\n"
-        f"📌 领取要求：{_md_escape(requirement_text)}\n"
-        f"⏳ 截止：{_md_escape(expires_at)}\n"
-        "谁先抢到，机缘便归谁。"
+        _format_broadcast_card(
+            "群机缘降世",
+            emoji="🌠",
+            lines=[
+                f"📜 奇遇：**{_md_escape(template.get('name') or '未命名奇遇')}**",
+                f"📝 异象：{_md_escape(action_text)}",
+                f"🎁 奖励预览：{_md_escape(reward_summary)}",
+                f"📌 领取要求：{_md_escape(requirement_text)}",
+                f"⏳ 截止：{_md_escape(expires_at)}",
+            ],
+            footer="⚡ 谁先抢到，机缘便归谁。",
+        )
     )
 
 

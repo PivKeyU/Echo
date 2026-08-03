@@ -948,6 +948,21 @@ def _format_notice_card(title: str, *, emoji: str, lines: Iterable[str], footer:
     return "\n".join(rows)
 
 
+# 群播报卡片分隔线(与斗罗/斗破播报同款样式)
+_MD_BROADCAST_DIVIDER = "━" * 18
+
+
+def _format_broadcast_card(title: str, *, emoji: str, lines: Iterable[str], footer: str | None = None) -> str:
+    """带分隔线边框的群播报卡片:图标标题 + 分隔线 + 正文 + 分隔线。"""
+    rows = [f"{emoji} **{_md_escape(title)}** {emoji}", _MD_BROADCAST_DIVIDER]
+    rows.extend(str(line).strip() for line in lines if str(line or "").strip())
+    if footer:
+        rows.extend([_MD_BROADCAST_DIVIDER, str(footer).strip()])
+    else:
+        rows.append(_MD_BROADCAST_DIVIDER)
+    return "\n".join(rows)
+
+
 def _format_layer_upgrade_line(upgraded_layers: list[int] | None, *, label: str = "层数提升") -> str:
     layers = [int(layer) for layer in (upgraded_layers or []) if int(layer) > 0]
     if not layers:
@@ -2403,15 +2418,15 @@ def _gift_group_broadcast_text(sender_name: str, receiver: dict[str, Any], amoun
         or str(receiver.get("display_name") or "").strip()
         or (f"@{receiver['username']}" if str(receiver.get("username") or "").strip() else f"TG {receiver.get('tg', 0)}")
     )
-    return _format_notice_card(
+    return _format_broadcast_card(
         "灵石赠礼",
         emoji="🎁",
         lines=[
             f"👤 赠礼人：{_md_escape(sender_name)}",
             f"🎯 收礼人：{_md_escape(receiver_label)}",
             f"💎 金额：`{int(amount or 0)}` 灵石",
-            "✨ 一份机缘已经当众完成交接。",
         ],
+        footer="✨ 一份机缘已经当众完成交接。",
     )
 
 
@@ -3657,16 +3672,17 @@ async def _maybe_broadcast_craft(actor_tg: int, result: dict[str, Any]) -> None:
     await _send_message(
         bot,
         chat_id,
-        "\n".join(
-            [
-                "🌠 **天地异象显化**",
+        _format_broadcast_card(
+            "天地异象显化",
+            emoji="🌠",
+            lines=[
                 f"🧑‍🏭 炼制者：{_md_escape(_duel_profile_label(actor_profile))}",
                 f"📜 配方：{_md_escape(recipe_name)}",
                 f"🎁 成品：**{_md_escape(item_name)}** × `{total_quantity or max(success_count, 1)}`",
                 f"✨ 品阶：`{_md_escape(quality_label or '高品')}`",
                 f"🔥 炉次：成功 `{success_count}` ｜ 失败 `{failure_count}`",
-                "🎉 高品质成品出炉，群中灵机为之一振。",
-            ]
+            ],
+            footer="🎉 高品质成品出炉，群中灵机为之一振。",
         ),
         parse_mode=RICH_TEXT_MODE,
     )
@@ -3683,7 +3699,6 @@ async def _maybe_broadcast_gambling(actor_tg: int, result: dict[str, Any]) -> No
     opened_count = max(int(result.get("opened_count") or 0), 0)
     fortune_hint = str(result.get("fortune_hint") or "").strip()
     lines = [
-        "🎰 **赌坊异象**",
         f"🧑‍🎲 开石者：{_md_escape(_duel_profile_label(actor_profile))}",
         f"🪨 本次开启：`{opened_count}` 枚仙界奇石",
         (f"🍀 机缘提示：{_md_escape(fortune_hint)}" if fortune_hint else "🍀 机缘提示：本次未额外显示机缘说明"),
@@ -3696,11 +3711,15 @@ async def _maybe_broadcast_gambling(actor_tg: int, result: dict[str, Any]) -> No
         lines.append(f"• `{_md_escape(quality_label)}` ｜ **{_md_escape(item_name)}** × `{quantity}`")
     if len(rare_rows) > 5:
         lines.append(f"• 其余还有 `{len(rare_rows) - 5}` 项高品奖励")
-    lines.append("🎉 群播已记录本次高品掉落，道友们快来围观手气。")
     await _send_message(
         bot,
         chat_id,
-        "\n".join(lines),
+        _format_broadcast_card(
+            "赌坊异象",
+            emoji="🎰",
+            lines=lines,
+            footer="🎉 群播已记录本次高品掉落，道友们快来围观手气。",
+        ),
         parse_mode=RICH_TEXT_MODE,
     )
 
@@ -4314,7 +4333,7 @@ def register_bot(bot_instance) -> None:
                         text = instance.get("broadcast_text")
                         chat_id = instance.get("broadcast_chat_id")
                         if text and chat_id:
-                            asyncio.create_task(_send_message(bot_instance, chat_id, text, persistent=True))
+                            asyncio.create_task(_send_message(bot_instance, chat_id, text, parse_mode=RICH_TEXT_MODE, persistent=True))
                     await asyncio.sleep(60)
                 except asyncio.CancelledError:
                     raise

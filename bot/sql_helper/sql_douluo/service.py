@@ -168,24 +168,53 @@ def _profile_display_name(display_name: str | None, username: str | None, tg: in
 # 触发群播报的关键突破境界
 BROADCAST_MILESTONE_REALMS = {"魂王", "魂帝", "魂圣", "魂斗罗", "封号斗罗", "神", "神王"}
 
+# Telegram MarkdownV2 特殊字符(作字面量时必须反斜杠转义)
+_MD_V2_SPECIAL_CHARS = r"_*[]()~`>#+-=|{}.!"
+# 魂环颜色 -> 表情符号(用于播报排版点缀)
+_RING_COLOR_EMOJI = {"白": "⚪", "黄": "🟡", "紫": "🟣", "黑": "⚫", "红": "🔴", "蓝金": "💎"}
+# 播报卡片分隔线
+_MD_BROADCAST_DIVIDER = "━" * 18
+
+
+def _md_escape(value: Any) -> str:
+    """转义 Telegram MarkdownV2 特殊字符,防止动态内容破坏排版。"""
+    text = str(value or "")
+    return "".join(f"\\{ch}" if ch in _MD_V2_SPECIAL_CHARS else ch for ch in text)
+
+
+def _md_broadcast_card(title: str, icon: str, lines: list[str]) -> str:
+    """将标题与内容行拼装为带分隔线的 MarkdownV2 播报卡片。"""
+    return "\n".join([f"{icon} **{title}** {icon}", _MD_BROADCAST_DIVIDER, *lines, _MD_BROADCAST_DIVIDER])
+
 
 def _build_douluo_broadcast_event(profile, result: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any] | None:
     """根据动作结果构造群播报事件;未达播报条件或关闭播报时返回 None。
 
-    覆盖:关键突破、高阶魂环(万年及以上)、魂兽讨伐胜利(含稀有魂骨掉落)。
+    覆盖:关键突破、高阶魂环(万年及以上)、血脉觉醒(珍品/神品)、魂兽讨伐胜利(含稀有魂骨掉落)。
+    事件同时携带纯文本 text 与 MarkdownV2 排版 md,群播报优先使用 md 呈现美观卡片。
     """
     if not bool(settings.get("broadcast_enabled", True)):
         return None
     display = _profile_display_name(profile.display_name, profile.username, int(profile.tg))
+    display_md = _md_escape(display)
     # 关键突破
     if result.get("success") and str(result.get("next_stage") or "") in BROADCAST_MILESTONE_REALMS:
         next_stage = result.get("next_stage")
         return {
             "kind": "breakthrough",
             "title": "斗罗突破播报",
+            "icon": "🔥",
             "text": (
                 f"⚡ {display} 魂力贯通,冲破瓶颈,成功晋升【{next_stage}】!\n"
                 "🌟 群中魂师,无不侧目。"
+            ),
+            "md": _md_broadcast_card(
+                "斗罗突破播报",
+                "🔥",
+                [
+                    f"⚡ **{display_md}** 魂力贯通，冲破瓶颈，成功晋升 **【{_md_escape(next_stage)}】**！",
+                    "🌟 *群中魂师，无不侧目。*",
+                ],
             ),
         }
     # 高阶魂环:猎杀吸收/替换万年及以上魂环
@@ -194,12 +223,23 @@ def _build_douluo_broadcast_event(profile, result: dict[str, Any], settings: dic
         region = result.get("region") or {}
         beast = result.get("beast") or {}
         color = str(result.get("color") or "")
+        color_emoji = _RING_COLOR_EMOJI.get(color, "✨")
+        years = _md_escape(result.get("years"))
         return {
             "kind": "high_ring",
             "title": "斗罗猎魂播报",
+            "icon": "🐾",
             "text": (
                 f"🐾 {display} 于【{region.get('name')}】猎杀 {beast.get('name')},\n"
                 f"💍 夺得 {result.get('years')}年高阶魂环!{color}色魂光冲天而起,群中魂师尽皆瞩目。"
+            ),
+            "md": _md_broadcast_card(
+                "斗罗猎魂播报",
+                "🐾",
+                [
+                    f"🐾 **{display_md}** 于 **【{_md_escape(region.get('name'))}】** 猎杀 **【{_md_escape(beast.get('name'))}】**",
+                    f"💍 夺得 **{years} 年** 高阶魂环！{color_emoji} *{_md_escape(color)}色魂光冲天而起，群中魂师尽皆瞩目。*",
+                ],
             ),
         }
     # 血脉觉醒(珍品/神品)
@@ -208,29 +248,44 @@ def _build_douluo_broadcast_event(profile, result: dict[str, Any], settings: dic
         return {
             "kind": "bloodline",
             "title": "斗罗血脉播报",
+            "icon": "🧬",
             "text": (
                 f"🧬 {display} 觉醒稀有血脉【{bloodline.get('name')}】({bloodline.get('rarity')})!\n"
                 f"🌀 {bloodline.get('system') or ''} 体系血脉流转周身,群中魂师尽皆动容。"
+            ),
+            "md": _md_broadcast_card(
+                "斗罗血脉播报",
+                "🧬",
+                [
+                    f"🧬 **{display_md}** 觉醒稀有血脉 **【{_md_escape(bloodline.get('name'))}】**（{_md_escape(bloodline.get('rarity'))}）！",
+                    f"🌀 *{_md_escape(bloodline.get('system'))} 体系血脉流转周身，群中魂师尽皆动容。*",
+                ],
             ),
         }
     # 魂兽讨伐胜利(含稀有魂骨掉落)
     if result.get("win"):
         boss = result.get("boss") or {}
         rewards = result.get("rewards") or {}
-        lines = [f"⚔️ {display} 讨伐成功,击败【{boss.get('name')}】!"]
+        text_lines = [f"⚔️ {display} 讨伐成功,击败【{boss.get('name')}】!"]
+        md_lines = [f"⚔️ **{display_md}** 讨伐成功，击败 **【{_md_escape(boss.get('name'))}】**！"]
         bone = (rewards or {}).get("soulbone") or {}
         if bone.get("name"):
-            lines.append(f"🦴 稀有魂骨掉落:【{bone.get('name')}】({bone.get('rarity') or '未知'})")
+            text_lines.append(f"🦴 稀有魂骨掉落:【{bone.get('name')}】({bone.get('rarity') or '未知'})")
+            md_lines.append(f"🦴 稀有魂骨掉落：**【{_md_escape(bone.get('name'))}】**（{_md_escape(bone.get('rarity') or '未知')}）")
         armor = (rewards or {}).get("armor") or {}
         if armor.get("name"):
-            lines.append(f"🛡️ 天降斗铠:【{armor.get('name')}】")
+            text_lines.append(f"🛡️ 天降斗铠:【{armor.get('name')}】")
+            md_lines.append(f"🛡️ 天降斗铠：**【{_md_escape(armor.get('name'))}】**")
         score = int(rewards.get("score") or 0)
         if score:
-            lines.append(f"📈 讨伐战绩 +{score}")
+            text_lines.append(f"📈 讨伐战绩 +{score}")
+            md_lines.append(f"📈 讨伐战绩 **\\+{score}**")
         return {
             "kind": "boss",
             "title": "斗罗讨伐播报",
-            "text": "\n".join(lines),
+            "icon": "⚔️",
+            "text": "\n".join(text_lines),
+            "md": _md_broadcast_card("斗罗讨伐播报", "⚔️", md_lines),
         }
     return None
 

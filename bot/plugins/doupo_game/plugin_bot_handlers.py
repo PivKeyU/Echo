@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from fastapi.concurrency import run_in_threadpool
 from pyrogram import filters
+from pyrogram.enums import ParseMode
 from pyrogram.types import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot import LOGGER, admin_p, group, owner_p, prefixes, user_p
@@ -60,6 +61,22 @@ COMMAND_DISPATCH_CACHE: dict[tuple[int, int, str], float] = {}
 PENDING_DUEL_INVITES: dict[str, dict[str, Any]] = {}
 MESSAGE_AUTO_DELETE_TASKS: dict[tuple[int, int], asyncio.Task] = {}
 PLAIN_PARSE_MODE = None
+
+# Telegram MarkdownV2 特殊字符(作字面量时必须反斜杠转义)
+_MD_V2_SPECIAL_CHARS = r"_*[]()~`>#+-=|{}.!"
+# 播报卡片分隔线
+_MD_BROADCAST_DIVIDER = "━" * 18
+
+
+def _md_escape(value: Any) -> str:
+    """转义 Telegram MarkdownV2 特殊字符,防止动态内容破坏排版。"""
+    text = str(value or "")
+    return "".join(f"\\{ch}" if ch in _MD_V2_SPECIAL_CHARS else ch for ch in text)
+
+
+def _md_broadcast_card(title: str, icon: str, lines: list[str]) -> str:
+    """将标题与内容行拼装为带分隔线的 MarkdownV2 播报卡片。"""
+    return "\n".join([f"{icon} **{title}** {icon}", _MD_BROADCAST_DIVIDER, *lines, _MD_BROADCAST_DIVIDER])
 
 
 def _ensure_doupo_bot_commands() -> None:
@@ -526,14 +543,26 @@ async def _push_duel_broadcast_if_needed(client, chat_id: int, result: dict[str,
     if not bool(settings.get("broadcast_enabled", True)):
         return
     winner = result.get("winner") or {}
+    loser = result.get("loser") or {}
     stake = int(result.get("stake_gold") or 0)
-    lines = [
-        "⚔️ 斗破斗战播报",
-        f"🏆 {winner.get('display_name') or '胜者'} 赢下斗战。",
-    ]
+    winner_name = str(winner.get("display_name") or "胜者").strip()
+    loser_name = str(loser.get("display_name") or "败者").strip()
+    lines = [f"🏆 **{_md_escape(winner_name)}** 赢下斗战，击败 **{_md_escape(loser_name)}**！"]
     if stake > 0:
-        lines.append(f"🪙 金币转移：{stake}")
-    await _send_message(client, chat_id, "\n".join(lines))
+        lines.append(f"🪙 金币转移：**{_md_escape(stake)}**")
+    lines.append("🔥 *斗气之约，一战定胜负。*")
+    md_text = _md_broadcast_card("斗破斗战播报", "⚔️", lines)
+    try:
+        await _send_message(client, chat_id, md_text, persistent=True, parse_mode=ParseMode.MARKDOWN_V2)
+    except Exception:
+        # MarkdownV2 失败时回退纯文本,保证播报不丢失。
+        fallback_lines = [f"⚔️ 斗破斗战播报", f"🏆 {winner_name} 赢下斗战。"]
+        if stake > 0:
+            fallback_lines.append(f"🪙 金币转移：{stake}")
+        try:
+            await _send_message(client, chat_id, "\n".join(fallback_lines), persistent=True)
+        except Exception as exc:
+            LOGGER.warning(f"doupo duel broadcast failed chat={chat_id}: {exc}")
 
 
 async def _finalize_doupo_duel_after_prepare(
@@ -564,15 +593,27 @@ async def _finalize_doupo_duel_after_prepare(
 
 
 async def _push_broadcast_if_needed(client, chat_id: int, result: dict[str, Any]) -> None:
+    """群播报:动作结果含 broadcast 事件时,向指定群发送 MarkdownV2 排版的播报卡片。
+
+    优先使用事件携带的 md(排版文本)发送,失败时回退为纯文本 text。
+    """
     event = result.get("broadcast") or {}
     text = str(event.get("text") or "").strip()
     if not text:
         return
     title = str(event.get("title") or "斗破播报").strip()
+    md_text = str(event.get("md") or "").strip()
     try:
-        await _send_message(client, chat_id, f"📢 {title}\n{text}", persistent=True)
-    except Exception as exc:
-        LOGGER.warning(f"doupo broadcast failed chat={chat_id}: {exc}")
+        if md_text:
+            await _send_message(client, chat_id, md_text, persistent=True, parse_mode=ParseMode.MARKDOWN_V2)
+        else:
+            await _send_message(client, chat_id, f"📢 {title}\n{text}", persistent=True)
+    except Exception:
+        # MarkdownV2 失败(如特殊字符漏转义)时回退纯文本,保证播报不丢失。
+        try:
+            await _send_message(client, chat_id, f"📢 {title}\n{text}", persistent=True)
+        except Exception as exc:
+            LOGGER.warning(f"doupo broadcast failed chat={chat_id}: {exc}")
 
 
 async def _run_group_action(client, message, action_key: str) -> None:

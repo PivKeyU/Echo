@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from fastapi.concurrency import run_in_threadpool
 from pyrogram import filters
+from pyrogram.enums import ParseMode
 from pyrogram.types import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot import LOGGER, admin_p, group, owner_p, prefixes, user_p
@@ -184,16 +185,27 @@ async def _delete_user_command_message(message) -> None:
 
 
 async def _push_broadcast_if_needed(client, chat_id: int, result: dict[str, Any]) -> None:
-    """群播报:动作结果含 broadcast 事件时,向指定群发送带 emoji 的播报。"""
+    """群播报:动作结果含 broadcast 事件时,向指定群发送 MarkdownV2 排版的播报卡片。
+
+    优先使用事件携带的 md(排版文本)发送,失败时回退为纯文本 text。
+    """
     event = (result or {}).get("broadcast") or {}
     text = str(event.get("text") or "").strip()
     if not text:
         return
     title = str(event.get("title") or "斗罗播报").strip()
+    md_text = str(event.get("md") or "").strip()
     try:
-        await _send_message(client, int(chat_id), f"【{title}】\n{text}", persistent=True)
-    except Exception as exc:
-        LOGGER.warning(f"douluo broadcast failed chat={chat_id}: {exc}")
+        if md_text:
+            await _send_message(client, int(chat_id), md_text, persistent=True, parse_mode=ParseMode.MARKDOWN_V2)
+        else:
+            await _send_message(client, int(chat_id), f"【{title}】\n{text}", persistent=True)
+    except Exception:
+        # MarkdownV2 失败(如特殊字符漏转义)时回退纯文本,保证播报不丢失。
+        try:
+            await _send_message(client, int(chat_id), f"【{title}】\n{text}", persistent=True)
+        except Exception as exc:
+            LOGGER.warning(f"douluo broadcast failed chat={chat_id}: {exc}")
 
 
 async def _push_result_broadcast_to_groups(result: dict[str, Any]) -> None:

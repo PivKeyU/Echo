@@ -4,6 +4,7 @@ import json
 import math
 import os
 import random
+import re
 import time
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -1026,17 +1027,41 @@ def _main_group_chat_id() -> int | None:
     return None
 
 
+_MD_ESCAPE_PATTERN = re.compile(r"([_*\[`])")
+# 群播报卡片分隔线(与斗罗/斗破/修仙播报同款样式)
+_MD_BROADCAST_DIVIDER = "━" * 18
+
+
+def _md_escape(value: Any) -> str:
+    """转义 legacy Markdown 特殊字符,防止动态内容破坏排版。"""
+    return _MD_ESCAPE_PATTERN.sub(r"\\\1", str(value or ""))
+
+
+def _format_broadcast_card(title: str, *, emoji: str, lines: list[str], footer: str | None = None) -> str:
+    """带分隔线边框的群播报卡片:图标标题 + 分隔线 + 正文 + 分隔线。"""
+    rows = [f"{emoji} **{_md_escape(title)}** {emoji}", _MD_BROADCAST_DIVIDER]
+    rows.extend(str(line).strip() for line in lines if str(line or "").strip())
+    if footer:
+        rows.extend([_MD_BROADCAST_DIVIDER, str(footer).strip()])
+    else:
+        rows.append(_MD_BROADCAST_DIVIDER)
+    return "\n".join(rows)
+
+
 def _broadcast_text(*, user_label: str, prize: dict[str, Any], probabilities: dict[str, Any], pity_triggered: bool) -> str:
     rate = (probabilities.get("prize_rates") or {}).get(prize.get("id"), 0)
     stock = int(prize.get("stock") or 0)
     stock_text = "不限" if stock < 0 else str(stock)
     pity_text = "，这次还是保底触发的，算、算你坚持得不错啦" if pity_triggered else ""
-    return (
-        "🎰 哼，本女仆才不是特意给你们报喜呢！\n"
-        f"{user_label} 刚刚在老虎机盲盒里抽中了 {prize.get('icon') or '🎁'} {prize.get('name')}！\n"
-        f"这个奖项当前概率约 {rate}%{pity_text}。\n"
-        f"剩余库存：{stock_text}\n"
-        "既然中了大奖，本女仆就勉强恭喜一下吧。下次可别得意忘形哦。"
+    return _format_broadcast_card(
+        "盲盒大奖播报",
+        emoji="🎰",
+        lines=[
+            f"🎉 **{_md_escape(user_label)}** 刚刚抽中了 {prize.get('icon') or '🎁'} **{_md_escape(prize.get('name'))}**！",
+            f"📊 当前概率约 `{rate}%`{pity_text}。",
+            f"📦 剩余库存：`{_md_escape(stock_text)}`",
+        ],
+        footer="🎀 哼，本女仆才不是特意给你们报喜呢！既然中了大奖，就勉强恭喜一下吧。下次可别得意忘形哦。",
     )
 
 
@@ -1053,11 +1078,11 @@ async def _send_group_broadcast(payload: dict[str, Any] | None) -> None:
     try:
         if image_url:
             try:
-                await bot.send_photo(chat_id=chat_id, photo=image_url, caption=text, parse_mode=enums.ParseMode.DISABLED)
+                await bot.send_photo(chat_id=chat_id, photo=image_url, caption=text, parse_mode=enums.ParseMode.MARKDOWN)
                 return
             except Exception as exc:
                 LOGGER.warning(f"slot blind box broadcast image failed chat={chat_id}: {exc}")
-        await bot.send_message(chat_id=chat_id, text=text, parse_mode=enums.ParseMode.DISABLED)
+        await bot.send_message(chat_id=chat_id, text=text, parse_mode=enums.ParseMode.MARKDOWN)
     except Exception as exc:
         LOGGER.warning(f"slot blind box broadcast failed chat={chat_id}: {exc}")
 

@@ -996,16 +996,19 @@ def spawn_world_boss(boss_id: int | None = None) -> dict[str, Any]:
     instance = create_world_boss_instance(int(boss["id"]), max_hp, expires_at)
 
     # 向主群广播降临消息
-    from bot.plugins.xiuxian_game.plugin_bot_handlers import _main_group_chat_id
+    from bot.plugins.xiuxian_game.plugin_bot_handlers import _format_broadcast_card, _main_group_chat_id, _md_escape
     try:
         chat_id = _main_group_chat_id()
         if chat_id:
-            text = (
-                f"【世界Boss降临】\n\n"
-                f"{boss['name']} 撕裂虚空而来！\n"
-                f"全服HP：{max_hp}/{max_hp}\n"
-                f"存在时限：{expires_at.strftime('%m月%d日 %H:%M')} (北京时间)\n\n"
-                f"所有在群道友速来降妖除魔！"
+            text = _format_broadcast_card(
+                "世界 Boss 降临",
+                emoji="👹",
+                lines=[
+                    f"🐉 **{_md_escape(boss['name'])}** 撕裂虚空而来！",
+                    f"❤️ 全服HP：`{max_hp}/{max_hp}`",
+                    f"⏳ 存在时限：`{expires_at.strftime('%m月%d日 %H:%M')}` (北京时间)",
+                ],
+                footer="⚔️ 所有在群道友速来降妖除魔！",
             )
             # 挂载到实例上，由 bot 客户端代为发送
             instance["broadcast_text"] = text
