@@ -346,12 +346,19 @@ docker compose up -d --force-recreate echo
 
 ### Docker Hub 发布（仓库维护者）
 
-GitHub Actions 已内置两条发布线：
+发布工作流定义在 [`.github/workflows/publish-docker.yml`](.github/workflows/publish-docker.yml)：
 
-- 推送到 `master`/`main` → 构建并推送 `latest`
-- 发布 GitHub Release → 构建并推送对应版本标签
+- 推送到 `main` → 构建并推送 `latest` 与 `sha-<短哈希>`
+- 推送形如 `v1.2.3` 的标签 → 额外推送 `1.2.3` / `1.2` / `1`
+- 提交 PR → 只验证双架构能否构建成功，不推送镜像
+- 手动触发 → 可选再打一个自定义 tag
 
-均构建 `linux/amd64` + `linux/arm64` 双架构。仓库 Secrets 需配置 `DOCKER_USERNAME` 与 `DOCKER_PASSWORD`，默认镜像名为 `${DOCKER_USERNAME}/echo`。
+两个架构在**原生** runner 上分别构建（`ubuntu-24.04` + `ubuntu-24.04-arm`），
+不依赖 QEMU 模拟，因此 arm64 编译速度与 amd64 相当；最后由 merge job 合并成
+单个 `linux/amd64` + `linux/arm64` 多架构 manifest。
+
+仓库 Secrets 需配置 `DOCKER_USERNAME` 与 `DOCKER_PASSWORD`（建议用 Docker Hub
+的 Access Token 而非登录密码）。镜像名固定为 `pivkeyu/echo`，可在工作流的 `env.DOCKERHUB_IMAGE` 调整。
 
 ---
 

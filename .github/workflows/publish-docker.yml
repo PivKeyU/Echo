@@ -1,0 +1,237 @@
+name: Publish Docker image (multi-arch)
+
+# 触发时机
+#   push 到 main          -> 构建并推送 latest
+#   push 形如 v1.2.3 的 tag -> 构建并推送 1.2.3 / 1.2 / 1
+#   Pull Request          -> 只验证能否构建成功，不推送镜像
+#   workflow_dispatch     -> 手动重建，可选额外打一个自定义 tag
+on:
+  push:
+    branches: ['main']
+    tags: ['v*']
+  pull_request:
+    branches: ['main']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '额外推送的自定义 tag（只能含字母数字 . _ -，留空则不打）'
+        required: false
+        default: ''
+
+# 三处（build / merge / 校验）共用同一个镜像名，改这里就够了。
+env:
+  DOCKERHUB_IMAGE: pivkeyu/echo
+
+concurrency:
+  # 同一分支/tag 的新提交会取消尚未跑完的旧构建，避免排队堆积。
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 每个架构在【原生】runner 上各自编译并推送，输出按 digest 落盘。
+  # arm64 用 ubuntu-24.04-arm 原生编译而非 QEMU 模拟：仓库是 public，
+  # GitHub 对公开仓库的 arm64 runner 免费且不限量，且 TgCrypto 这类 C 扩展
+  # 原生编译比模拟快一个数量级。
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 Docker Hub
+        # PR（尤其是 fork 来的）拿不到 secrets，跳过登录。
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 计算 build 输出方式
+        id: out
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # PR 只验证构建，产物丢弃。
+            echo "build-outputs=type=cacheonly" >> "$GITHUB_OUTPUT"
+          else
+            # 按 digest 推送，暂不打 tag；tag 由最后的 merge job 统一打，
+            # 这样多架构 manifest 一次性生成，中间不会出现半成品 tag。
+            echo "build-outputs=type=image,name=${DOCKERHUB_IMAGE},push-by-digest=true,name-canonical=true,push=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 构建并推送（按 digest）
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: ${{ steps.out.outputs.build-outputs }}
+          # 按架构分开缓存，两边的缓存互不覆盖。
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+          # 关掉 provenance / SBOM 证明：这样每个平台只产出唯一的镜像 manifest，
+          # 合并后的 manifest list 里只有 amd64 / arm64 两项，不会出现
+          # unknown/unknown 的证明条目。如需供应链证明，把这两行改为 true 即可。
+          provenance: false
+          sbom: false
+        env:
+          # 关掉 build record 产物，避免污染下面 digest artifact 的收集。
+          DOCKER_BUILD_RECORD_UPLOAD: false
+
+      - name: 导出 digest
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          if [ -z "$digest" ]; then
+            echo "::error::构建未返回 digest"
+            exit 1
+          fi
+          touch "/tmp/digests/${digest#sha256:}"
+          echo "- \`${{ matrix.arch }}\` -> \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传 digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # 把各架构的 digest 合并成一个多架构 manifest，并统一打 tag 推送。
+  # ---------------------------------------------------------------------------
+  merge:
+    name: 合并多架构 manifest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: [build]
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      - name: 下载各架构 digest
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: 确认收齐两个架构
+        run: |
+          set -euo pipefail
+          count=$(find /tmp/digests -type f | wc -l)
+          echo "收到 $count 个架构 digest"
+          if [ "$count" -ne 2 ]; then
+            echo "::error::期望 2 个架构 digest（amd64 + arm64），实际 $count 个"
+            exit 1
+          fi
+
+      - name: 配置 Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 生成 tag 规则
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKERHUB_IMAGE }}
+          # 刻意不用 type=ref,event=tag：仓库里存在形如
+          # `feat-修仙漏洞修复与数值平衡` 的中文标签，直接当 Docker tag 会被
+          # registry 拒绝（只允许 [A-Za-z0-9_.-]）。type=semver 只对 v1.2.3
+          # 这类合法版本号生效，其余标签自动跳过，因此安全。
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=sha-,format=short
+
+      - name: 合并并推送 manifest
+        working-directory: /tmp/digests
+        env:
+          EXTRA_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          tag_args=$(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+
+          # 手动触发时允许额外打一个自定义 tag。这里做白名单校验，
+          # 因为 git 标签可能是中文等非法字符，不能直接透传。
+          if [ -n "${EXTRA_TAG}" ]; then
+            if ! printf '%s' "${EXTRA_TAG}" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'; then
+              echo "::error::自定义 tag 非法（只允许字母数字 . _ -，且不超过 128 字符）：${EXTRA_TAG}"
+              exit 1
+            fi
+            tag_args="${tag_args} -t ${DOCKERHUB_IMAGE}:${EXTRA_TAG}"
+          fi
+
+          echo "将推送以下 tag："
+          echo "${tag_args}"
+
+          # shellcheck disable=SC2086
+          docker buildx imagetools create \
+            ${tag_args} \
+            $(printf "${DOCKERHUB_IMAGE}@sha256:%s " *)
+
+      - name: 校验最终镜像
+        env:
+          PRIMARY_TAG: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          ref="${DOCKERHUB_IMAGE}:${PRIMARY_TAG}"
+
+          docker buildx imagetools inspect "$ref" | tee /tmp/inspect.txt
+
+          # 断言必须同时含 amd64 与 arm64，防止某架构静默缺失却报成功。
+          # 用 --raw 读原始 manifest JSON 再交给 jq：比 grep 文本稳，
+          # 因为文本输出里键名是 `Platform:`（首字母大写），且 arm64 可能带
+          # variant 后缀（linux/arm64/v8），grep 容易误判。
+          arches=$(docker buildx imagetools inspect "$ref" --raw \
+            | jq -r '.manifests[] | select(.platform != null) | .platform.architecture' \
+            | sort -u)
+
+          echo "检测到架构：$(printf '%s' "$arches" | tr '\n' ' ')"
+
+          for arch in amd64 arm64; do
+            if ! printf '%s\n' "$arches" | grep -qx "$arch"; then
+              echo "::error::最终镜像缺少 linux/${arch}"
+              exit 1
+            fi
+          done
+          echo "✅ amd64 + arm64 均已就位"
+
+          {
+            echo "### 已发布 \`${ref}\`"
+            echo ""
+            echo '```'
+            cat /tmp/inspect.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
