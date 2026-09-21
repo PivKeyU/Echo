@@ -80,8 +80,8 @@ Telegram Bot · Web 管理后台 · Mini App · 运行时插件系统
 ### 2. 获取项目并初始化
 
 ```bash
-git clone https://github.com/PivKeyU/Pivkeyu_emby.git
-cd Pivkeyu_emby
+git clone https://github.com/PivKeyU/Echo.git
+cd Echo
 mkdir -p data log db caddy/data caddy/config
 cp config_example.json data/config.json
 ```
