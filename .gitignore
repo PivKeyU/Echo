@@ -7,9 +7,9 @@
 *.iml
 out
 gen
-!/keaiji.session
-!/keaiji_bot.session
-!/keaiji_bot.session-journal
+# Telegram / Pyrogram 会话文件（含登录凭据，绝不入库）
+*.session
+*.session-journal
 __pycache__/
 *.py[cod]
 .DS_Store
@@ -38,3 +38,8 @@ caddy/config/
 caddy/data/
 .pi/
 .workflow/
+
+# 本地密钥文件，绝不入库
+.env
+.env.*
+!.env.example

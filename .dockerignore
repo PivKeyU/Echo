@@ -30,3 +30,24 @@ start_test.bat
 stop_test.bat
 start_test.ps1
 stop_test.ps1
+
+# 忽略规则文件本身不需要进入镜像
+.gitignore
+.dockerignore
+
+# 本地密钥文件绝不进镜像（.env.example 是模板，保留）
+# 注：git 的 .env 会递归匹配子目录，Docker 不会（裸名只匹配上下文根目录），
+# 所以必须补 **/ 才能覆盖 data/runtime_plugins/** 等被重新纳入的子目录。
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+
+# 源码美术资源，运行时不读取（注意：Docker 的 * 不跨目录，必须用 **/ ）
+**/*.psd
+
+# 仅开发期使用的文件
+tests/
+AGENTS.md
+CLAUDE.md

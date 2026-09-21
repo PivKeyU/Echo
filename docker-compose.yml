@@ -40,7 +40,7 @@ services:
   echo:
     build:
       context: .
-    image: ${PIVKEYU_APP_IMAGE:-echo/echo:latest}
+    image: ${PIVKEYU_APP_IMAGE:-pivkeyu/echo:latest}
     container_name: echo
     restart: always
     network_mode: host

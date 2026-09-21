@@ -77,12 +77,12 @@ def _normalize_git_repo() -> str:
     detected = _parse_github_repo(auto_update.git_repo)
     if detected and detected != "owner/echo":
         return detected
-    return _repo_from_origin() or "PivKeyU/Echo"
+    return _repo_from_origin() or "PivKeyU/Pivkeyu_emby"
 
 
 def _normalize_docker_image() -> str:
     image = str(auto_update.docker_image or "").strip()
-    return image or "echo/echo:latest"
+    return image or "pivkeyu/echo:latest"
 
 
 def _normalize_container_name() -> str:
@@ -204,7 +204,7 @@ async def _fetch_latest_commit(repo: str) -> dict[str, Any]:
 def _split_image_ref(image: str) -> tuple[str, str]:
     raw = str(image or "").strip()
     if not raw:
-        return "echo/echo", "latest"
+        return "pivkeyu/echo", "latest"
     name = raw
     tag = "latest"
     last_segment = raw.rsplit("/", 1)[-1]
